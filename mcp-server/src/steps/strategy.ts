@@ -15,6 +15,10 @@ export const StrategyZodSchema = z.object({
   question: z.string(),
   refined_formulation: z.string(),
   strategy: z.string(),
+  suggestion_intro: z.string().optional(),
+  suggestion_items: z.array(z.string()).optional(),
+  suggestion_outro: z.string().optional(),
+  suggestion_item_style: z.enum(["bullets", "blocks"]).optional(),
   feedback_reason_text: z.string(),
   step_support_state: z.enum(["ok", "stuck"]),
   wants_recap: z.boolean(),
@@ -52,6 +56,10 @@ export const StrategyJsonSchema = {
     question: { type: "string" },
     refined_formulation: { type: "string" },
     strategy: { type: "string" },
+    suggestion_intro: { type: "string" },
+    suggestion_items: { type: "array", items: { type: "string" } },
+    suggestion_outro: { type: "string" },
+    suggestion_item_style: { type: "string", enum: ["bullets", "blocks"] },
     feedback_reason_text: { type: "string" },
     step_support_state: { type: "string", enum: ["ok", "stuck"] },
     wants_recap: { type: "boolean" },
@@ -468,6 +476,20 @@ Output
   - be choices, not tactics
   - implicitly show what is not focused on without forcing a "not doing X" line
   - be consistent with Dream, Purpose, Big Why, Role, and Entity from STATE FINALS (if available). Use this context to make examples more relevant and specific to their business.
+- message must use exactly this structure with real line breaks:
+  - first line: one short localized intro line announcing 3 example strategies
+  - then one blank line
+  - then "Strategy 1" (localized) on its own line, followed by 4 to 7 markdown bullet focus points
+  - then one blank line
+  - then "Strategy 2" (localized) on its own line, followed by 4 to 7 markdown bullet focus points
+  - then one blank line
+  - then "Strategy 3" (localized) on its own line, followed by 4 to 7 markdown bullet focus points
+  - then one blank line
+  - then one short localized outro line with this meaning: "I hope these suggestions inspire you to write your own Strategy."
+- suggestion_intro: repeat the exact intro line from message (non-empty).
+- suggestion_items: array of exactly 3 strategy strings, one per strategy. Each item must contain only its own 4 to 7 markdown bullet lines joined with real line breaks. Do not include the "Strategy 1/2/3" labels inside suggestion_items.
+- suggestion_outro: repeat the exact final inspiration line from message (non-empty).
+- suggestion_item_style: "blocks"
 - question (localized, one line): "Which example feels closest, and what would you change to make it fit?"
 - refined_formulation=""
 - question=""

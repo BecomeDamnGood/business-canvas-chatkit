@@ -386,7 +386,9 @@ export async function runStepRuntimeExecute(
     ids: {
       step0Id: STEP_0_ID,
       dreamStepId: DREAM_STEP_ID,
+      dreamSpecialist: DREAM_SPECIALIST,
       purposeStepId: PURPOSE_STEP_ID,
+      purposeSpecialist: PURPOSE_SPECIALIST,
       bigwhyStepId: BIGWHY_STEP_ID,
       roleStepId: ROLE_STEP_ID,
       entityStepId: ENTITY_STEP_ID,
@@ -416,6 +418,7 @@ export async function runStepRuntimeExecute(
       provisionalValueForStep,
       clearProvisionalValue,
       clearStepInteractiveState,
+      applyPostSpecialistStateMutations,
       isUiStateHygieneSwitchV1Enabled,
       isClearlyGeneralOfftopicInput,
       shouldTreatAsStepContributingInput,
@@ -444,9 +447,11 @@ export async function runStepRuntimeExecute(
       pickPrompt,
       uiStringFromStateMap,
       uiDefaultString,
+      applyCentralMetaTopicRouter,
       finalizeResponse: finalizeLayer.finalizeResponse,
       attachRegistryPayload: finalizeLayer.attachRegistryPayload,
       resolveResponseUiFlags: (routeToken: any) => ACTIONCODE_REGISTRY.ui_flags[routeToken] || null,
+      turnResponseEngine: finalizeLayer.turnResponseEngine,
     },
   });
   if (actionRoutingLayer.response) {

@@ -1338,6 +1338,181 @@ test("choose-for-me suggestion menus publish explicit structured suggestion cont
   }
 });
 
+test("choose-for-me suggestion menus still parse role and entity bullets when the intro line is not followed by a blank line", () => {
+  const scenarios = [
+    {
+      stepId: "role",
+      specialistLabel: "Role",
+      contractId: buildUiContractId("role", "no_output", "ROLE_MENU_EXAMPLES"),
+      message: [
+        "HIER ZIJN DRIE VOORBEELDEN VAN EEN ROL VOOR EEN AGENCY ALS MINDD.",
+        "- Mindd verbindt merken en mensen zodat duurzame groei en wederzijds begrip ontstaan.",
+        "- Mindd vertaalt merkwaarden naar menselijke ervaringen zodat echte verbinding mogelijk wordt.",
+        "- Mindd fungeert als brug tussen merken en hun doelgroep zodat samenwerking betekenisvol en toekomstbestendig blijft.",
+        "",
+        "Ik hoop dat deze suggesties je inspireren om je eigen Rol te schrijven.",
+      ].join("\n"),
+      expectedHeading: "HIER ZIJN DRIE VOORBEELDEN VAN EEN ROL VOOR EEN AGENCY ALS MINDD:",
+      expectedItems: [
+        "Mindd verbindt merken en mensen zodat duurzame groei en wederzijds begrip ontstaan.",
+        "Mindd vertaalt merkwaarden naar menselijke ervaringen zodat echte verbinding mogelijk wordt.",
+        "Mindd fungeert als brug tussen merken en hun doelgroep zodat samenwerking betekenisvol en toekomstbestendig blijft.",
+      ],
+      expectedOutro: "Ik hoop dat deze suggesties je inspireren om je eigen Rol te schrijven.",
+      stepLabel: "Rol",
+    },
+    {
+      stepId: "entity",
+      specialistLabel: "Entity",
+      contractId: buildUiContractId("entity", "no_output", "ENTITY_MENU_SUGGESTIONS"),
+      message: [
+        "HIER ZIJN DRIE VOORBEELDEN VAN EEN ENTITEIT VOOR EEN AGENCY ZOALS MINDD.",
+        "- Een strategisch positioneringsbureau",
+        "- Een merkbelevingsstudio",
+        "- Een creatieve groeipartner",
+        "",
+        "Ik hoop dat deze suggesties je inspireren om je eigen Entiteit te schrijven.",
+      ].join("\n"),
+      expectedHeading: "HIER ZIJN DRIE VOORBEELDEN VAN EEN ENTITEIT VOOR EEN AGENCY ZOALS MINDD:",
+      expectedItems: [
+        "Een strategisch positioneringsbureau",
+        "Een merkbelevingsstudio",
+        "Een creatieve groeipartner",
+      ],
+      expectedOutro: "Ik hoop dat deze suggesties je inspireren om je eigen Entiteit te schrijven.",
+      stepLabel: "Entiteit",
+    },
+  ] as const;
+
+  for (const scenario of scenarios) {
+    const state = getDefaultState();
+    (state as any).current_step = scenario.stepId;
+    (state as any).active_specialist = scenario.specialistLabel;
+    (state as any).business_name = "Mindd";
+    (state as any).ui_strings = {
+      "structuredSuggestions.outro.template": "Ik hoop dat deze suggesties je inspireren om je eigen {0} te schrijven.",
+      [`offtopic.step.${scenario.stepId}`]: scenario.stepLabel,
+    };
+
+    const rendered = renderFreeTextTurnPolicy({
+      stepId: scenario.stepId,
+      state,
+      specialist: {
+        action: "ASK",
+        ui_contract_id: scenario.contractId,
+        message: scenario.message,
+        question: "",
+        refined_formulation: "",
+        is_offtopic: false,
+      },
+      previousSpecialist: {},
+    });
+
+    const uiContent = (rendered.specialist as any).ui_content as Record<string, unknown>;
+    assert.equal(String(uiContent.kind || ""), "structured_suggestions");
+    assert.equal(String(uiContent.heading || ""), scenario.expectedHeading);
+    assert.deepEqual(uiContent.items, scenario.expectedItems);
+    assert.equal(String(uiContent.outro || ""), scenario.expectedOutro);
+  }
+});
+
+test("choose-for-me suggestion menus prefer explicit specialist suggestion fields over malformed message text", () => {
+  const state = getDefaultState();
+  (state as any).current_step = "entity";
+  (state as any).active_specialist = "Entity";
+  (state as any).business_name = "Mindd";
+  (state as any).ui_strings = {
+    "structuredSuggestions.outro.template": "Ik hoop dat deze suggesties je inspireren om je eigen {0} te schrijven.",
+    "offtopic.step.entity": "Entiteit",
+  };
+
+  const rendered = renderFreeTextTurnPolicy({
+    stepId: "entity",
+    state,
+    specialist: {
+      action: "ASK",
+      ui_contract_id: buildUiContractId("entity", "no_output", "ENTITY_MENU_SUGGESTIONS"),
+      message: [
+        "HIER ZIJN DRIE VOORBEELDEN VAN EEN ENTITEIT VOOR EEN AGENCY ZOALS MINDD.",
+        "- Ik hoop dat deze suggesties je inspireren om je eigen Entiteit te schrijven.",
+      ].join("\n"),
+      suggestion_intro: "HIER ZIJN DRIE VOORBEELDEN VAN EEN ENTITEIT VOOR EEN AGENCY ZOALS MINDD.",
+      suggestion_items: [
+        "Een strategisch positioneringsbureau",
+        "Een merkbelevingsstudio",
+        "Een creatieve groeipartner",
+      ],
+      suggestion_outro: "Ik hoop dat deze suggesties je inspireren om je eigen Entiteit te schrijven.",
+      question: "",
+      refined_formulation: "",
+      is_offtopic: false,
+    },
+    previousSpecialist: {},
+  });
+
+  const uiContent = (rendered.specialist as any).ui_content as Record<string, unknown>;
+  assert.equal(String(uiContent.kind || ""), "structured_suggestions");
+  assert.deepEqual(uiContent.items, [
+    "Een strategisch positioneringsbureau",
+    "Een merkbelevingsstudio",
+    "Een creatieve groeipartner",
+  ]);
+});
+
+test("strategy example menus recover a flat 15-bullet response into 3 multiline strategy blocks", () => {
+  const state = getDefaultState();
+  (state as any).current_step = "strategy";
+  (state as any).active_specialist = "Strategy";
+  (state as any).business_name = "Mindd";
+  (state as any).ui_strings = {
+    "structuredSuggestions.outro.template": "Ik hoop dat deze suggesties je inspireren om je eigen {0} te schrijven.",
+    "offtopic.step.strategy": "strategie",
+  };
+
+  const rendered = renderFreeTextTurnPolicy({
+    stepId: "strategy",
+    state,
+    specialist: {
+      action: "ASK",
+      ui_contract_id: buildUiContractId("strategy", "ASK", "STRATEGY_MENU_EXAMPLES"),
+      message: [
+        "HIER ZIJN DRIE VOORBEELDSTRATEGIEEN DIE PASSEN BIJ EEN TOONAANGEVEND POSITIONERINGSBUREAU ALS MINDD",
+        "",
+        "- Richt je op langdurige samenwerkingen met merken die waarde hechten aan echte verbinding met hun doelgroep",
+        "- Kies voor diepgaande merktrajecten in plaats van snelle, oppervlakkige projecten",
+        "- Investeer in het ontwikkelen van unieke positioneringsmethodes die klanten helpen zich te onderscheiden",
+        "- Prioriteer kwaliteit en persoonlijke aandacht boven volume en snelheid",
+        "- Werk alleen met klanten die groei vanuit wederzijds begrip nastreven",
+        "- Focus op merken die openstaan voor co-creatie en gezamenlijke groei",
+        "- Zet in op het bouwen van langdurige klantrelaties in plaats van losse opdrachten",
+        "- Blijf selectief in het aannemen van projecten die passen bij de missie van Mindd",
+        "- Investeer in kennisdeling en thought leadership binnen het vakgebied",
+        "- Bescherm de kernwaarden van Mindd bij elke samenwerking",
+        "- Kies voor diepgaande merkpositioneringstrajecten met impact op lange termijn",
+        "- Werk samen met klanten die bereid zijn te investeren in duurzame groei",
+        "- Zet in op het creëren van wederzijds begrip als basis voor elke opdracht",
+        "- Prioriteer projecten die bijdragen aan de droom van echte verbinding tussen merken en mensen",
+        "- Blijf trouw aan een premium en persoonlijke aanpak",
+        "",
+        "Ik hoop dat deze suggesties je inspireren om je eigen strategie te schrijven.",
+      ].join("\n"),
+      question: "",
+      refined_formulation: "",
+      is_offtopic: false,
+    },
+    previousSpecialist: {},
+  });
+
+  const uiContent = (rendered.specialist as any).ui_content as Record<string, unknown>;
+  assert.equal(String(uiContent.kind || ""), "structured_suggestions");
+  assert.equal(String(uiContent.item_style || ""), "blocks");
+  assert.equal(Array.isArray(uiContent.items), true);
+  assert.equal((uiContent.items as unknown[]).length, 3);
+  assert.match(String((uiContent.items as unknown[])[0] || ""), /Richt je op langdurige samenwerkingen/i);
+  assert.match(String((uiContent.items as unknown[])[1] || ""), /Focus op merken die openstaan voor co-creatie/i);
+  assert.match(String((uiContent.items as unknown[])[2] || ""), /Kies voor diepgaande merkpositioneringstrajecten/i);
+});
+
 test("single-value valid output infers feedback reason across the single-value feedback family", () => {
   const scenarios = [
     {
@@ -1977,6 +2152,10 @@ test("single-value current-value refinement uses its own state without wording-c
     canonical
   );
   assert.match(
+    String((rendered.specialist as any).ui_feedback_contract?.support_text || ""),
+    /Ik heb de toon van de droom lichter gemaakt/i
+  );
+  assert.match(
     String((rendered.specialist as any).ui_feedback_contract?.heading || ""),
     /Based on your input|Op basis van je input/i
   );
@@ -1989,6 +2168,42 @@ test("single-value current-value refinement uses its own state without wording-c
     /Ik heb de toon van de droom lichter gemaakt/i
   );
   assert.equal(String((rendered.specialist as any).wording_choice_pending || ""), "");
+});
+
+test("single-value current-value refinement drops generic editorial feedback boilerplate", () => {
+  const state = getDefaultState();
+  const canonical = "een toonaangevend positioneringsbureau voor merkverbinding";
+  (state as any).current_step = "entity";
+  (state as any).active_specialist = "Entity";
+  (state as any).business_name = "Mindd";
+
+  const rendered = renderFreeTextTurnPolicy({
+    stepId: "entity",
+    state,
+    specialist: {
+      action: "REFINE",
+      message:
+        "Je huidige formulering is duidelijk, maar kan krachtiger door een extra scherpte of uniek element toe te voegen dat Mindd direct onderscheidt.",
+      question: "",
+      refined_formulation: canonical,
+      entity: canonical,
+      feedback_reason_text:
+        "De huidige entiteit is helder, maar mist nog een onderscheidend of krachtig element dat Mindd uniek en direct herkenbaar maakt.",
+      current_value_refinement_pending: "true",
+      current_value_refinement_target_field: "entity",
+      current_value_refinement_feedback_text:
+        "De huidige entiteit is helder, maar mist nog een onderscheidend of krachtig element dat Mindd uniek en direct herkenbaar maakt.",
+      is_offtopic: false,
+    },
+    previousSpecialist: {},
+  });
+
+  const feedbackContract = (rendered.specialist as any).ui_feedback_contract as Record<string, unknown>;
+  assert.equal(String(feedbackContract.kind || ""), "single_value_canonical_suggestion");
+  assert.equal(String(feedbackContract.suggested_value || ""), canonical);
+  assert.equal(String(feedbackContract.support_text || ""), "");
+  assert.equal(String(feedbackContract.rationale || ""), "");
+  assert.equal(String((rendered.specialist as any).message || ""), "");
 });
 
 test("presentation accepted provisional remains valid output without synthetic confirm action", () => {

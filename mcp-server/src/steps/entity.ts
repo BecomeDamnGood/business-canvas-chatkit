@@ -15,6 +15,10 @@ export const EntityZodSchema = z.object({
   question: z.string(),
   refined_formulation: z.string(),
   entity: z.string(),
+  suggestion_intro: z.string().optional(),
+  suggestion_items: z.array(z.string()).optional(),
+  suggestion_outro: z.string().optional(),
+  suggestion_item_style: z.enum(["bullets", "blocks"]).optional(),
   feedback_reason_text: z.string(),
   feedback_mode: z.enum(["none", "affirm_input", "compare_suggestion", "refine_current"]),
   step_support_state: z.enum(["ok", "stuck"]),
@@ -52,6 +56,10 @@ export const EntityJsonSchema = {
     question: { type: "string" },
     refined_formulation: { type: "string" },
     entity: { type: "string" },
+    suggestion_intro: { type: "string" },
+    suggestion_items: { type: "array", items: { type: "string" } },
+    suggestion_outro: { type: "string" },
+    suggestion_item_style: { type: "string", enum: ["bullets", "blocks"] },
     feedback_reason_text: { type: "string" },
     feedback_mode: { type: "string", enum: ["none", "affirm_input", "compare_suggestion", "refine_current"] },
     step_support_state: { type: "string", enum: ["ok", "stuck"] },
@@ -244,6 +252,10 @@ If USER_MESSAGE is "__ROUTE__ENTITY_FORMULATE__":
   First line: one short intro line (localized) with this meaning: "Here are three examples of an Entity for a {venture_type} like {company_name}." Use the known venture type and company name when available. If one is missing, keep the line natural and specific with the context that is known.
   Then provide exactly 3 Entity suggestions as a markdown bullet list (each line must start with "- "). Each suggestion must be one short noun phrase starting with the correct indefinite article and follow all Entity rules.
   After the 3 bullet suggestions, add exactly one blank line, then add this one short line (localized): "I hope these suggestions inspire you to write your own Entity."
+- suggestion_intro: repeat the exact intro line from message (non-empty).
+- suggestion_items: array of exactly 3 Entity suggestion strings, one per suggestion, without bullet markers.
+- suggestion_outro: repeat the exact final inspiration line from message (non-empty).
+- suggestion_item_style: "bullets"
 - refined_formulation=""
 - question=""
 - entity=""
@@ -261,6 +273,10 @@ HANDLE FORMULATE MY ENTITY FOR ME (from explain-more choice path)
 If USER_MESSAGE is "__ROUTE__ENTITY_FORMULATE_FOR_ME__":
 - action="ASK"
 - message must contain exactly the same structure and quality rules as "__ROUTE__ENTITY_FORMULATE__": intro line, exactly 3 markdown bullet suggestions, one blank line, then the inspiration line.
+- suggestion_intro: repeat the exact intro line from message (non-empty).
+- suggestion_items: array of exactly 3 Entity suggestion strings, one per suggestion, without bullet markers.
+- suggestion_outro: repeat the exact final inspiration line from message (non-empty).
+- suggestion_item_style: "bullets"
 - question=""
 - refined_formulation=""
 - entity=""

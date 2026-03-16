@@ -333,7 +333,7 @@ function extractStructuredSuggestionItems(params: {
 function looksLikeStrategyExampleMarker(line: string): boolean {
   const collapsed = String(line || "").replace(/\s+/g, " ").trim();
   if (!collapsed) return false;
-  return /^(?:example|voorbeeld|ejemplo|exemple|beispiel|esempio|exemplo|пример|उदाहरण|예시|例)\s*\d+\s*:?$/i.test(
+  return /^(?:example|voorbeeld|ejemplo|exemple|beispiel|esempio|exemplo|пример|उदाहरण|예시|例|strategy|strategie|estrategia|stratégie|strategie)\s*\d+\s*:?$/i.test(
     collapsed
   );
 }
@@ -361,6 +361,7 @@ function extractStructuredStrategyExampleItems(raw: string): string[] {
     if (nonBulletLines.length > 0 && !nonBulletLines.every((line) => looksLikeStrategyExampleMarker(line))) {
       continue;
     }
+    if (nonBulletLines.length === 0 && bulletLines.length > 7) continue;
     const candidate = bulletLines.join("\n").trim();
     const key = candidate
       .toLowerCase()
@@ -371,7 +372,29 @@ function extractStructuredStrategyExampleItems(raw: string): string[] {
     seen.add(key);
     items.push(candidate);
   }
-  return items.slice(0, 3);
+  if (items.length > 0) return items.slice(0, 3);
+  const flatBulletLines = String(raw || "")
+    .replace(/\r/g, "\n")
+    .split("\n")
+    .map((line) => String(line || "").trim())
+    .filter((line) => /^(?:[-*•]|\d+[\).])\s+/.test(line))
+    .map((line) => line.replace(/^(?:[-*•]|\d+[\).])\s+/, "").trim())
+    .filter(Boolean);
+  const total = flatBulletLines.length;
+  if (total < 12 || total > 21) return [];
+  const base = Math.floor(total / 3);
+  const remainder = total % 3;
+  const sizes = [base, base, base].map((size, index) => size + (index < remainder ? 1 : 0));
+  if (sizes.some((size) => size < 4 || size > 7)) return [];
+  const fallbackItems: string[] = [];
+  let cursor = 0;
+  for (const size of sizes) {
+    const part = flatBulletLines.slice(cursor, cursor + size);
+    cursor += size;
+    if (part.length !== size) return [];
+    fallbackItems.push(part.join("\n"));
+  }
+  return fallbackItems.slice(0, 3);
 }
 
 function normalizeStructuredSuggestionMessage(params: {
@@ -380,6 +403,7 @@ function normalizeStructuredSuggestionMessage(params: {
   messageRaw: string;
   stateUiStrings: Record<string, unknown>;
   tokenizeWords: (text: string) => string[];
+  specialist?: Record<string, unknown> | null;
 }): string {
   const config = structuredSuggestionMenuConfigFor(params.contractStepId, params.menuId);
   if (!config) return String(params.messageRaw || "").trim();
@@ -391,6 +415,7 @@ function normalizeStructuredSuggestionMessage(params: {
     menuId: params.menuId,
     message,
     uiStrings: params.stateUiStrings,
+    specialist: params.specialist || null,
   });
   if (!content || content.items.length === 0) return message;
   const parts: string[] = [];
@@ -678,6 +703,7 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
       messageRaw: msg,
       stateUiStrings,
       tokenizeWords: deps.tokenizeWords,
+      specialist,
     });
     let refined = stripMarkupPreserveLines(String(specialist?.refined_formulation ?? ""));
     if (!wordingPending) {
@@ -852,19 +878,74 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
       selectionForCurrentValue,
       currentSelectedValue
     );
-    if (!msg && !wordingPending && !isSingleValueValidOutput && isBulletConsistencyStep && currentSelectedValue) {
-      const currentValueListItems = extractStructuredListItems(currentSelectedValue);
-      const normalizedCurrentBody =
-        currentValueListItems.length >= 2
-          ? currentValueListItems.map((line) => `• ${line}`).join("\n")
-          : currentSelectedValue;
-      if (selectionCurrentParts.heading && selectionCurrentParts.body) {
-        msg = `${selectionCurrentParts.heading}\n\n${selectionCurrentParts.body}`.trim();
-      } else {
-        msg = normalizedCurrentBody;
+    const groupedCompareCurrentValueBlock = (() => {
+      if (dreamBuilderCanonicalOnlyView || wordingPending || isSingleValueValidOutput || !isBulletConsistencyStep) {
+        return "";
       }
+      if (selectionCurrentParts.heading && selectionCurrentParts.body) {
+        return `${selectionCurrentParts.heading}\n\n${selectionCurrentParts.body}`.trim();
+      }
+      const currentValueListItems = extractStructuredListItems(currentSelectedValue);
+      if (currentValueListItems.length >= 2) {
+        return currentValueListItems.map((line) => `• ${line}`).join("\n");
+      }
+      return currentSelectedValue;
+    })();
+    const stripGroupedCompareCurrentValueNoise = (messageRaw: string): string => {
+      if (!groupedCompareCurrentValueBlock) return String(messageRaw || "").trim();
+      const headingComparable = deps.canonicalizeComparableText(selectionCurrentParts.heading);
+      const blockComparable = deps.canonicalizeComparableText(groupedCompareCurrentValueBlock);
+      const currentItemKeys = new Set(
+        extractStructuredListItems(groupedCompareCurrentValueBlock)
+          .map((line) => deps.canonicalizeComparableText(line))
+          .filter(Boolean)
+      );
+      const keptParagraphs: string[] = [];
+      const seenParagraphs = new Set<string>();
+      const paragraphs = String(messageRaw || "")
+        .replace(/\r/g, "\n")
+        .split(/\n{2,}/)
+        .map((part) => String(part || "").trim())
+        .filter(Boolean);
+      for (const paragraph of paragraphs) {
+        const paragraphComparable = deps.canonicalizeComparableText(paragraph);
+        if (blockComparable && paragraphComparable === blockComparable) continue;
+        const keptLines = paragraph
+          .split("\n")
+          .map((line) => String(line || "").trim())
+          .filter(Boolean)
+          .filter((line) => {
+            const lineComparable = deps.canonicalizeComparableText(line);
+            if (!lineComparable) return false;
+            if (headingComparable && lineComparable === headingComparable) return false;
+            const itemComparable = deps.canonicalizeComparableText(
+              line.replace(/^\s*(?:[-*•]|\d+[\).])\s*/, "").trim()
+            );
+            if (itemComparable && currentItemKeys.has(itemComparable)) return false;
+            return true;
+          });
+        const cleanedParagraph = keptLines.join("\n").trim();
+        if (!cleanedParagraph) continue;
+        const cleanedComparable = deps.canonicalizeComparableText(cleanedParagraph);
+        if (!cleanedComparable || cleanedComparable === blockComparable || seenParagraphs.has(cleanedComparable)) continue;
+        seenParagraphs.add(cleanedComparable);
+        keptParagraphs.push(cleanedParagraph);
+      }
+      return keptParagraphs.join("\n\n").trim();
+    };
+    if (groupedCompareCurrentValueBlock) {
+      msg = stripGroupedCompareCurrentValueNoise(msg);
     }
-    if (!dreamBuilderCanonicalOnlyView && !isSingleValueValidOutput && selectionCurrentParts.heading && selectionCurrentParts.body) {
+    if (!msg && !wordingPending && !isSingleValueValidOutput && isBulletConsistencyStep && currentSelectedValue) {
+      msg = groupedCompareCurrentValueBlock;
+    }
+    if (
+      !groupedCompareCurrentValueBlock &&
+      !dreamBuilderCanonicalOnlyView &&
+      !isSingleValueValidOutput &&
+      selectionCurrentParts.heading &&
+      selectionCurrentParts.body
+    ) {
       const msgComparable = deps.canonicalizeComparableText(msg);
       const headingComparable = deps.canonicalizeComparableText(selectionCurrentParts.heading);
       const bodyComparable = deps.canonicalizeComparableText(selectionCurrentParts.body);
@@ -883,6 +964,7 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
       }
     }
     const currentHeading = (() => {
+      if (groupedCompareCurrentValueBlock) return "";
       if (isSingleValueValidOutput) return "";
       if (wordingPending) return "";
       if (!msg || !refined) return "";
@@ -912,6 +994,21 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
       ).trim()
       : "";
     if (msg) parts.push(msg);
+    if (groupedCompareCurrentValueBlock) {
+      const messageLineSet = new Set(
+        normalizedLines(msg).map((line) => deps.canonicalizeComparableText(line)).filter(Boolean)
+      );
+      const groupedBlockLines = normalizedLines(groupedCompareCurrentValueBlock);
+      const duplicateByLines =
+        groupedBlockLines.length > 0 &&
+        groupedBlockLines.every((line) => {
+          const normalized = deps.canonicalizeComparableText(line);
+          return Boolean(normalized) && messageLineSet.has(normalized);
+        });
+      if (!duplicateByLines) {
+        parts.push(groupedCompareCurrentValueBlock);
+      }
+    }
     if (canonicalPendingSuggestionText) {
       const suggestionNormalized = deps.canonicalizeComparableText(canonicalPendingSuggestionText);
       const messageNormalized = deps.canonicalizeComparableText(msg);
@@ -930,7 +1027,7 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
         parts.push(canonicalPendingSuggestionBlock);
       }
     }
-    if (refined && !wordingPending && !suppressRefinedAppend) {
+    if (refined && !groupedCompareCurrentValueBlock && !wordingPending && !suppressRefinedAppend) {
       const statementComparable = statementLines
         .map((line) => deps.canonicalizeComparableText(line))
         .filter(Boolean);

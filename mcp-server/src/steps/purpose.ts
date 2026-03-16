@@ -15,6 +15,10 @@ export const PurposeZodSchema = z.object({
   question: z.string(),
   refined_formulation: z.string(),
   purpose: z.string(),
+  suggestion_intro: z.string().optional(),
+  suggestion_items: z.array(z.string()).optional(),
+  suggestion_outro: z.string().optional(),
+  suggestion_item_style: z.enum(["bullets", "blocks"]).optional(),
   feedback_reason_text: z.string(),
   feedback_mode: z.enum(["none", "affirm_input", "compare_suggestion", "refine_current"]),
   step_support_state: z.enum(["ok", "stuck"]),
@@ -52,6 +56,10 @@ export const PurposeJsonSchema = {
     question: { type: "string" },
     refined_formulation: { type: "string" },
     purpose: { type: "string" },
+    suggestion_intro: { type: "string" },
+    suggestion_items: { type: "array", items: { type: "string" } },
+    suggestion_outro: { type: "string" },
+    suggestion_item_style: { type: "string", enum: ["bullets", "blocks"] },
     feedback_reason_text: { type: "string" },
     feedback_mode: { type: "string", enum: ["none", "affirm_input", "compare_suggestion", "refine_current"] },
     step_support_state: { type: "string", enum: ["ok", "stuck"] },
@@ -407,6 +415,11 @@ Output
 
   After the 3 examples, add exactly one blank line, then add this one short line (localized):
   "I hope these suggestions inspire you to write your own Purpose."
+
+- suggestion_intro: repeat the exact intro line from message (non-empty).
+- suggestion_items: array of exactly 3 Purpose example strings, one per example, without bullet markers.
+- suggestion_outro: repeat the exact final inspiration line from message (non-empty).
+- suggestion_item_style: "bullets"
 
 Anti-echo check (HARD) 
 Before outputting refined_formulation, verify that the core nouns and verbs are different from the confirmed outputs of all prior steps. Semantic overlap with a prior step is a quality failure, not a sign of consistency.

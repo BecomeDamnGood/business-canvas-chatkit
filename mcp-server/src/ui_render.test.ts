@@ -4,9 +4,11 @@ import assert from "node:assert/strict";
 import {
   actionRoleForStateKey,
   buildInitialDreamScoringScores,
+  decorateStructuredSuggestionItemsForStep,
   dreamExerciseButtonLabelKeyForState,
   parseWordingChoiceInstruction,
   readFeedbackContract,
+  readStructuredSuggestionsCardContent,
   resolveActionCodeForStateKey,
   resolveActionPayloadModeForStateKey,
   surfaceActionsForResult,
@@ -122,12 +124,37 @@ test("readFeedbackContract normalizes canonical single-value feedback from the s
   });
 });
 
+test("strategy structured suggestion blocks get Strategy 1/2/3 headings in the widget renderer", () => {
+  setRuntimeUiStrings({ "title.strategy": "Strategie" });
+  const normalized = readStructuredSuggestionsCardContent({
+    content: {
+      kind: "structured_suggestions",
+      item_style: "blocks",
+      items: [
+        "- Focus op langdurige samenwerkingen\n- Kies voor diepgang",
+        "- Bouw aan wederzijds begrip\n- Werk selectief",
+        "- Prioriteer premium kwaliteit\n- Bescherm de kernwaarden",
+      ],
+    },
+  });
+  const decorated = decorateStructuredSuggestionItemsForStep({
+    stepId: "strategy",
+    lang: "nl",
+    content: normalized,
+  });
+
+  assert.equal(Array.isArray(decorated?.items), true);
+  assert.match(String(decorated?.items?.[0] || ""), /^Strategie 1\b/);
+  assert.match(String(decorated?.items?.[1] || ""), /^Strategie 2\b/);
+  assert.match(String(decorated?.items?.[2] || ""), /^Strategie 3\b/);
+});
+
 test("shouldSuppressMainCardForWordingChoice follows the feedback contract for compare families", () => {
   assert.equal(
     shouldSuppressMainCardForWordingChoice(
       {
         feedback_contract: {
-          kind: "list_duplicate_merge_compare",
+          kind: "grouped_list_compare",
           mode: "list",
         },
       },
@@ -147,6 +174,40 @@ test("shouldSuppressMainCardForWordingChoice follows the feedback contract for c
     ),
     false
   );
+});
+
+test("readFeedbackContract normalizes grouped list compare contracts from the server", () => {
+  const feedbackContract = readFeedbackContract({
+    feedback_contract: {
+      kind: "grouped_list_compare",
+      mode: "list",
+      rationale: "Ik heb de resterende strategische keuze scherper gemaakt.",
+      current_label: "Jouw compacte formulering",
+      suggested_label: "Mijn suggestie",
+      current_items: ["AI scans en implementatiehulp", "Brand strategy voor technische teams"],
+      suggested_items: ["AI opportunity scans", "Implementation guidance for AI adoption"],
+      retained_heading: "Deze punten blijven al in de definitieve lijst:",
+      retained_items: ["Strategy workshops"],
+      instruction: "Kies de versie die het beste past bij het resterende verschil.",
+    },
+  });
+
+  assert.deepEqual(feedbackContract, {
+    kind: "grouped_list_compare",
+    mode: "list",
+    rationale: "Ik heb de resterende strategische keuze scherper gemaakt.",
+    heading: "",
+    supportText: "",
+    currentLabel: "Jouw compacte formulering",
+    suggestedLabel: "Mijn suggestie",
+    currentValue: "",
+    suggestedValue: "",
+    currentItems: ["AI scans en implementatiehulp", "Brand strategy voor technische teams"],
+    suggestedItems: ["AI opportunity scans", "Implementation guidance for AI adoption"],
+    retainedHeading: "Deze punten blijven al in de definitieve lijst:",
+    retainedItems: ["Strategy workshops"],
+    instruction: "Kies de versie die het beste past bij het resterende verschil.",
+  });
 });
 
 test("shouldSuppressPromptForWordingChoice hides the prompt while wording-choice is active", () => {

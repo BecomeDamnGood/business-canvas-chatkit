@@ -14,6 +14,13 @@ export type StructuredSuggestionsContent = {
   item_style: StructuredSuggestionsItemStyle;
 };
 
+export type StructuredSuggestionsSpecialistFields = {
+  suggestion_intro?: string;
+  suggestion_items?: string[];
+  suggestion_outro?: string;
+  suggestion_item_style?: StructuredSuggestionsItemStyle;
+};
+
 function uiString(uiStrings: Record<string, unknown> | null | undefined, key: string): string {
   const scoped = uiStrings && typeof uiStrings === "object" ? uiStrings : {};
   return String(scoped[key] || UI_STRINGS_DEFAULT[key] || "").trim();
@@ -131,7 +138,60 @@ function extractSentenceOrPhraseItems(
   return paragraphItems.slice(0, 3);
 }
 
+function extractExplicitItems(
+  specialist: Record<string, unknown> | null | undefined,
+  itemKind: StepRegistryChooseForMeItemKind
+): string[] {
+  if (!specialist || typeof specialist !== "object") return [];
+  const rawItems = Array.isArray(specialist.suggestion_items)
+    ? (specialist.suggestion_items as unknown[])
+    : [];
+  if (rawItems.length === 0) return [];
+  if (itemKind === "multiline_list") {
+    const items = rawItems
+      .map((raw) => {
+        const bulletLines = String(raw || "")
+          .replace(/\r/g, "\n")
+          .split("\n")
+          .map((line) => stripBulletPrefix(String(line || "").trim()))
+          .filter(Boolean);
+        if (bulletLines.length === 0) return "";
+        return bulletLines.map((line) => `- ${line}`).join("\n");
+      })
+      .filter(Boolean);
+    return items.slice(0, 3);
+  }
+  return rawItems
+    .map((raw) => cleanSuggestionItem(String(raw || ""), itemKind))
+    .filter(Boolean)
+    .slice(0, 3);
+}
+
 function extractMultilineListItems(bodyBlocks: string[]): string[] {
+  const strategyMarkerPattern =
+    /^(?:example|voorbeeld|ejemplo|exemple|beispiel|esempio|exemplo|пример|उदाहरण|예시|例|strategy|strategie|estrategia|stratégie|strategie)\s*\d+\s*:?$/i;
+  const collectBulletLines = (lines: string[]): string[] =>
+    lines
+      .filter((line) => /^\s*[-*•·]\s+/.test(line))
+      .map((line) => stripBulletPrefix(line))
+      .filter(Boolean);
+  const chunkFlatBulletList = (allBulletLines: string[]): string[] => {
+    const total = allBulletLines.length;
+    if (total < 12 || total > 21) return [];
+    const base = Math.floor(total / 3);
+    const remainder = total % 3;
+    const sizes = [base, base, base].map((size, index) => size + (index < remainder ? 1 : 0));
+    if (sizes.some((size) => size < 4 || size > 7)) return [];
+    const chunks: string[] = [];
+    let cursor = 0;
+    for (const size of sizes) {
+      const part = allBulletLines.slice(cursor, cursor + size);
+      cursor += size;
+      if (part.length !== size) return [];
+      chunks.push(part.map((line) => `- ${line}`).join("\n"));
+    }
+    return chunks;
+  };
   const items: string[] = [];
   for (const block of bodyBlocks) {
     const lines = String(block || "")
@@ -140,18 +200,19 @@ function extractMultilineListItems(bodyBlocks: string[]): string[] {
       .map((line) => String(line || "").trim())
       .filter(Boolean);
     if (lines.length === 0) continue;
+    const hasMarker = strategyMarkerPattern.test(lines[0] || "");
     const withoutExampleMarker =
-      /^example\s+\d+$/i.test(lines[0] || "") || /^voorbeeld\s+\d+$/i.test(lines[0] || "")
+      hasMarker
         ? lines.slice(1)
         : lines;
-    const bulletLines = withoutExampleMarker
-      .filter((line) => /^\s*[-*•·]\s+/.test(line))
-      .map((line) => stripBulletPrefix(line))
-      .filter(Boolean);
+    const bulletLines = collectBulletLines(withoutExampleMarker);
     if (bulletLines.length === 0) continue;
+    if (!hasMarker && bulletLines.length > 7) continue;
     items.push(bulletLines.map((line) => `- ${line}`).join("\n"));
   }
-  return items.slice(0, 3);
+  if (items.length > 0) return items.slice(0, 3);
+  const allBulletLines = collectBulletLines(bodyBlocks.join("\n\n").split("\n"));
+  return chunkFlatBulletList(allBulletLines).slice(0, 3);
 }
 
 export function deriveStructuredSuggestionsContent(params: {
@@ -159,29 +220,56 @@ export function deriveStructuredSuggestionsContent(params: {
   menuId: string;
   message: string;
   uiStrings?: Record<string, unknown> | null;
+  specialist?: Record<string, unknown> | null;
 }): StructuredSuggestionsContent | null {
   const entry = getChooseForMeRegistryEntryForMenu(params.stepId, params.menuId);
   if (!entry) return null;
+  const itemKind = entry.chooseForMe.itemKind;
+  const itemStyle: StructuredSuggestionsItemStyle = itemKind === "multiline_list" ? "blocks" : "bullets";
+  const expectedOutro = structuredSuggestionOutro(entry.stepId, params.uiStrings || null);
+  const explicitItems = extractExplicitItems(params.specialist || null, itemKind);
+  if (explicitItems.length === 3) {
+    const rawHeading = String((params.specialist as Record<string, unknown> | null)?.suggestion_intro || "").trim();
+    const rawOutro = String((params.specialist as Record<string, unknown> | null)?.suggestion_outro || "").trim();
+    return {
+      kind: "structured_suggestions",
+      ...(rawHeading ? { heading: ensureHeading(rawHeading) } : {}),
+      items: explicitItems,
+      ...(rawOutro || expectedOutro ? { outro: rawOutro || expectedOutro } : {}),
+      item_style: itemStyle,
+    };
+  }
+
   const message = String(params.message || "").replace(/\r/g, "\n").trim();
   if (!message || looksLikeDiscoveryQuestions(message)) return null;
 
-  const blocks = splitBlocks(message);
-  if (blocks.length === 0) return null;
-
-  const itemKind = entry.chooseForMe.itemKind;
-  const itemStyle: StructuredSuggestionsItemStyle = itemKind === "multiline_list" ? "blocks" : "bullets";
-  const workingBlocks = [...blocks];
+  const rawLines = message
+    .replace(/\r/g, "\n")
+    .split("\n")
+    .map((line) => String(line || "").trim());
+  let bodyLines = [...rawLines];
   let heading = "";
   let outro = "";
-  const expectedOutro = structuredSuggestionOutro(entry.stepId, params.uiStrings || null);
 
-  if (workingBlocks.length > 1 && isLikelyIntroLine(workingBlocks[0] || "")) {
-    heading = ensureHeading(String(workingBlocks.shift() || "").trim());
+  const firstContentLine = bodyLines.find((line) => Boolean(line)) || "";
+  if (firstContentLine && isLikelyIntroLine(firstContentLine)) {
+    heading = ensureHeading(firstContentLine);
+    const firstIndex = bodyLines.findIndex((line) => line === firstContentLine);
+    bodyLines = bodyLines.slice(firstIndex + 1);
   }
 
-  if (workingBlocks.length > 1 && isLikelyOutroBlock(workingBlocks[workingBlocks.length - 1] || "", expectedOutro)) {
-    outro = String(workingBlocks.pop() || "").trim();
+  while (bodyLines.length > 0 && !String(bodyLines[0] || "").trim()) bodyLines.shift();
+  while (bodyLines.length > 0 && !String(bodyLines[bodyLines.length - 1] || "").trim()) bodyLines.pop();
+
+  const lastContentLine = [...bodyLines].reverse().find((line) => Boolean(line)) || "";
+  if (lastContentLine && isLikelyOutroBlock(lastContentLine, expectedOutro)) {
+    outro = String(lastContentLine || "").trim();
+    const lastIndex = bodyLines.lastIndexOf(lastContentLine);
+    bodyLines = bodyLines.slice(0, lastIndex);
   }
+
+  const bodyText = bodyLines.join("\n").trim();
+  const workingBlocks = splitBlocks(bodyText);
 
   let items =
     itemKind === "multiline_list"

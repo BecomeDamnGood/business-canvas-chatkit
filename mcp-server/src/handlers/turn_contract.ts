@@ -40,6 +40,7 @@ type UiActionSurface =
 type UiFeedbackKind =
   | "single_value_compare"
   | "single_value_canonical_suggestion"
+  | "grouped_list_compare"
   | "list_edit_compare"
   | "list_duplicate_merge_compare";
 
@@ -106,6 +107,7 @@ const UI_ACTION_SURFACES = new Set<UiActionSurface>([
 const UI_FEEDBACK_KINDS = new Set<UiFeedbackKind>([
   "single_value_compare",
   "single_value_canonical_suggestion",
+  "grouped_list_compare",
   "list_edit_compare",
   "list_duplicate_merge_compare",
 ]);
@@ -216,9 +218,13 @@ function ensureUnifiedUiFeedbackContract(response: RunStepContractResponse): voi
     wordingMode === "list" &&
     (feedbackReasonText || userItems.length > 0 || suggestionItems.length > 0)
   ) {
+    const feedbackKind: UiFeedbackKind =
+      wordingVariant === "grouped_list_units"
+        ? "grouped_list_compare"
+        : "list_edit_compare";
     ui.feedback_contract = {
       version: "2026-03-16.feedback_contract.v1",
-      kind: wordingVariant === "grouped_list_units" ? "list_duplicate_merge_compare" : "list_edit_compare",
+      kind: feedbackKind,
       mode: "list",
       ...(feedbackReasonText ? { rationale: feedbackReasonText } : {}),
       ...(userLabel ? { current_label: userLabel } : {}),

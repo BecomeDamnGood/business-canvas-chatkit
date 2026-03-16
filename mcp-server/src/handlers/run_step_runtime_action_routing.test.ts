@@ -76,7 +76,9 @@ function buildParams(intentEnabled: boolean) {
     ids: {
       step0Id: "step0",
       dreamStepId: "dream",
+      dreamSpecialist: "Dream",
       purposeStepId: "purpose",
+      purposeSpecialist: "Purpose",
       bigwhyStepId: "bigwhy",
       roleStepId: "role",
       entityStepId: "entity",
@@ -106,6 +108,16 @@ function buildParams(intentEnabled: boolean) {
       provisionalValueForStep: () => "",
       clearProvisionalValue: (state: any) => state,
       clearStepInteractiveState,
+      applyPostSpecialistStateMutations: ({ prevState, decision, specialistResult }: any) => ({
+        ...prevState,
+        current_step: String(decision.current_step || ""),
+        active_specialist: String(decision.specialist_to_call || ""),
+        intro_shown_for_step:
+          String(specialistResult?.action || "").trim() === "INTRO"
+            ? String(decision.current_step || "")
+            : String((prevState as Record<string, unknown>).intro_shown_for_step || ""),
+        last_specialist_result: specialistResult,
+      }),
       isUiStateHygieneSwitchV1Enabled: () => true,
       isClearlyGeneralOfftopicInput: () => false,
       shouldTreatAsStepContributingInput: () => true,
@@ -159,9 +171,45 @@ function buildParams(intentEnabled: boolean) {
       pickPrompt: () => "",
       uiStringFromStateMap: () => "",
       uiDefaultString: () => "",
+      applyCentralMetaTopicRouter: ({ specialistResult }: any) => specialistResult,
       finalizeResponse: (payload: any) => payload,
       attachRegistryPayload,
       resolveResponseUiFlags: () => null,
+      turnResponseEngine: {
+        renderValidateRecover: ({ state, specialist }: any) => ({
+          ok: true,
+          value: {
+            state,
+            specialist: {
+              ...specialist,
+              action: "ASK",
+            },
+            renderedStatus: "incomplete_output",
+            actionCodes: [],
+            renderedActions: [],
+            contractMeta: {
+              contractId: "",
+              contractVersion: "v1",
+              textKeys: [],
+            },
+          },
+        }),
+        attachAndFinalize: ({ state, specialist, responseUiFlags, actionCodesOverride, renderedActionsOverride, contractMetaOverride }: any) => ({
+          ok: true,
+          tool: "run_step",
+          current_step_id: String(state.current_step || ""),
+          active_specialist: String(state.active_specialist || ""),
+          specialist,
+          state,
+          ui: {
+            flags: responseUiFlags || {},
+            action_codes: actionCodesOverride || [],
+            actions: renderedActionsOverride || [],
+            contract_meta: contractMetaOverride || null,
+          },
+        }),
+        finalize: (payload: any) => payload,
+      },
     },
   };
 }
@@ -365,6 +413,126 @@ test("runStepRuntimeActionRoutingLayer does not pretransition special-route-owne
   );
 });
 
+test("runStepRuntimeActionRoutingLayer returns a deterministic Dream intro response for ACTION_STEP0_READY_START", async () => {
+  const params = buildParams(true) as any;
+  params.runtime.actionCodeRaw = "ACTION_STEP0_READY_START";
+  params.runtime.state = {
+    current_step: "step0",
+    active_specialist: "Step0",
+    intro_shown_session: "true",
+    intro_shown_for_step: "step0",
+    last_specialist_result: {
+      action: "ASK",
+      message: "Ready to start.",
+    },
+  };
+  params.behavior.buildTextForWidget = ({ specialist }: { specialist: Record<string, unknown> }) =>
+    String(specialist.message || "");
+  params.behavior.applyCentralMetaTopicRouter = ({ stepId, specialistResult }: any) => ({
+    ...specialistResult,
+    message: stepId === "dream" ? "Dream intro from catalog." : "",
+  });
+  params.behavior.turnResponseEngine.renderValidateRecover = ({ state, specialist, previousSpecialist }: any) => {
+    assert.equal(String(state.current_step || ""), "dream");
+    assert.equal(String(state.active_specialist || ""), "Dream");
+    assert.equal(String(previousSpecialist.action || ""), "ASK");
+    assert.equal(String(specialist.action || ""), "INTRO");
+    assert.equal(String(specialist.message || ""), "Dream intro from catalog.");
+    return {
+      ok: true,
+      value: {
+        state,
+        specialist: {
+          ...specialist,
+          action: "ASK",
+          ui_show_step_intro_chrome: true,
+        },
+        renderedStatus: "incomplete_output",
+        actionCodes: ["ACTION_DREAM_INTRO_EXPLAIN_MORE", "ACTION_DREAM_INTRO_START_EXERCISE"],
+        renderedActions: [],
+        contractMeta: {
+          contractId: "dream:incomplete_output:DREAM_MENU_INTRO",
+          contractVersion: "v1",
+          textKeys: ["step.dream.question.with_options"],
+        },
+      },
+    };
+  };
+
+  const result = await runStepRuntimeActionRoutingLayer(params);
+
+  assert.ok(result.response);
+  assert.equal(String((result.state as Record<string, unknown>).current_step || ""), "dream");
+  assert.equal(String((result.state as Record<string, unknown>).active_specialist || ""), "Dream");
+  assert.equal(String(((result.response as Record<string, unknown>).specialist as Record<string, unknown>).message || ""), "Dream intro from catalog.");
+  assert.equal(
+    String((((result.response as Record<string, unknown>).specialist as Record<string, unknown>).ui_show_step_intro_chrome || "")),
+    "true"
+  );
+});
+
+test("runStepRuntimeActionRoutingLayer returns a deterministic Purpose intro response for Dream confirm actions", async () => {
+  const actions = ["ACTION_DREAM_REFINE_CONFIRM", "ACTION_DREAM_EXPLAINER_REFINE_CONFIRM"];
+
+  for (const actionCode of actions) {
+    const params = buildParams(true) as any;
+    params.runtime.actionCodeRaw = actionCode;
+    params.runtime.state = {
+      current_step: "dream",
+      active_specialist: actionCode === "ACTION_DREAM_REFINE_CONFIRM" ? "Dream" : "DreamExplainer",
+      intro_shown_session: "true",
+      intro_shown_for_step: "dream",
+      dream_final: "Mindd droomt van een wereld met oprechte verbinding.",
+      last_specialist_result: {
+        action: "ASK",
+        message: "Dream confirmed.",
+      },
+    };
+    params.behavior.buildTextForWidget = ({ specialist }: { specialist: Record<string, unknown> }) =>
+      String(specialist.message || "");
+    params.behavior.applyCentralMetaTopicRouter = ({ stepId, specialistResult }: any) => ({
+      ...specialistResult,
+      message: stepId === "purpose" ? "Purpose intro from catalog for Mindd." : "",
+    });
+    params.behavior.turnResponseEngine.renderValidateRecover = ({ state, specialist, previousSpecialist }: any) => {
+      assert.equal(String(state.current_step || ""), "purpose");
+      assert.equal(String(state.active_specialist || ""), "Purpose");
+      assert.equal(String(previousSpecialist.action || ""), "ASK");
+      assert.equal(String(specialist.action || ""), "INTRO");
+      assert.equal(String(specialist.message || ""), "Purpose intro from catalog for Mindd.");
+      return {
+        ok: true,
+        value: {
+          state,
+          specialist: {
+            ...specialist,
+            action: "ASK",
+            ui_show_step_intro_chrome: true,
+          },
+          renderedStatus: "incomplete_output",
+          actionCodes: ["ACTION_PURPOSE_INTRO_EXPLAIN_MORE", "ACTION_PURPOSE_INTRO_START_EXERCISE"],
+          renderedActions: [],
+          contractMeta: {
+            contractId: "purpose:incomplete_output:PURPOSE_MENU_INTRO",
+            contractVersion: "v1",
+            textKeys: ["step.purpose.question.with_options"],
+          },
+        },
+      };
+    };
+
+    const result = await runStepRuntimeActionRoutingLayer(params);
+
+    assert.ok(result.response);
+    assert.equal(String((result.state as Record<string, unknown>).current_step || ""), "purpose");
+    assert.equal(String((result.state as Record<string, unknown>).active_specialist || ""), "Purpose");
+    assert.equal(
+      String((((result.response as Record<string, unknown>).specialist as Record<string, unknown>).message || "")),
+      "Purpose intro from catalog for Mindd."
+    );
+  }
+});
+
 test("runStepRuntimeActionRoutingLayer strips stale single-value content before rebuilding a resumed picker payload", async () => {
   const params = buildParams(true) as any;
   params.runtime.actionCodeRaw = "ACTION_TARGETGROUP_POSTREFINE_CONFIRM";
@@ -550,10 +718,22 @@ test("runStepRuntimeActionRoutingLayer proceeds from single-value confirm action
     params.state.provisionalValueForStep = () => "";
 
     const result = await runStepRuntimeActionRoutingLayer(params);
-    assert.equal(result.response, null);
     assert.equal(String((result.state as Record<string, unknown>).current_step || ""), current.nextStep);
     assert.equal(String((result.state as Record<string, unknown>)[current.finalField] || ""), current.canonical);
-    assert.equal(String((result.state as Record<string, unknown>).active_specialist || ""), "");
+    if (
+      current.actionCode === "ACTION_DREAM_EXPLAINER_REFINE_CONFIRM" ||
+      current.actionCode === "ACTION_DREAM_REFINE_CONFIRM"
+    ) {
+      assert.ok(result.response);
+      assert.equal(String((result.state as Record<string, unknown>).active_specialist || ""), "Purpose");
+      assert.equal(
+        String((((result.response as Record<string, unknown>).specialist as Record<string, unknown>).action || "")),
+        "ASK"
+      );
+    } else {
+      assert.equal(result.response, null);
+      assert.equal(String((result.state as Record<string, unknown>).active_specialist || ""), "");
+    }
   }
 });
 
@@ -603,10 +783,10 @@ test("runStepRuntimeActionRoutingLayer proceeds from Dream confirm when canonica
     params.wording.buildWordingChoiceFromPendingSpecialist = () => null;
 
     const result = await runStepRuntimeActionRoutingLayer(params);
-    assert.equal(result.response, null);
+    assert.ok(result.response);
     assert.equal(String((result.state as Record<string, unknown>).current_step || ""), "purpose");
     assert.equal(String((result.state as Record<string, unknown>).dream_final || ""), canonical);
-    assert.equal(String((result.state as Record<string, unknown>).active_specialist || ""), "");
+    assert.equal(String((result.state as Record<string, unknown>).active_specialist || ""), "Purpose");
     const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
     assert.notEqual(String(specialist.wording_choice_pending || ""), "true");
   }

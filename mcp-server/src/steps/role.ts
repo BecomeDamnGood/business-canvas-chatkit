@@ -15,6 +15,10 @@ export const RoleZodSchema = z.object({
   question: z.string(),
   refined_formulation: z.string(),
   role: z.string(),
+  suggestion_intro: z.string().optional(),
+  suggestion_items: z.array(z.string()).optional(),
+  suggestion_outro: z.string().optional(),
+  suggestion_item_style: z.enum(["bullets", "blocks"]).optional(),
   feedback_reason_text: z.string(),
   feedback_mode: z.enum(["none", "affirm_input", "compare_suggestion", "refine_current"]),
   step_support_state: z.enum(["ok", "stuck"]),
@@ -52,6 +56,10 @@ export const RoleJsonSchema = {
     question: { type: "string" },
     refined_formulation: { type: "string" },
     role: { type: "string" },
+    suggestion_intro: { type: "string" },
+    suggestion_items: { type: "array", items: { type: "string" } },
+    suggestion_outro: { type: "string" },
+    suggestion_item_style: { type: "string", enum: ["bullets", "blocks"] },
     feedback_reason_text: { type: "string" },
     feedback_mode: { type: "string", enum: ["none", "affirm_input", "compare_suggestion", "refine_current"] },
     step_support_state: { type: "string", enum: ["ok", "stuck"] },
@@ -373,6 +381,10 @@ After the third answer, propose a refined Role sentence via REFINE (section 12).
   First line: one short intro line (localized) with this meaning: "Here are three examples of a Role for a {venture_type} like {company_name}." Use the known venture type and company name when available. If one is missing, keep the line natural and specific with the context that is known.
   Then provide exactly 3 Role suggestions as a markdown bullet list (each line must start with "- "). Each example must be exactly one sentence and follow all example rules.
   After the 3 bullet suggestions, add exactly one blank line, then add this one short line (localized): "I hope these suggestions inspire you to write your own Role."
+- suggestion_intro: repeat the exact intro line from message (non-empty).
+- suggestion_items: array of exactly 3 Role suggestion strings, one per suggestion, without bullet markers.
+- suggestion_outro: repeat the exact final inspiration line from message (non-empty).
+- suggestion_item_style: "bullets"
 - question=""
 - refined_formulation=""
 - question=""

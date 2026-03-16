@@ -577,7 +577,7 @@ test("feedback contract derives the list edit family from wording-choice list fe
   assert.equal(String(feedbackContract.instruction || ""), "Choose the version that fits best for the remaining difference.");
 });
 
-test("feedback contract derives the duplicate merge family from grouped list wording feedback", () => {
+test("feedback contract derives the grouped list compare family from grouped list wording feedback", () => {
   const response = finalizeResponseContractInternals(
     {
       ok: true,
@@ -631,7 +631,7 @@ test("feedback contract derives the duplicate merge family from grouped list wor
   );
 
   const feedbackContract = (((response.ui || {}) as Record<string, unknown>).feedback_contract || {}) as Record<string, unknown>;
-  assert.equal(String(feedbackContract.kind || ""), "list_duplicate_merge_compare");
+  assert.equal(String(feedbackContract.kind || ""), "grouped_list_compare");
   assert.equal(
     String(feedbackContract.rationale || ""),
     "Je hebt al iets soortgelijks gezegd, dus een samengevoegde regel houdt je lijst scherper."

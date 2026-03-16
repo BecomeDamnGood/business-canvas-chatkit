@@ -16,6 +16,10 @@ export const DreamZodSchema = z.object({
   question: z.string(),
   refined_formulation: z.string(),
   dream: z.string(),
+  suggestion_intro: z.string().optional(),
+  suggestion_items: z.array(z.string()).optional(),
+  suggestion_outro: z.string().optional(),
+  suggestion_item_style: z.enum(["bullets", "blocks"]).optional(),
   feedback_reason_text: z.string(),
   feedback_mode: z.enum(["none", "affirm_input", "compare_suggestion", "refine_current"]),
   step_support_state: z.enum(["ok", "stuck"]),
@@ -55,6 +59,10 @@ export const DreamJsonSchema = {
     question: { type: "string" },
     refined_formulation: { type: "string" },
     dream: { type: "string" },
+    suggestion_intro: { type: "string" },
+    suggestion_items: { type: "array", items: { type: "string" } },
+    suggestion_outro: { type: "string" },
+    suggestion_item_style: { type: "string", enum: ["bullets", "blocks"] },
     feedback_reason_text: { type: "string" },
     feedback_mode: { type: "string", enum: ["none", "affirm_input", "compare_suggestion", "refine_current"] },
     step_support_state: { type: "string", enum: ["ok", "stuck"] },
@@ -296,6 +304,10 @@ If user chooses "Give me a few dream suggestions":
   - Base them only on the venture type + business name if known (do NOT invent extra facts).
   - Each suggestion MUST comply with Dream Quality Rules (section 8.5). Keep it effect-first and emotionally resonant. Do not mention tools, software, channels, methods, or measurable claims.
   - After the 3 bullet suggestions, add exactly one blank line, then end with one short line (localized): "I hope these suggestions inspire you to write your own Dream."
+- suggestion_intro: repeat the exact intro line from message (non-empty).
+- suggestion_items: array of exactly 3 Dream suggestion strings, one per suggestion, without bullet markers.
+- suggestion_outro: repeat the exact final inspiration line from message (non-empty).
+- suggestion_item_style: "bullets"
 
 - refined_formulation=""
 - question=""

@@ -44,6 +44,7 @@ import {
   isInteractiveSupportStep,
   supportsAutoSuggest,
 } from "../steps/step_registry.js";
+import { deriveStructuredSuggestionsContent } from "../core/structured_suggestions.js";
 type RunPostSpecialistPipelineParams = RunStepPostSpecialistPipelineRequest;
 
 type RunStepPipelineFlatPorts<TPayload> =
@@ -81,6 +82,51 @@ function isNonContributingWordingIntent(intentRaw: string): boolean {
     intent === "feedback_on_suggestion" ||
     intent === "reject_suggestion_explicit"
   );
+}
+
+type StructuredSuggestionRouteSpec = {
+  stepId: string;
+  menuId: string;
+  routeToken: string;
+  fieldName: string;
+};
+
+function resolveStructuredSuggestionRouteSpec(stepId: string, userMessage: string): StructuredSuggestionRouteSpec | null {
+  const route = String(userMessage || "").trim();
+  if (!route.startsWith("__ROUTE__")) return null;
+  const specs: StructuredSuggestionRouteSpec[] = [
+    { stepId: "dream", menuId: "DREAM_MENU_SUGGESTIONS", routeToken: "__ROUTE__DREAM_GIVE_SUGGESTIONS__", fieldName: "dream" },
+    { stepId: "purpose", menuId: "PURPOSE_MENU_EXAMPLES", routeToken: "__ROUTE__PURPOSE_GIVE_EXAMPLES__", fieldName: "purpose" },
+    { stepId: "bigwhy", menuId: "BIGWHY_MENU_FROM_GIVE", routeToken: "__ROUTE__BIGWHY_GIVE_EXAMPLE__", fieldName: "bigwhy" },
+    { stepId: "role", menuId: "ROLE_MENU_EXAMPLES", routeToken: "__ROUTE__ROLE_GIVE_EXAMPLES__", fieldName: "role" },
+    { stepId: "entity", menuId: "ENTITY_MENU_SUGGESTIONS", routeToken: "__ROUTE__ENTITY_FORMULATE__", fieldName: "entity" },
+    { stepId: "entity", menuId: "ENTITY_MENU_SUGGESTIONS", routeToken: "__ROUTE__ENTITY_FORMULATE_FOR_ME__", fieldName: "entity" },
+    { stepId: "strategy", menuId: "STRATEGY_MENU_EXAMPLES", routeToken: "__ROUTE__STRATEGY_GIVE_EXAMPLES__", fieldName: "strategy" },
+  ];
+  return specs.find((spec) => spec.stepId === stepId && route.startsWith(spec.routeToken)) || null;
+}
+
+function renderStructuredSuggestionsTranscript(content: {
+  heading?: string;
+  items: string[];
+  outro?: string;
+  item_style: "bullets" | "blocks";
+}): string {
+  const parts: string[] = [];
+  if (content.heading) parts.push(String(content.heading || "").trim());
+  if (content.item_style === "blocks") {
+    parts.push(content.items.map((item) => String(item || "").trim()).filter(Boolean).join("\n\n"));
+  } else {
+    parts.push(
+      content.items
+        .map((item) => String(item || "").trim())
+        .filter(Boolean)
+        .map((item) => `- ${item}`)
+        .join("\n")
+    );
+  }
+  if (content.outro) parts.push(String(content.outro || "").trim());
+  return parts.filter(Boolean).join("\n\n").trim();
 }
 
 export function shouldForcePendingWordingChoiceFromIntent(params: {
@@ -830,7 +876,67 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
       }
     }
 
-    if (String(decision1.current_step || "") === deps.bigwhyStepId) {
+    const structuredSuggestionRouteSpec = resolveStructuredSuggestionRouteSpec(
+      String(decision1.current_step || ""),
+      userMessage
+    );
+    if (structuredSuggestionRouteSpec && !isTrueFlag(specialistResult?.is_offtopic)) {
+      const normalizeStructuredSuggestionRouteResult = (candidateResult: Record<string, unknown>) => {
+        const content = deriveStructuredSuggestionsContent({
+          stepId: structuredSuggestionRouteSpec.stepId,
+          menuId: structuredSuggestionRouteSpec.menuId,
+          message: String(candidateResult.message || "").trim(),
+          uiStrings:
+            state && typeof (state as Record<string, unknown>).ui_strings === "object"
+              ? ((state as Record<string, unknown>).ui_strings as Record<string, unknown>)
+              : null,
+          specialist: candidateResult,
+        });
+        if (!content || content.items.length !== 3) return null;
+        return {
+          ...candidateResult,
+          message: renderStructuredSuggestionsTranscript(content),
+          refined_formulation: "",
+          feedback_reason_text: "",
+          [structuredSuggestionRouteSpec.fieldName]: "",
+          suggestion_intro: String(content.heading || "").trim(),
+          suggestion_items: content.items,
+          suggestion_outro: String(content.outro || "").trim(),
+          suggestion_item_style: content.item_style,
+        } as Record<string, unknown>;
+      };
+
+      let normalizedSuggestionRouteResult = normalizeStructuredSuggestionRouteResult(specialistResult);
+      if (!normalizedSuggestionRouteResult) {
+        const repairInput = [
+          structuredSuggestionRouteSpec.routeToken,
+          "STRUCTURED_SUGGESTIONS_CONTRACT",
+          "- return action=\"ASK\"",
+          "- return exactly 3 suggestions in suggestion_items",
+          "- keep refined_formulation=\"\"",
+          `- keep ${structuredSuggestionRouteSpec.fieldName}=\"\"`,
+          "- keep feedback_reason_text=\"\"",
+        ].join("\n");
+        const repairCall = await deps.callSpecialistStrictSafe(
+          { model: params.model, state, decision: decision1, userMessage: repairInput },
+          deps.buildRoutingContext(repairInput),
+          state
+        );
+        if (!repairCall.ok) return finalizePipelinePayload(repairCall.payload);
+        params.rememberLlmCall(repairCall.value);
+        attempts = Math.max(attempts, repairCall.value.attempts);
+        specialistResult = asRecord(repairCall.value.specialistResult);
+        normalizedSuggestionRouteResult = normalizeStructuredSuggestionRouteResult(specialistResult);
+      }
+      if (normalizedSuggestionRouteResult) {
+        specialistResult = normalizedSuggestionRouteResult;
+      }
+    }
+
+    if (
+      String(decision1.current_step || "") === deps.bigwhyStepId &&
+      !structuredSuggestionRouteSpec
+    ) {
       const candidate = deps.pickBigWhyCandidate(specialistResult);
       if (candidate && deps.countWords(candidate) > deps.bigwhyMaxWords) {
         const shortenRequest = `__SHORTEN_BIGWHY__ ${candidate}`;

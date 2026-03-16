@@ -55,6 +55,7 @@ function toRecord(value: unknown): Record<string, unknown> {
 type FeedbackContractKind =
   | "single_value_compare"
   | "single_value_canonical_suggestion"
+  | "grouped_list_compare"
   | "list_edit_compare"
   | "list_duplicate_merge_compare";
 
@@ -87,6 +88,7 @@ function normalizeFeedbackContractKind(raw: unknown): FeedbackContractKind | "" 
   if (
     kind === "single_value_compare" ||
     kind === "single_value_canonical_suggestion" ||
+    kind === "grouped_list_compare" ||
     kind === "list_edit_compare" ||
     kind === "list_duplicate_merge_compare"
   ) {
@@ -159,7 +161,7 @@ function readSingleValueCardContent(uiPayload: Record<string, unknown>): {
   };
 }
 
-function readStructuredSuggestionsCardContent(uiPayload: Record<string, unknown>): {
+export function readStructuredSuggestionsCardContent(uiPayload: Record<string, unknown>): {
   heading?: string;
   items?: string[];
   outro?: string;
@@ -180,6 +182,33 @@ function readStructuredSuggestionsCardContent(uiPayload: Record<string, unknown>
   };
 }
 
+export function decorateStructuredSuggestionItemsForStep(params: {
+  stepId: string;
+  lang: string | null | undefined;
+  content: {
+    heading?: string;
+    items?: string[];
+    outro?: string;
+    itemStyle?: "bullets" | "blocks";
+  } | null;
+}): {
+  heading?: string;
+  items?: string[];
+  outro?: string;
+  itemStyle?: "bullets" | "blocks";
+} | null {
+  const content = params.content;
+  if (!content) return null;
+  if (params.stepId !== "strategy" || content.itemStyle !== "blocks" || !Array.isArray(content.items)) {
+    return content;
+  }
+  const stepTitle = extractStepTitle(params.stepId, params.lang) || "Strategy";
+  return {
+    ...content,
+    items: content.items.map((item, index) => `${stepTitle} ${index + 1}\n${String(item || "").trim()}`.trim()),
+  };
+}
+
 export function shouldSuppressMainCardForWordingChoice(
   uiPayloadRaw: Record<string, unknown> | null | undefined,
   uiViewVariantRaw: string | null | undefined
@@ -194,6 +223,7 @@ export function shouldSuppressMainCardForWordingChoice(
   const flags = toRecord(uiPayload.flags);
   return (
     feedbackContract?.kind === "single_value_compare" ||
+    feedbackContract?.kind === "grouped_list_compare" ||
     feedbackContract?.kind === "list_edit_compare" ||
     feedbackContract?.kind === "list_duplicate_merge_compare" ||
     uiViewVariant === "wording_choice" ||
@@ -1130,6 +1160,7 @@ function renderWordingChoicePanel(resultData: Record<string, unknown>, lang: str
   const requirePick = String(flags.require_wording_pick || "false") === "true";
   const feedbackContractEnabled =
     feedbackContract?.kind === "single_value_compare" ||
+    feedbackContract?.kind === "grouped_list_compare" ||
     feedbackContract?.kind === "list_edit_compare" ||
     feedbackContract?.kind === "list_duplicate_merge_compare";
   const enabled = feedbackContractEnabled || requirePick || wording.enabled === true;
@@ -1536,7 +1567,13 @@ export function render(overrideToolOutput?: unknown): void {
   const uiQuestionText = String(uiPayload.questionText || "").trim();
   const wordingChoiceActive = shouldSuppressMainCardForWordingChoice(uiPayload, uiViewVariant);
   const singleValueContent = wordingChoiceActive ? null : readSingleValueCardContent(uiPayload);
-  const structuredSuggestionsContent = wordingChoiceActive ? null : readStructuredSuggestionsCardContent(uiPayload);
+  const structuredSuggestionsContent = wordingChoiceActive
+    ? null
+    : decorateStructuredSuggestionItemsForStep({
+        stepId: current,
+        lang,
+        content: readStructuredSuggestionsCardContent(uiPayload),
+      });
   const structuredActions = choiceActionsForResult(result);
   const hasStructuredActions = structuredActions.length > 0;
   const promptBody =

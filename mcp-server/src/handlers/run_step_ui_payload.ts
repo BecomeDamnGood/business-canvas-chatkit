@@ -205,6 +205,7 @@ function normalizeUiFeedbackContract(raw: unknown): Record<string, unknown> | un
   if (
     kind !== "single_value_canonical_suggestion" &&
     kind !== "single_value_compare" &&
+    kind !== "grouped_list_compare" &&
     kind !== "list_edit_compare" &&
     kind !== "list_duplicate_merge_compare"
   ) {

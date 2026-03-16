@@ -25,6 +25,7 @@ import {
   formatCompareFeedbackForDisplay,
   formatUserPickFeedbackForDisplay,
   sanitizeFeedbackReasonForDisplay,
+  sanitizeSupportTextForDisplay,
 } from "./feedback_display.js";
 import { UI_STRINGS_SOURCE_EN } from "../i18n/ui_strings_defaults.js";
 import { productsServicesItemsFromText } from "../shared/productsservices_items.js";
@@ -616,7 +617,12 @@ function singleValueSupportText(params: {
       if (isSingleValueCanonicalBlock(block, params.heading, params.canonicalValue)) return false;
       return true;
     });
-  return filtered.join("\n\n").trim();
+  return filtered
+    .map((block) => sanitizeSupportTextForDisplay(block))
+    .map((block) => String(block || "").trim())
+    .filter(Boolean)
+    .join("\n\n")
+    .trim();
 }
 
 function buildSingleValueUiContent(params: {
@@ -657,6 +663,7 @@ function buildStructuredSuggestionsUiContent(params: {
   menuId: string;
   state: CanvasState;
   message: string;
+  specialist?: Record<string, unknown> | null;
 }): UiStructuredSuggestionsContent | undefined {
   const chooseForMeEntry = getChooseForMeRegistryEntryForMenu(params.stepId, params.menuId);
   if (!chooseForMeEntry) return undefined;
@@ -665,6 +672,7 @@ function buildStructuredSuggestionsUiContent(params: {
     menuId: params.menuId,
     message: params.message,
     uiStrings: params.state.ui_strings as Record<string, unknown> | undefined,
+    specialist: params.specialist || null,
   });
   if (!content || content.items.length === 0) return undefined;
   return content;
@@ -2144,6 +2152,7 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     menuId,
     state,
     message: messageForDisplay,
+    specialist: specialistForDisplay,
   });
 
   const {

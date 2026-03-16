@@ -1,6 +1,8 @@
 import type { CanvasState } from "../core/state.js";
 import type { TurnOutputStatus } from "../core/turn_policy_renderer.js";
+import type { OrchestratorOutput } from "../core/orchestrator.js";
 import type { RunStepAttachRegistryPayload } from "./run_step_ports.js";
+import type { TurnResponseEngine } from "./run_step_turn_response_engine.js";
 import type { WordingChoiceUiPayload } from "./run_step_runtime_action_helpers.js";
 import type { AcceptedOutputUserTurnClassification } from "./run_step_accepted_output_semantics.js";
 import type {
@@ -52,7 +54,9 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
   ids: {
     step0Id: string;
     dreamStepId: string;
+    dreamSpecialist: string;
     purposeStepId: string;
+    purposeSpecialist: string;
     bigwhyStepId: string;
     roleStepId: string;
     entityStepId: string;
@@ -106,6 +110,12 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     provisionalValueForStep: (state: Record<string, unknown>, stepId: string) => string;
     clearProvisionalValue: (state: CanvasState, stepId: string) => CanvasState;
     clearStepInteractiveState: (state: CanvasState, stepId: string) => CanvasState;
+    applyPostSpecialistStateMutations: (params: {
+      prevState: CanvasState;
+      decision: OrchestratorOutput;
+      specialistResult: Record<string, unknown>;
+      provisionalSource: "action_route" | "system_generated" | "user_input";
+    }) => CanvasState;
     isUiStateHygieneSwitchV1Enabled: () => boolean;
     isClearlyGeneralOfftopicInput: (userMessage: string) => boolean;
     shouldTreatAsStepContributingInput: (userMessage: string, stepId: string) => boolean;
@@ -188,9 +198,17 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     pickPrompt: (specialist: Record<string, unknown>) => string;
     uiStringFromStateMap: (state: CanvasState | null | undefined, key: string, fallback: string) => string;
     uiDefaultString: (key: string, fallback?: string) => string;
+    applyCentralMetaTopicRouter: (params: {
+      stepId: string;
+      specialistResult: Record<string, unknown>;
+      previousSpecialist?: Record<string, unknown>;
+      state: CanvasState;
+      userMessage?: string;
+    }) => Record<string, unknown>;
     finalizeResponse: (payload: TPayload) => TPayload;
     attachRegistryPayload: RunStepAttachRegistryPayload<TPayload>;
     resolveResponseUiFlags: (actionCodeOrRouteToken: string) => Record<string, boolean | string> | null;
+    turnResponseEngine: TurnResponseEngine<TPayload>;
   };
 }): Promise<RunStepRuntimeActionRoutingOutput<TPayload>> {
   const {
@@ -205,6 +223,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
   let state = runtime.state;
   let userMessage = runtime.userMessage;
   let forcedProceed = false;
+  let forcedProceedPreviousSpecialist: Record<string, unknown> = {};
   let submittedTextIntent: PendingWordingChoiceTextIntent | "" = "";
   let submittedTextAnchor: PendingWordingChoiceTextAnchor | "" = "";
   let acceptedOutputUserTurnClassification: AcceptedOutputUserTurnClassification | null = null;
@@ -700,6 +719,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
       if (String((state as Record<string, unknown>).current_step || "") !== ids.dreamStepId) {
         action.setDreamRuntimeMode(state, "self");
       }
+      forcedProceedPreviousSpecialist = prev;
       userMessage = "";
       forcedProceed = true;
     }
@@ -940,6 +960,138 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
       buildBigWhyTooLongFeedback,
     };
   };
+  const deterministicIntroTargetForAction = (
+    actionCode: string
+  ): { stepId: string; specialistId: string } | null => {
+    const normalized = String(actionCode || "").trim().toUpperCase();
+    if (normalized === "ACTION_STEP0_READY_START") {
+      return {
+        stepId: ids.dreamStepId,
+        specialistId: ids.dreamSpecialist,
+      };
+    }
+    if (
+      normalized === "ACTION_DREAM_REFINE_CONFIRM" ||
+      normalized === "ACTION_DREAM_EXPLAINER_REFINE_CONFIRM"
+    ) {
+      return {
+        stepId: ids.purposeStepId,
+        specialistId: ids.purposeSpecialist,
+      };
+    }
+    return null;
+  };
+  const buildDeterministicIntroResponse = async (): Promise<
+    RunStepRuntimeActionRoutingOutput<TPayload> | null
+  > => {
+    if (!forcedProceed) return null;
+    const target = deterministicIntroTargetForAction(runtime.actionCodeRaw);
+    if (!target) return null;
+    if (String((state as Record<string, unknown>).current_step || "").trim() !== target.stepId) return null;
+
+    const responseUiFlags = behavior.resolveResponseUiFlags(runtime.actionCodeRaw);
+    const stateWithUi = await behavior.ensureUiStrings(state, runtime.actionCodeRaw || userMessage);
+    const introSpecialistSeed = behavior.applyCentralMetaTopicRouter({
+      stepId: target.stepId,
+      specialistResult: {
+        action: "INTRO",
+        message: "",
+        question: "",
+        wants_recap: false,
+        is_offtopic: false,
+        user_intent: "STEP_INPUT",
+        meta_topic: "NONE",
+      },
+      previousSpecialist: forcedProceedPreviousSpecialist,
+      state: stateWithUi,
+      userMessage: "",
+    });
+    const forcedDecision = {
+      specialist_to_call: target.specialistId,
+      specialist_input: `CURRENT_STEP_ID: ${target.stepId} | USER_MESSAGE: ${runtime.actionCodeRaw}`,
+      current_step: target.stepId,
+      intro_shown_for_step: String((stateWithUi as Record<string, unknown>).intro_shown_for_step ?? ""),
+      intro_shown_session:
+        String((stateWithUi as Record<string, unknown>).intro_shown_session ?? "").trim() === "true"
+          ? "true"
+          : "false",
+      show_step_intro: "true",
+      show_session_intro: "false",
+    } as OrchestratorOutput;
+    const nextState = statePorts.applyPostSpecialistStateMutations({
+      prevState: stateWithUi,
+      decision: forcedDecision,
+      specialistResult: introSpecialistSeed,
+      provisionalSource: "action_route",
+    });
+    const renderedResult = behavior.turnResponseEngine.renderValidateRecover({
+      state: nextState,
+      specialist: introSpecialistSeed,
+      previousSpecialist: forcedProceedPreviousSpecialist,
+      telemetry: runtime.uiI18nTelemetry,
+      onContractViolation: () =>
+        behavior.finalizeResponse(
+          behavior.attachRegistryPayload(
+            {
+              ok: true,
+              tool: "run_step",
+              current_step_id: String(nextState.current_step || ""),
+              active_specialist: String((nextState as Record<string, unknown>).active_specialist || ""),
+              text: behavior.buildTextForWidget({ specialist: introSpecialistSeed, state: nextState }),
+              prompt: behavior.pickPrompt(introSpecialistSeed),
+              specialist: introSpecialistSeed,
+              state: nextState,
+            },
+            introSpecialistSeed,
+            responseUiFlags
+          )
+        ),
+    });
+    if (!renderedResult.ok) {
+      return {
+        response: renderedResult.payload,
+        state: nextState,
+        userMessage,
+        submittedTextIntent,
+        submittedTextAnchor,
+        acceptedOutputUserTurnClassification,
+        responseUiFlags,
+        bigwhyMaxWords: BIGWHY_MAX_WORDS,
+        countWords,
+        pickBigWhyCandidate,
+        buildBigWhyTooLongFeedback,
+      };
+    }
+    const renderedState = await behavior.ensureUiStrings(
+      renderedResult.value.state,
+      runtime.actionCodeRaw || userMessage
+    );
+    state = renderedState;
+    return {
+      response: behavior.turnResponseEngine.attachAndFinalize({
+        state: renderedState,
+        specialist: renderedResult.value.specialist,
+        responseUiFlags,
+        actionCodesOverride: renderedResult.value.actionCodes,
+        renderedActionsOverride: renderedResult.value.renderedActions,
+        contractMetaOverride: renderedResult.value.contractMeta,
+      }),
+      state: renderedState,
+      userMessage,
+      submittedTextIntent,
+      submittedTextAnchor,
+      acceptedOutputUserTurnClassification,
+      responseUiFlags,
+      bigwhyMaxWords: BIGWHY_MAX_WORDS,
+      countWords,
+      pickBigWhyCandidate,
+      buildBigWhyTooLongFeedback,
+    };
+  };
+  const deterministicIntroResponse = await buildDeterministicIntroResponse();
+  if (deterministicIntroResponse) {
+    return deterministicIntroResponse;
+  }
   let hasPendingWordingChoice =
     runtime.wordingChoiceEnabled &&
     runtime.inputMode === "widget" &&

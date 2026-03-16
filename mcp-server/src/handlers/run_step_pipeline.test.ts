@@ -161,8 +161,11 @@ function buildPipelineWordingHelpers() {
 
 function buildStrategyPipelineHarness(params: {
   specialistResult: Record<string, unknown>;
+  specialistResults?: Record<string, unknown>[];
   onSpecialistCall?: (userMessage: string) => void;
   dreamRuntimeMode?: "self" | "builder_collect" | "builder_scoring" | "builder_refine";
+  pickBigWhyCandidate?: (result: Record<string, unknown>) => string;
+  buildBigWhyTooLongFeedback?: () => Record<string, unknown>;
   classifyStepStuckTurn?: (params: {
     model: string;
     stepId: string;
@@ -173,6 +176,7 @@ function buildStrategyPipelineHarness(params: {
   }) => Promise<{ is_stuck: boolean }>;
 }) {
   const wordingHelpers = buildPipelineWordingHelpers();
+  const queuedResults = [...(params.specialistResults || [params.specialistResult])];
   const helpers = createRunStepPipelineHelpers<any>({
     ids: {
       step0Id: "step0",
@@ -194,10 +198,11 @@ function buildStrategyPipelineHarness(params: {
       buildRoutingContext: () => ({ enabled: true, shadow: false }),
       callSpecialistStrictSafe: async ({ userMessage }) => {
         params.onSpecialistCall?.(String(userMessage || ""));
+        const nextResult = queuedResults.length > 0 ? queuedResults.shift() || params.specialistResult : params.specialistResult;
         return {
           ok: true,
           value: {
-            specialistResult: params.specialistResult,
+            specialistResult: nextResult,
             attempts: 1,
             usage: {},
             model: "gpt-5-mini",
@@ -248,13 +253,13 @@ function buildStrategyPipelineHarness(params: {
         }
         return [];
       },
-      pickBigWhyCandidate: () => "",
+      pickBigWhyCandidate: (result) => params.pickBigWhyCandidate?.(result) || "",
       countWords: (text: string) =>
         String(text || "")
           .trim()
           .split(/\s+/)
           .filter(Boolean).length,
-      buildBigWhyTooLongFeedback: () => ({}),
+      buildBigWhyTooLongFeedback: () => params.buildBigWhyTooLongFeedback?.() || ({}),
       enforceDreamBuilderQuestionProgress: (specialistResult) => specialistResult,
       applyMotivationQuotesContractV11: ({ specialistResult }) => ({
         specialistResult,
@@ -1382,6 +1387,106 @@ test("runPostSpecialistPipeline sends first multiline strategy input straight to
   assert.equal(specialistUserMessage, firstInput);
   assert.equal(specialistUserMessage.startsWith("__BUSINESS_LIST_CLARIFY__"), false);
   assert.equal(String((payload.specialist as Record<string, unknown>).__business_list_turn_preclassified || ""), "");
+});
+
+test("runPostSpecialistPipeline canonicalizes Big Why suggestion routes into explicit suggestion fields and never shortens them", async () => {
+  const specialistCalls: string[] = [];
+  const longCandidate = [
+    "Mensen verdienen het om zich gezien en geraakt te voelen zodat zij hun volledige potentieel kunnen ontdekken",
+    "en benutten in een wereld waarin merken en communicatie hen niet reduceren maar juist helpen",
+    "om met vertrouwen en waardigheid keuzes te maken die hun leven verrijken.",
+  ].join(" ");
+  const helpers = buildStrategyPipelineHarness({
+    specialistResult: {
+      action: "ASK",
+      message: [
+        "HIER ZIJN DRIE MOGELIJKE GROTE WAAROM-FORMULERINGEN DIE PASSEN BIJ DE DROOM EN BESTAANSREDEN VAN MINDD",
+        "- Mensen verdienen het om zich gezien en geraakt te voelen, zodat ze hun volledige potentieel kunnen ontdekken en benutten.",
+        "- Echte verbinding en oprechte inspiratie zorgen ervoor dat mensen boven zichzelf uitstijgen, ongeacht hun achtergrond of omstandigheden.",
+        "- Wanneer merken mensen oprecht raken, ontstaat er ruimte voor persoonlijke groei en langdurige positieve verandering in de samenleving.",
+        "",
+        "Ik hoop dat deze suggesties je inspireren om je eigen Grote Waarom te schrijven.",
+      ].join("\n"),
+      question: "",
+      refined_formulation: longCandidate,
+      bigwhy: longCandidate,
+      feedback_reason_text: "Dit had geen refine-feedback mogen zijn.",
+      feedback_mode: "none",
+      step_support_state: "ok",
+      wants_recap: false,
+      is_offtopic: false,
+      user_intent: "STEP_INPUT",
+      meta_topic: "NONE",
+    },
+    onSpecialistCall: (userMessage) => {
+      specialistCalls.push(userMessage);
+    },
+    pickBigWhyCandidate: (result) =>
+      String((result as Record<string, unknown>).bigwhy || (result as Record<string, unknown>).refined_formulation || ""),
+  });
+
+  const payload = await helpers.runPostSpecialistPipeline({
+    routing: {
+      userMessage: "__ROUTE__BIGWHY_GIVE_EXAMPLE__",
+      actionCodeRaw: "",
+      responseUiFlags: null,
+      inputMode: "widget",
+      wordingChoiceEnabled: true,
+      languageResolvedThisTurn: false,
+      isBootstrapPollCall: false,
+      motivationQuotesEnabled: false,
+    },
+    rendering: {
+      uiI18nTelemetry: null,
+      lang: "nl",
+      ensureUiStrings: async (state) => ({
+        ...state,
+        ui_strings: {
+          "structuredSuggestions.outro.template": "Ik hoop dat deze suggesties je inspireren om je eigen {0} te schrijven.",
+          "offtopic.step.bigwhy": "Grote Waarom",
+        },
+      }),
+    },
+    state: {
+      state: {
+        current_step: "bigwhy",
+        active_specialist: "BigWhy",
+        business_name: "Mindd",
+        provisional_by_step: {},
+        last_specialist_result: {},
+      } as any,
+      transientPendingScores: null,
+      submittedUserText: "",
+      submittedTextIntent: "",
+      submittedTextAnchor: "",
+      rawNormalized: "__ROUTE__BIGWHY_GIVE_EXAMPLE__",
+      pristineAtEntry: false,
+    },
+    specialist: {
+      model: "gpt-5-mini",
+      decideOrchestration: () =>
+        ({
+          current_step: "bigwhy",
+          specialist_to_call: "BigWhy",
+          show_session_intro: "false",
+          show_step_intro: "false",
+        }) as any,
+      rememberLlmCall: () => {},
+    },
+  } as any);
+
+  assert.deepEqual((payload.specialist as Record<string, unknown>).suggestion_items, [
+    "Mensen verdienen het om zich gezien en geraakt te voelen, zodat ze hun volledige potentieel kunnen ontdekken en benutten.",
+    "Echte verbinding en oprechte inspiratie zorgen ervoor dat mensen boven zichzelf uitstijgen, ongeacht hun achtergrond of omstandigheden.",
+    "Wanneer merken mensen oprecht raken, ontstaat er ruimte voor persoonlijke groei en langdurige positieve verandering in de samenleving.",
+  ]);
+  assert.equal(String((payload.specialist as Record<string, unknown>).bigwhy || ""), "");
+  assert.equal(String((payload.specialist as Record<string, unknown>).refined_formulation || ""), "");
+  assert.equal(String((payload.specialist as Record<string, unknown>).feedback_reason_text || ""), "");
+  assert.equal(
+    specialistCalls.some((message) => String(message || "").startsWith("__SHORTEN_BIGWHY__")),
+    false
+  );
 });
 
 test("runPostSpecialistPipeline exposes a renderable next widget outcome for every visible refine-adjust action", async () => {

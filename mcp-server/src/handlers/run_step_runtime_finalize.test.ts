@@ -464,6 +464,58 @@ test("buildTextForWidget avoids duplicate strategy bullets when message already 
   assert.equal((output.match(/Focus op enterprise-opdrachten/g) || []).length, 1);
 });
 
+test("buildTextForWidget keeps strategy support text but renders the current strategy block only once", () => {
+  const helpers = buildTextHelpers((stepId) => {
+    if (stepId !== "strategy") return "";
+    return [
+      "Je huidige strategie voor Mindd is:",
+      "",
+      "• Richt je op langdurige samenwerkingen met merken die waarde hechten aan echte verbinding met hun doelgroep",
+      "• Kies voor diepgaande merktrajecten in plaats van snelle, oppervlakkige projecten",
+      "• Investeer in het ontwikkelen van unieke positioneringsmethodes die klanten helpen zich te onderscheiden",
+      "• Prioriteer kwaliteit en persoonlijke aandacht boven volume en snelheid",
+      "• Werk alleen met klanten die groei vanuit wederzijds begrip nastreven",
+    ].join("\n");
+  });
+
+  const output = helpers.buildTextForWidget({
+    specialist: {
+      ui_contract_id: "strategy:ASK:STRATEGY_MENU_QUESTIONS:v1",
+      message: [
+        "JE HUIDIGE STRATEGIE VOOR MINDD IS",
+        "",
+        "JE HEBT NU 5 FOCUSPUNTEN BINNEN JE STRATEGIE",
+        "Ik adviseer je om minimaal 4 en maximaal 7 focuspunten te formuleren.",
+      ].join("\n"),
+      refined_formulation: [
+        "Richt je op langdurige samenwerkingen met merken die waarde hechten aan echte verbinding met hun doelgroep",
+        "Kies voor diepgaande merktrajecten in plaats van snelle, oppervlakkige projecten",
+        "Investeer in het ontwikkelen van unieke positioneringsmethodes die klanten helpen zich te onderscheiden",
+        "Prioriteer kwaliteit en persoonlijke aandacht boven volume en snelheid",
+        "Werk alleen met klanten die groei vanuit wederzijds begrip nastreven",
+      ].join(" "),
+      strategy: [
+        "Richt je op langdurige samenwerkingen met merken die waarde hechten aan echte verbinding met hun doelgroep",
+        "Kies voor diepgaande merktrajecten in plaats van snelle, oppervlakkige projecten",
+        "Investeer in het ontwikkelen van unieke positioneringsmethodes die klanten helpen zich te onderscheiden",
+        "Prioriteer kwaliteit en persoonlijke aandacht boven volume en snelheid",
+        "Werk alleen met klanten die groei vanuit wederzijds begrip nastreven",
+      ].join(" "),
+    },
+    state: {
+      active_specialist: "Strategy",
+      current_step: "strategy",
+    } as any,
+  });
+
+  assert.equal((output.match(/Je huidige strategie voor Mindd is:/g) || []).length, 1);
+  assert.match(output, /Je hebt nu 5 focuspunten binnen je strategie/i);
+  assert.equal(
+    (output.match(/Richt je op langdurige samenwerkingen met merken die waarde hechten aan echte verbinding met hun doelgroep/g) || []).length,
+    1
+  );
+});
+
 test("buildTextForWidget avoids duplicate products/services bullets when message already contains the same list", () => {
   const helpers = buildTextHelpers((stepId) => {
     if (stepId !== "productsservices") return "";

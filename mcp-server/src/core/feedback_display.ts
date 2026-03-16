@@ -40,8 +40,27 @@ function isPureGenericFeedbackAcknowledgementSentence(input: string): boolean {
     /^(?:goed|sterk|prima)\s+(?:beginpunt|start|startpunt|inzicht)[.!?]*$/i,
     /^(?:dat|dit)\s+is\s+een\s+(?:goed|sterk|prima)\s+(?:beginpunt|start|startpunt|inzicht)[.!?]*$/i,
     /^(?:i think i understand what you mean|i understand what you mean|ik denk dat ik begrijp wat je bedoelt|ik begrijp wat je bedoelt)[.!?]*$/i,
+    /^(?:your|de|je)\s+(?:current|huidige)\s+(?:wording|formulation|sentence|zin|entity|entiteit|purpose|bestaansreden|big why|grote waarom|role|rol|target group|doelgroep)\s+(?:is|blijft)\s+(?:clear|helder|duidelijk)[^.!?]*(?:but|maar)[^.!?]*(?:stronger|krachtiger|distinctive|onderscheidend|unique|uniek|recognizable|herkenbaar|generic|generiek)[^.!?]*[.!?]*$/i,
+    /^(?:your|de|je)\s+(?:current|huidige)\s+(?:entity|entiteit|wording|formulation|zin)\s+(?:is|blijft)\s+(?:clear|helder|duidelijk)[^.!?]*(?:misses|mist)[^.!?]*(?:distinctive|onderscheidend|unique|uniek|recognizable|herkenbaar)[^.!?]*[.!?]*$/i,
+    /^(?:your|je)\s+(?:(?:current|huidige)\s+)?(?:wording|formulation|zin|formulering)\s+(?:is|blijft)\s+(?:clear|helder|duidelijk)[^.!?]*(?:can be|kan)\s+(?:more\s+)?(?:stronger|krachtiger)[^.!?]*[.!?]*$/i,
   ];
-  return patterns.some((pattern) => pattern.test(sentence));
+  if (patterns.some((pattern) => pattern.test(sentence))) return true;
+  if (
+    /^(?:i|ik)\s+(?:have|heb)\s+(?:your|je)?\s*(?:current\s+)?(?:wording|formulation|zin|formulering)?\s*(?:made more compact|compacter gemaakt|shortened|verkort|tightened|aangescherpt|rewritten|herschreven)[^.!?]*[.!?]*$/i.test(
+      sentence
+    ) &&
+    !/\b(?:so that|zodat|because|omdat)\b/i.test(sentence)
+  ) {
+    return true;
+  }
+  return false;
+}
+
+export function sanitizeSupportTextForDisplay(rawText: string): string {
+  const sanitized = splitFeedbackSentences(rawText).filter(
+    (sentence) => !isPureGenericFeedbackAcknowledgementSentence(sentence)
+  );
+  return sanitized.join(" ").trim();
 }
 
 export function sanitizeFeedbackReasonForDisplay(params: {

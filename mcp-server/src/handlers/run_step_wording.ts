@@ -680,6 +680,23 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     };
   }
 
+  function clearedResolvedWordingTransientFields(): Record<string, unknown> {
+    return {
+      feedback_reason_key: "",
+      feedback_reason_text: "",
+      pending_suggestion_intent: "",
+      pending_suggestion_anchor: "",
+      pending_suggestion_seed_source: "",
+      pending_suggestion_feedback_text: "",
+      pending_suggestion_presentation_mode: "",
+      feedback_mode: "none",
+      current_value_refinement_pending: "false",
+      current_value_refinement_target_field: "",
+      current_value_refinement_feedback_text: "",
+      current_value_refinement_anchor_value: "",
+    };
+  }
+
   function looksLikeDualClarificationPrompt(previousSpecialist: Record<string, unknown>): boolean {
     const combined = [
       String(previousSpecialist.question || ""),
@@ -755,6 +772,63 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     if (!userRaw) return null;
     const referenceItems = params.baseItems.length > 0 ? params.baseItems : params.suggestionItems;
     if (referenceItems.length === 0) return null;
+    const implicitRewrite = (() => {
+      const explicitItems = deps.parseListItems(userRaw)
+        .map((line) => String(line || "").trim())
+        .filter(Boolean);
+      if (explicitItems.length > 1) return null;
+      const sentenceItems = deps.splitSentenceItems(userRaw)
+        .map((line) => String(line || "").trim())
+        .filter(Boolean);
+      if (sentenceItems.length < 2 || sentenceItems.length > 3) return null;
+
+      let matchedSentenceIndex = -1;
+      let matchedReferenceIndex = -1;
+      let matchedScore = 0;
+      let strongMatchCount = 0;
+      for (let sentenceIndex = 0; sentenceIndex < sentenceItems.length; sentenceIndex += 1) {
+        let bestReferenceIndex = -1;
+        let bestSentenceScore = 0;
+        for (let referenceIndex = 0; referenceIndex < referenceItems.length; referenceIndex += 1) {
+          const score = itemSimilarity(sentenceItems[sentenceIndex], referenceItems[referenceIndex]);
+          if (score > bestSentenceScore) {
+            bestSentenceScore = score;
+            bestReferenceIndex = referenceIndex;
+          }
+        }
+        if (bestSentenceScore >= 0.72) {
+          strongMatchCount += 1;
+          if (bestSentenceScore > matchedScore) {
+            matchedScore = bestSentenceScore;
+            matchedSentenceIndex = sentenceIndex;
+            matchedReferenceIndex = bestReferenceIndex;
+          }
+        }
+      }
+      if (strongMatchCount !== 1 || matchedSentenceIndex < 0 || matchedReferenceIndex < 0) return null;
+
+      const unmatchedSentenceItems = sentenceItems.filter((_, index) => index !== matchedSentenceIndex);
+      if (unmatchedSentenceItems.length === 0) return null;
+      const unmatchedStayDistinct = unmatchedSentenceItems.every((sentence) => {
+        let bestScore = 0;
+        for (const referenceItem of referenceItems) {
+          bestScore = Math.max(bestScore, itemSimilarity(sentence, referenceItem));
+        }
+        return bestScore < 0.58;
+      });
+      if (!unmatchedStayDistinct) return null;
+
+      return {
+        updatedItems: mergeListItems(
+          [],
+          [
+            ...referenceItems.slice(0, matchedReferenceIndex),
+            ...sentenceItems,
+            ...referenceItems.slice(matchedReferenceIndex + 1),
+          ]
+        ),
+      };
+    })();
 
     if (LIST_NO_CHANGE_SIGNAL.test(userRaw)) {
       const stable = mergeListItems([], referenceItems);
@@ -784,6 +858,14 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
         userItems: mergeListItems([], turnResolution.updatedItems),
         suggestionItems: mergeListItems([], params.suggestionItems.length > 0 ? params.suggestionItems : referenceItems),
         normalizedUser: mergeListItems([], turnResolution.updatedItems).join("\n"),
+      };
+    }
+    if (turnResolution.kind === "add" && implicitRewrite) {
+      return {
+        semantics: "full",
+        userItems: implicitRewrite.updatedItems,
+        suggestionItems: mergeListItems([], params.suggestionItems.length > 0 ? params.suggestionItems : referenceItems),
+        normalizedUser: implicitRewrite.updatedItems.join("\n"),
       };
     }
 
@@ -1885,6 +1967,7 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
         : (String(suggestionRaw || "").trim() || normalizedUser);
       const autoSelectedBase: Record<string, unknown> = {
         ...specialistResult,
+        ...clearedResolvedWordingTransientFields(),
         wording_choice_pending: "false",
         wording_choice_selected: "suggestion",
         wording_choice_list_semantics: "delta",
@@ -1895,13 +1978,6 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
         wording_choice_compare_segments: [],
         wording_choice_user_variant_semantics: "",
         wording_choice_user_variant_stepworthy: "",
-        feedback_reason_key: "",
-        feedback_reason_text: "",
-        pending_suggestion_intent: "",
-        pending_suggestion_anchor: "",
-        pending_suggestion_seed_source: "",
-        pending_suggestion_feedback_text: "",
-        pending_suggestion_presentation_mode: "",
         refined_formulation: chosen,
         ...(mode === "list" ? { statements: chosenItems } : {}),
       };
@@ -2160,6 +2236,7 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
         }
         const nextPending: Record<string, unknown> = {
           ...prevRaw,
+          ...clearedResolvedWordingTransientFields(),
           wording_choice_pending: "true",
           wording_choice_selected: "",
           wording_choice_compare_mode: "grouped_units",
@@ -2176,12 +2253,7 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
           wording_choice_suggestion_label: String(
             nextPayload.suggestion_label || prevRaw.wording_choice_suggestion_label || ""
           ),
-          feedback_reason_key: "",
           feedback_reason_text: String(nextUnit.feedback_reason_text || "").trim(),
-          pending_suggestion_intent: "",
-          pending_suggestion_anchor: "",
-          pending_suggestion_seed_source: "",
-          pending_suggestion_feedback_text: "",
           pending_suggestion_presentation_mode: String(prevRaw.wording_choice_presentation || ""),
         };
         const nextState: CanvasState = {
@@ -2198,6 +2270,7 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
       const selected = withUpdatedTargetField(
         {
           ...prevRaw,
+          ...clearedResolvedWordingTransientFields(),
           message: selectedMessage,
           wording_choice_pending: "false",
           wording_choice_selected: pickedUser ? "user" : "suggestion",
@@ -2219,14 +2292,7 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
           wording_choice_compare_segments: [],
           wording_choice_user_variant_semantics: "",
           wording_choice_user_variant_stepworthy: "",
-          feedback_reason_key: "",
           feedback_reason_text: pickedUser ? userPickFeedbackReason(state, prevRaw) : "",
-          feedback_mode: "none",
-          pending_suggestion_intent: "",
-          pending_suggestion_anchor: "",
-          pending_suggestion_seed_source: "",
-          pending_suggestion_feedback_text: "",
-          pending_suggestion_presentation_mode: "",
           ...(mode === "list" ? { statements: composedItems } : {}),
         },
         stepId,
@@ -2304,6 +2370,7 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     const selected = withUpdatedTargetField(
       {
         ...prevRaw,
+        ...clearedResolvedWordingTransientFields(),
         message: selectedMessage,
         wording_choice_pending: "false",
         wording_choice_selected: pickedUser ? "user" : "suggestion",
@@ -2325,14 +2392,7 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
         wording_choice_compare_segments: [],
         wording_choice_user_variant_semantics: "",
         wording_choice_user_variant_stepworthy: "",
-        feedback_reason_key: "",
         feedback_reason_text: pickedUser ? userPickFeedbackReason(state, prevRaw) : "",
-        feedback_mode: "none",
-        pending_suggestion_intent: "",
-        pending_suggestion_anchor: "",
-        pending_suggestion_seed_source: "",
-        pending_suggestion_feedback_text: "",
-        pending_suggestion_presentation_mode: "",
         ...(mode === "list" ? { statements: mergedPickedItems } : {}),
       },
       stepId,

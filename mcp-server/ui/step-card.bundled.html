@@ -5119,6 +5119,19 @@
       itemStyle
     };
   }
+  function decorateStructuredSuggestionItemsForStep(params) {
+    const content = params.content;
+    if (!content) return null;
+    if (params.stepId !== "strategy" || content.itemStyle !== "blocks" || !Array.isArray(content.items)) {
+      return content;
+    }
+    const stepTitle = extractStepTitle(params.stepId, params.lang) || "Strategy";
+    return {
+      ...content,
+      items: content.items.map((item, index) => `${stepTitle} ${index + 1}
+${String(item || "").trim()}`.trim())
+    };
+  }
   function shouldSuppressMainCardForWordingChoice(uiPayloadRaw, uiViewVariantRaw) {
     const uiPayload = uiPayloadRaw && typeof uiPayloadRaw === "object" ? uiPayloadRaw : {};
     const feedbackContract = readFeedbackContract(uiPayload);
@@ -5993,7 +6006,11 @@
     const uiQuestionText = String(uiPayload.questionText || "").trim();
     const wordingChoiceActive = shouldSuppressMainCardForWordingChoice(uiPayload, uiViewVariant);
     const singleValueContent = wordingChoiceActive ? null : readSingleValueCardContent(uiPayload);
-    const structuredSuggestionsContent = wordingChoiceActive ? null : readStructuredSuggestionsCardContent(uiPayload);
+    const structuredSuggestionsContent = wordingChoiceActive ? null : decorateStructuredSuggestionItemsForStep({
+      stepId: current,
+      lang,
+      content: readStructuredSuggestionsCardContent(uiPayload)
+    });
     const structuredActions = choiceActionsForResult(result);
     const hasStructuredActions = structuredActions.length > 0;
     const promptBody = uiPayload.prompt && typeof uiPayload.prompt.body === "string" ? String(uiPayload.prompt.body || "") : "";

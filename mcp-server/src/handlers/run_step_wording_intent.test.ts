@@ -1775,6 +1775,64 @@ test("buildWordingChoiceFromTurn keeps productsservices anchorless 2-to-3 rewrit
   assert.equal((result.wordingChoice?.suggestion_items || []).length >= 1, true);
 });
 
+test("buildWordingChoiceFromTurn treats an implicit strategy line rewrite as one remaining compare unit instead of an additive list expansion", () => {
+  const helpers = buildHelpers(true);
+  const originalTarget = "Werk alleen met klanten die groei vanuit wederzijds begrip nastreven";
+  const result = helpers.buildWordingChoiceFromTurn({
+    stepId: "strategy",
+    state: {} as any,
+    activeSpecialist: "Strategy",
+    previousSpecialist: {
+      statements: [
+        "Richt je op langdurige samenwerkingen met merken die waarde hechten aan echte verbinding met hun doelgroep",
+        "Kies voor diepgaande merktrajecten in plaats van snelle, oppervlakkige projecten",
+        "Investeer in het ontwikkelen van unieke positioneringsmethodes die klanten helpen zich te onderscheiden",
+        "Prioriteer kwaliteit en persoonlijke aandacht boven volume en snelheid",
+        originalTarget,
+      ],
+      strategy: "",
+    },
+    specialistResult: {
+      message: "Ik heb je input omgezet naar een positieve focuskeuze, zodat het duidelijk richting geeft aan je strategie.",
+      feedback_reason_text:
+        "Ik heb je input omgezet naar een positieve focuskeuze, zodat het duidelijk richting geeft aan je strategie.",
+      refined_formulation: [
+        "Richt je op langdurige samenwerkingen met merken die waarde hechten aan echte verbinding met hun doelgroep",
+        "Kies voor diepgaande merktrajecten in plaats van snelle, oppervlakkige projecten",
+        "Investeer in het ontwikkelen van unieke positioneringsmethodes die klanten helpen zich te onderscheiden",
+        "Prioriteer kwaliteit en persoonlijke aandacht boven volume en snelheid",
+        "Sta open voor samenwerkingen met diverse klanten, mits er ruimte is voor echte verbinding",
+      ].join("\n"),
+      statements: [
+        "Richt je op langdurige samenwerkingen met merken die waarde hechten aan echte verbinding met hun doelgroep",
+        "Kies voor diepgaande merktrajecten in plaats van snelle, oppervlakkige projecten",
+        "Investeer in het ontwikkelen van unieke positioneringsmethodes die klanten helpen zich te onderscheiden",
+        "Prioriteer kwaliteit en persoonlijke aandacht boven volume en snelheid",
+        "Sta open voor samenwerkingen met diverse klanten, mits er ruimte is voor echte verbinding",
+      ],
+    },
+    userTextRaw: "Ik werk niet alleen met klanten die groei vanuit wederzijds begrip nastreven. Wij werken met iedereen",
+    isOfftopic: false,
+  });
+
+  assert.ok(result.wordingChoice);
+  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_variant || ""), "grouped_list_units");
+  const compareUnits = ((result.specialist as Record<string, unknown>).wording_choice_compare_units as Array<Record<string, unknown>>) || [];
+  assert.equal(compareUnits.length, 1);
+  assert.deepEqual(compareUnits[0].user_items, [
+    "Ik werk niet alleen met klanten die groei vanuit wederzijds begrip nastreven",
+    "Wij werken met iedereen",
+  ]);
+  assert.deepEqual(compareUnits[0].suggestion_items, [
+    "Sta open voor samenwerkingen met diverse klanten, mits er ruimte is voor echte verbinding",
+  ]);
+  const compareSegments = ((result.specialist as Record<string, unknown>).wording_choice_compare_segments as Array<Record<string, unknown>>) || [];
+  const retainedItems = compareSegments
+    .filter((segment) => String(segment.kind || "") === "retained")
+    .flatMap((segment) => ((segment.items as string[]) || []).map((line) => String(line || "")));
+  assert.equal(retainedItems.includes(originalTarget), false);
+});
+
 test("buildWordingChoiceFromTurn keeps productsservices retained items with internal commas intact", () => {
   const helpers = buildHelpers(true);
   const retainedItem = "Traditionele communicatiediensten (zoals DTP, posters, campagnes)";
@@ -2612,6 +2670,43 @@ test("applyWordingPickSelection unwraps autosuggest heading before committing su
   assert.equal(String(applyResult.specialist.refined_formulation || ""), value);
   assert.equal(String(applyResult.specialist.dream || ""), value);
   assert.equal(String(applyResult.specialist.wording_choice_agent_current || ""), value);
+});
+
+test("applyWordingPickSelection clears stale current-value refinement context after suggestion pick", () => {
+  const helpers = buildHelpers(true);
+  const chosen = "Retailbedrijven in de Randstad met marketingteams";
+  const applyResult = helpers.applyWordingPickSelection({
+    stepId: "targetgroup",
+    routeToken: "__WORDING_PICK_SUGGESTION__",
+    state: {
+      current_step: "targetgroup",
+      active_specialist: "TargetGroup",
+      last_specialist_result: {
+        wording_choice_pending: "true",
+        wording_choice_mode: "text",
+        wording_choice_target_field: "targetgroup",
+        wording_choice_user_normalized: "Bedrijven in de retailsector",
+        wording_choice_agent_current: chosen,
+        current_value_refinement_pending: "true",
+        current_value_refinement_target_field: "targetgroup",
+        current_value_refinement_feedback_text:
+          "Alleen 'bedrijven in de retailsector' is te algemeen; een extra kenmerk zoals teamtype maakt het bruikbaarder.",
+        current_value_refinement_anchor_value: "Bedrijven in de retailsector",
+        feedback_reason_text:
+          "Alleen 'bedrijven in de retailsector' is te algemeen; een extra kenmerk zoals teamtype maakt het bruikbaarder.",
+      },
+    } as any,
+  });
+
+  assert.equal(applyResult.handled, true);
+  assert.equal(String(applyResult.specialist.refined_formulation || ""), chosen);
+  assert.equal(String(applyResult.specialist.targetgroup || ""), chosen);
+  assert.equal(String(applyResult.specialist.wording_choice_selected || ""), "suggestion");
+  assert.equal(String(applyResult.specialist.current_value_refinement_pending || ""), "false");
+  assert.equal(String(applyResult.specialist.current_value_refinement_target_field || ""), "");
+  assert.equal(String(applyResult.specialist.current_value_refinement_feedback_text || ""), "");
+  assert.equal(String(applyResult.specialist.current_value_refinement_anchor_value || ""), "");
+  assert.equal(String(applyResult.specialist.feedback_reason_text || ""), "");
 });
 
 test("applyWordingPickSelection preserves feedback reason when user picks own single-value wording", () => {
