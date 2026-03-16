@@ -1315,6 +1315,15 @@ test("choose-for-me suggestion menus publish explicit structured suggestion cont
         action: "ASK",
         ui_contract_id: scenario.contractId,
         message: scenario.message,
+        suggestion_intro: scenario.expectedHeading.replace(/:\s*$/, ""),
+        suggestion_items:
+          scenario.expectedItems ||
+          scenario.message
+            .split("\n")
+            .filter((line) => line.startsWith("- "))
+            .map((line) => line.replace(/^- /, "")),
+        suggestion_outro: scenario.expectedOutro,
+        suggestion_item_style: "bullets",
         question: "",
         refined_formulation: "",
         is_offtopic: false,
@@ -1338,7 +1347,7 @@ test("choose-for-me suggestion menus publish explicit structured suggestion cont
   }
 });
 
-test("choose-for-me suggestion menus still parse role and entity bullets when the intro line is not followed by a blank line", () => {
+test("choose-for-me suggestion menus render role and entity bullets from explicit specialist suggestion fields", () => {
   const scenarios = [
     {
       stepId: "role",
@@ -1401,6 +1410,10 @@ test("choose-for-me suggestion menus still parse role and entity bullets when th
         action: "ASK",
         ui_contract_id: scenario.contractId,
         message: scenario.message,
+        suggestion_intro: scenario.expectedHeading.replace(/:\s*$/, ""),
+        suggestion_items: scenario.expectedItems,
+        suggestion_outro: scenario.expectedOutro,
+        suggestion_item_style: "bullets",
         question: "",
         refined_formulation: "",
         is_offtopic: false,
@@ -1414,6 +1427,38 @@ test("choose-for-me suggestion menus still parse role and entity bullets when th
     assert.deepEqual(uiContent.items, scenario.expectedItems);
     assert.equal(String(uiContent.outro || ""), scenario.expectedOutro);
   }
+});
+
+test("choose-for-me suggestion menus require explicit specialist suggestion fields", () => {
+  const state = getDefaultState();
+  (state as any).current_step = "entity";
+  (state as any).active_specialist = "Entity";
+  (state as any).business_name = "Mindd";
+  (state as any).ui_strings = {
+    "structuredSuggestions.outro.template": "Ik hoop dat deze suggesties je inspireren om je eigen {0} te schrijven.",
+    "offtopic.step.entity": "Entiteit",
+  };
+
+  const rendered = renderFreeTextTurnPolicy({
+    stepId: "entity",
+    state,
+    specialist: {
+      action: "ASK",
+      ui_contract_id: buildUiContractId("entity", "no_output", "ENTITY_MENU_SUGGESTIONS"),
+      message: [
+        "HIER ZIJN DRIE VOORBEELDEN VAN EEN ENTITEIT VOOR EEN AGENCY ZOALS MINDD.",
+        "- Een strategisch positioneringsbureau",
+        "- Een merkbelevingsstudio",
+        "- Een creatieve groeipartner",
+      ].join("\n"),
+      question: "",
+      refined_formulation: "",
+      is_offtopic: false,
+    },
+    previousSpecialist: {},
+  });
+
+  assert.equal(Object.prototype.hasOwnProperty.call((rendered.specialist as any) || {}, "ui_content"), false);
 });
 
 test("choose-for-me suggestion menus prefer explicit specialist suggestion fields over malformed message text", () => {
@@ -1496,6 +1541,32 @@ test("strategy example menus recover a flat 15-bullet response into 3 multiline 
         "",
         "Ik hoop dat deze suggesties je inspireren om je eigen strategie te schrijven.",
       ].join("\n"),
+      suggestion_intro: "HIER ZIJN DRIE VOORBEELDSTRATEGIEEN DIE PASSEN BIJ EEN TOONAANGEVEND POSITIONERINGSBUREAU ALS MINDD",
+      suggestion_items: [
+        [
+          "Richt je op langdurige samenwerkingen met merken die waarde hechten aan echte verbinding met hun doelgroep",
+          "Kies voor diepgaande merktrajecten in plaats van snelle, oppervlakkige projecten",
+          "Investeer in het ontwikkelen van unieke positioneringsmethodes die klanten helpen zich te onderscheiden",
+          "Prioriteer kwaliteit en persoonlijke aandacht boven volume en snelheid",
+          "Werk alleen met klanten die groei vanuit wederzijds begrip nastreven",
+        ].join("\n"),
+        [
+          "Focus op merken die openstaan voor co-creatie en gezamenlijke groei",
+          "Zet in op het bouwen van langdurige klantrelaties in plaats van losse opdrachten",
+          "Blijf selectief in het aannemen van projecten die passen bij de missie van Mindd",
+          "Investeer in kennisdeling en thought leadership binnen het vakgebied",
+          "Bescherm de kernwaarden van Mindd bij elke samenwerking",
+        ].join("\n"),
+        [
+          "Kies voor diepgaande merkpositioneringstrajecten met impact op lange termijn",
+          "Werk samen met klanten die bereid zijn te investeren in duurzame groei",
+          "Zet in op het creëren van wederzijds begrip als basis voor elke opdracht",
+          "Prioriteer projecten die bijdragen aan de droom van echte verbinding tussen merken en mensen",
+          "Blijf trouw aan een premium en persoonlijke aanpak",
+        ].join("\n"),
+      ],
+      suggestion_outro: "Ik hoop dat deze suggesties je inspireren om je eigen strategie te schrijven.",
+      suggestion_item_style: "blocks",
       question: "",
       refined_formulation: "",
       is_offtopic: false,

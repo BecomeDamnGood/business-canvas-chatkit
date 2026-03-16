@@ -173,15 +173,8 @@ test("buildTextForWidget normalizes structured suggestion menus into heading, bu
     {
       contract: "dream:ASK:DREAM_MENU_SUGGESTIONS:v1",
       stepId: "dream",
-      message: [
-        "Here are three examples of a Dream for an advertising agency like Mindd.",
-        "",
-        "Mindd dreams of a world in which creative ideas help brands connect with people on a deeper, more meaningful level.",
-        "",
-        "Mindd dreams of a world in which advertising inspires trust and brings genuine value to everyday lives.",
-        "",
-        "Mindd dreams of a world in which brands communicate with honesty, making people feel understood and respected.",
-      ].join("\n"),
+      message: "fallback",
+      suggestionIntro: "Here are three examples of a Dream for an advertising agency like Mindd.",
       expectedHeading: "Here are three examples of a Dream for an advertising agency like Mindd:",
       expectedItems: [
         "Mindd dreams of a world in which creative ideas help brands connect with people on a deeper, more meaningful level.",
@@ -193,13 +186,8 @@ test("buildTextForWidget normalizes structured suggestion menus into heading, bu
     {
       contract: "bigwhy:ASK:BIGWHY_MENU_FROM_GIVE:v1",
       stepId: "bigwhy",
-      message: [
-        "Here are three Big Why suggestions for Mindd, each reflecting the deeper meaning behind your Dream and Purpose.",
-        "",
-        "People should feel more deeply understood by the messages that shape their choices.",
-        "Communication should strengthen trust between brands and the people they serve.",
-        "Creative work should move culture toward more honest and human connection.",
-      ].join("\n"),
+      message: "fallback",
+      suggestionIntro: "Here are three Big Why suggestions for Mindd, each reflecting the deeper meaning behind your Dream and Purpose.",
       expectedHeading: "Here are three Big Why suggestions for Mindd, each reflecting the deeper meaning behind your Dream and Purpose:",
       expectedItems: [
         "People should feel more deeply understood by the messages that shape their choices.",
@@ -211,15 +199,8 @@ test("buildTextForWidget normalizes structured suggestion menus into heading, bu
     {
       contract: "role:ASK:ROLE_MENU_EXAMPLES:v1",
       stepId: "role",
-      message: [
-        "Here are three examples of a Role for an advertising agency like Mindd.",
-        "",
-        "- Mindd connects brands and people by translating creative ideas into meaningful experiences that foster genuine connection.",
-        "- Mindd aligns business goals with human insight, ensuring every campaign bridges the gap between brands and their audiences.",
-        "- Mindd translates complex brand messages into relatable stories, making it easier for people to feel understood and valued.",
-        "",
-        "I hope these suggestions inspire you to write your own Role.",
-      ].join("\n"),
+      message: "fallback",
+      suggestionIntro: "Here are three examples of a Role for an advertising agency like Mindd.",
       expectedHeading: "Here are three examples of a Role for an advertising agency like Mindd:",
       expectedItems: [
         "Mindd connects brands and people by translating creative ideas into meaningful experiences that foster genuine connection.",
@@ -231,13 +212,8 @@ test("buildTextForWidget normalizes structured suggestion menus into heading, bu
     {
       contract: "entity:ASK:ENTITY_MENU_SUGGESTIONS:v1",
       stepId: "entity",
-      message: [
-        "Here are three examples of an Entity for an advertising agency like Mindd.",
-        "",
-        "A creative brand agency.",
-        "An experiential marketing studio.",
-        "A purpose-driven advertising collective.",
-      ].join("\n"),
+      message: "fallback",
+      suggestionIntro: "Here are three examples of an Entity for an advertising agency like Mindd.",
       expectedHeading: "Here are three examples of an Entity for an advertising agency like Mindd:",
       expectedItems: [
         "A creative brand agency",
@@ -249,15 +225,9 @@ test("buildTextForWidget normalizes structured suggestion menus into heading, bu
     {
       contract: "bigwhy:ASK:BIGWHY_MENU_FROM_GIVE:v1",
       stepId: "bigwhy",
-      message: [
+      message: "fallback",
+      suggestionIntro:
         "HIER ZIJN DRIE MOGELIJKE GROTE WAAROM-FORMULERINGEN DIE PASSEN BIJ DE DROOM EN BESTAANSREDEN VAN MINDD",
-        "",
-        "- Mensen verdienen het om zich gezien en geraakt te voelen, zodat ze hun volledige potentieel kunnen ontdekken en benutten.",
-        "- Echte verbinding en oprechte inspiratie zorgen ervoor dat mensen boven zichzelf uitstijgen, ongeacht hun achtergrond of omstandigheden.",
-        "- Wanneer merken mensen oprecht raken, ontstaat er ruimte voor persoonlijke groei en langdurige positieve verandering in de samenleving.",
-        "",
-        "Ik hoop dat deze suggesties je inspireren om je eigen Grote Waarom te schrijven.",
-      ].join("\n"),
       expectedHeading:
         "HIER ZIJN DRIE MOGELIJKE GROTE WAAROM-FORMULERINGEN DIE PASSEN BIJ DE DROOM EN BESTAANSREDEN VAN MINDD:",
       expectedItems: [
@@ -270,15 +240,8 @@ test("buildTextForWidget normalizes structured suggestion menus into heading, bu
     {
       contract: "purpose:ASK:PURPOSE_MENU_EXAMPLES:v1",
       stepId: "purpose",
-      message: [
-        "HIER ZIJN DRIE MOGELIJKE FORMULERINGEN VOOR DE BESTAANSREDEN VAN MINDD",
-        "",
-        "- Mindd bestaat om mensen te helpen complexe keuzes met rust en vertrouwen te maken.",
-        "- Mindd bestaat om moeilijke informatie om te zetten in helderheid die mensen verder helpt.",
-        "- Mindd bestaat om mensen richting te geven wanneer belangrijke beslissingen overweldigend voelen.",
-        "",
-        "Ik hoop dat deze suggesties je inspireren om je eigen bestaansreden te schrijven.",
-      ].join("\n"),
+      message: "fallback",
+      suggestionIntro: "HIER ZIJN DRIE MOGELIJKE FORMULERINGEN VOOR DE BESTAANSREDEN VAN MINDD",
       expectedHeading: "HIER ZIJN DRIE MOGELIJKE FORMULERINGEN VOOR DE BESTAANSREDEN VAN MINDD:",
       expectedItems: [
         "Mindd bestaat om mensen te helpen complexe keuzes met rust en vertrouwen te maken.",
@@ -294,6 +257,10 @@ test("buildTextForWidget normalizes structured suggestion menus into heading, bu
       specialist: {
         ui_contract_id: scenario.contract,
         message: scenario.message,
+        suggestion_intro: scenario.suggestionIntro,
+        suggestion_items: scenario.expectedItems,
+        suggestion_outro: scenario.expectedOutro,
+        suggestion_item_style: "bullets",
         refined_formulation: "",
       },
       state: {
@@ -345,19 +312,19 @@ test("buildTextForWidget keeps purpose discovery questions intact when examples-
   assert.doesNotMatch(output, /Ik hoop dat deze suggesties je inspireren/i);
 });
 
-test("deriveSuggestionStateForWidget captures visible sentence suggestions for Dream", () => {
+test("deriveSuggestionStateForWidget captures explicit sentence suggestions for Dream", () => {
   const helpers = buildTextHelpers(() => "");
   const specialist = {
     ui_contract_id: "dream:ASK:DREAM_MENU_SUGGESTIONS:v1",
-    message: [
-      "Here are three examples of a Dream for an advertising agency like Mindd.",
-      "",
+    message: "fallback",
+    suggestion_intro: "Here are three examples of a Dream for an advertising agency like Mindd.",
+    suggestion_items: [
       "Mindd dreams of a world in which creative ideas help brands connect with people on a deeper, more meaningful level.",
-      "",
       "Mindd dreams of a world in which advertising inspires trust and brings genuine value to everyday lives.",
-      "",
       "Mindd dreams of a world in which brands communicate with honesty, making people feel understood and respected.",
-    ].join("\n"),
+    ],
+    suggestion_outro: "I hope these suggestions inspire you to write your own Dream.",
+    suggestion_item_style: "bullets",
   } as Record<string, unknown>;
 
   const snapshot = helpers.deriveSuggestionStateForWidget({ specialist, state: {} as any });
@@ -374,25 +341,34 @@ test("deriveSuggestionStateForWidget captures visible sentence suggestions for D
   });
 });
 
-test("deriveSuggestionStateForWidget captures multiline Strategy examples as plain line blocks", () => {
+test("deriveSuggestionStateForWidget captures explicit multiline Strategy examples as plain line blocks", () => {
   const helpers = buildTextHelpers(() => "");
   const specialist = {
     ui_contract_id: "strategy:ASK:STRATEGY_MENU_EXAMPLES:v1",
-    message: [
-      "HERE ARE THREE EXAMPLE STRATEGIES FOR MINDD:",
-      "",
-      "EXAMPLE 1",
-      "- Focus on long-term partnerships",
-      "- Prioritize depth over volume",
-      "- Select clients that match the mission",
-      "- Invest in strategic learning",
-      "",
-      "EXAMPLE 2",
-      "- Build a culture of curiosity",
-      "- Protect time for reflection",
-      "- Choose quality over speed",
-      "- Work with values-aligned clients",
-    ].join("\n"),
+    message: "fallback",
+    suggestion_intro: "HERE ARE THREE EXAMPLE STRATEGIES FOR MINDD",
+    suggestion_items: [
+      [
+        "Focus on long-term partnerships",
+        "Prioritize depth over volume",
+        "Select clients that match the mission",
+        "Invest in strategic learning",
+      ].join("\n"),
+      [
+        "Build a culture of curiosity",
+        "Protect time for reflection",
+        "Choose quality over speed",
+        "Work with values-aligned clients",
+      ].join("\n"),
+      [
+        "Make every project reinforce the long-term mission",
+        "Prefer values-aligned growth over short-term wins",
+        "Invest in reflection after each engagement",
+        "Protect quality over throughput",
+      ].join("\n"),
+    ],
+    suggestion_outro: "I hope these suggestions inspire you to write your own strategy.",
+    suggestion_item_style: "blocks",
   } as Record<string, unknown>;
 
   const snapshot = helpers.deriveSuggestionStateForWidget({ specialist, state: {} as any });
@@ -412,6 +388,12 @@ test("deriveSuggestionStateForWidget captures multiline Strategy examples as pla
         "Protect time for reflection",
         "Choose quality over speed",
         "Work with values-aligned clients",
+      ].join("\n"),
+      [
+        "Make every project reinforce the long-term mission",
+        "Prefer values-aligned growth over short-term wins",
+        "Invest in reflection after each engagement",
+        "Protect quality over throughput",
       ].join("\n"),
     ],
     valid_for_action_codes: ["ACTION_STRATEGY_EXAMPLES_CHOOSE_FOR_ME"],

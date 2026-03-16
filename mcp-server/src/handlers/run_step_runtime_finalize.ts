@@ -1099,22 +1099,28 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
     const menuId = deps.parseMenuFromContractIdForStep(contractId, contractStepId).toUpperCase();
     const config = structuredSuggestionMenuConfigFor(contractStepId, menuId);
     if (!config) return null;
-
-    const renderedText = buildTextForWidget({
+    const uiStrings =
+      params.state && typeof (params.state as Record<string, unknown>).ui_strings === "object"
+        ? ((params.state as Record<string, unknown>).ui_strings as Record<string, unknown>)
+        : null;
+    const content = deriveStructuredSuggestionsContent({
+      stepId: contractStepId,
+      menuId,
+      message: String((params.specialist as Record<string, unknown>).message || "").trim(),
+      uiStrings,
       specialist: params.specialist,
-      state: params.state || null,
     });
-    if (!renderedText) return null;
-
+    if (!content || content.items.length === 0) return null;
     const items =
       config.itemKind === "multiline_list"
-        ? extractStructuredStrategyExampleItems(renderedText)
-        : extractStructuredSuggestionItems({
-            raw: renderedText,
-            itemKind: config.itemKind,
-            tokenizeWords: deps.tokenizeWords,
-          }).slice(0, 3);
-    if (items.length === 0) return null;
+        ? content.items.map((item) =>
+            String(item || "")
+              .split("\n")
+              .map((line) => String(line || "").replace(/^\s*[-*•·]\s+/, "").trim())
+              .filter(Boolean)
+              .join("\n")
+          )
+        : [...content.items];
 
     return {
       stepId: config.stepId,

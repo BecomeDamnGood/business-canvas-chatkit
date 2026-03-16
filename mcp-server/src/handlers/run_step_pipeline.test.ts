@@ -1389,7 +1389,7 @@ test("runPostSpecialistPipeline sends first multiline strategy input straight to
   assert.equal(String((payload.specialist as Record<string, unknown>).__business_list_turn_preclassified || ""), "");
 });
 
-test("runPostSpecialistPipeline canonicalizes Big Why suggestion routes into explicit suggestion fields and never shortens them", async () => {
+test("runPostSpecialistPipeline repairs Big Why suggestion routes into explicit suggestion fields and never shortens them", async () => {
   const specialistCalls: string[] = [];
   const longCandidate = [
     "Mensen verdienen het om zich gezien en geraakt te voelen zodat zij hun volledige potentieel kunnen ontdekken",
@@ -1399,18 +1399,15 @@ test("runPostSpecialistPipeline canonicalizes Big Why suggestion routes into exp
   const helpers = buildStrategyPipelineHarness({
     specialistResult: {
       action: "ASK",
-      message: [
-        "HIER ZIJN DRIE MOGELIJKE GROTE WAAROM-FORMULERINGEN DIE PASSEN BIJ DE DROOM EN BESTAANSREDEN VAN MINDD",
-        "- Mensen verdienen het om zich gezien en geraakt te voelen, zodat ze hun volledige potentieel kunnen ontdekken en benutten.",
-        "- Echte verbinding en oprechte inspiratie zorgen ervoor dat mensen boven zichzelf uitstijgen, ongeacht hun achtergrond of omstandigheden.",
-        "- Wanneer merken mensen oprecht raken, ontstaat er ruimte voor persoonlijke groei en langdurige positieve verandering in de samenleving.",
-        "",
-        "Ik hoop dat deze suggesties je inspireren om je eigen Grote Waarom te schrijven.",
-      ].join("\n"),
+      message: "",
       question: "",
-      refined_formulation: longCandidate,
-      bigwhy: longCandidate,
-      feedback_reason_text: "Dit had geen refine-feedback mogen zijn.",
+      refined_formulation: "",
+      bigwhy: "",
+      suggestion_intro: "",
+      suggestion_items: [],
+      suggestion_outro: "",
+      suggestion_item_style: "bullets",
+      feedback_reason_text: "",
       feedback_mode: "none",
       step_support_state: "ok",
       wants_recap: false,
@@ -1418,6 +1415,62 @@ test("runPostSpecialistPipeline canonicalizes Big Why suggestion routes into exp
       user_intent: "STEP_INPUT",
       meta_topic: "NONE",
     },
+    specialistResults: [
+      {
+        action: "ASK",
+        message: [
+          "HIER ZIJN DRIE MOGELIJKE GROTE WAAROM-FORMULERINGEN DIE PASSEN BIJ DE DROOM EN BESTAANSREDEN VAN MINDD",
+          "- Mensen verdienen het om zich gezien en geraakt te voelen, zodat ze hun volledige potentieel kunnen ontdekken en benutten.",
+          "- Echte verbinding en oprechte inspiratie zorgen ervoor dat mensen boven zichzelf uitstijgen, ongeacht hun achtergrond of omstandigheden.",
+          "- Wanneer merken mensen oprecht raken, ontstaat er ruimte voor persoonlijke groei en langdurige positieve verandering in de samenleving.",
+          "",
+          "Ik hoop dat deze suggesties je inspireren om je eigen Grote Waarom te schrijven.",
+        ].join("\n"),
+        question: "",
+        refined_formulation: longCandidate,
+        bigwhy: longCandidate,
+        suggestion_intro: "",
+        suggestion_items: [],
+        suggestion_outro: "",
+        suggestion_item_style: "bullets",
+        feedback_reason_text: "Dit had geen refine-feedback mogen zijn.",
+        feedback_mode: "none",
+        step_support_state: "ok",
+        wants_recap: false,
+        is_offtopic: false,
+        user_intent: "STEP_INPUT",
+        meta_topic: "NONE",
+      },
+      {
+        action: "ASK",
+        message: [
+          "HIER ZIJN DRIE MOGELIJKE GROTE WAAROM-FORMULERINGEN DIE PASSEN BIJ DE DROOM EN BESTAANSREDEN VAN MINDD",
+          "- Mensen verdienen het om zich gezien en geraakt te voelen, zodat ze hun volledige potentieel kunnen ontdekken en benutten.",
+          "- Echte verbinding en oprechte inspiratie zorgen ervoor dat mensen boven zichzelf uitstijgen, ongeacht hun achtergrond of omstandigheden.",
+          "- Wanneer merken mensen oprecht raken, ontstaat er ruimte voor persoonlijke groei en langdurige positieve verandering in de samenleving.",
+          "",
+          "Ik hoop dat deze suggesties je inspireren om je eigen Grote Waarom te schrijven.",
+        ].join("\n"),
+        question: "",
+        refined_formulation: "",
+        bigwhy: "",
+        suggestion_intro: "HIER ZIJN DRIE MOGELIJKE GROTE WAAROM-FORMULERINGEN DIE PASSEN BIJ DE DROOM EN BESTAANSREDEN VAN MINDD",
+        suggestion_items: [
+          "Mensen verdienen het om zich gezien en geraakt te voelen, zodat ze hun volledige potentieel kunnen ontdekken en benutten.",
+          "Echte verbinding en oprechte inspiratie zorgen ervoor dat mensen boven zichzelf uitstijgen, ongeacht hun achtergrond of omstandigheden.",
+          "Wanneer merken mensen oprecht raken, ontstaat er ruimte voor persoonlijke groei en langdurige positieve verandering in de samenleving.",
+        ],
+        suggestion_outro: "Ik hoop dat deze suggesties je inspireren om je eigen Grote Waarom te schrijven.",
+        suggestion_item_style: "bullets",
+        feedback_reason_text: "",
+        feedback_mode: "none",
+        step_support_state: "ok",
+        wants_recap: false,
+        is_offtopic: false,
+        user_intent: "STEP_INPUT",
+        meta_topic: "NONE",
+      },
+    ],
     onSpecialistCall: (userMessage) => {
       specialistCalls.push(userMessage);
     },
@@ -1486,6 +1539,10 @@ test("runPostSpecialistPipeline canonicalizes Big Why suggestion routes into exp
   assert.equal(
     specialistCalls.some((message) => String(message || "").startsWith("__SHORTEN_BIGWHY__")),
     false
+  );
+  assert.equal(
+    specialistCalls.some((message) => String(message || "").includes("STRUCTURED_SUGGESTIONS_CONTRACT")),
+    true
   );
 });
 
