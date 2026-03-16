@@ -2208,6 +2208,65 @@ test("buildWordingChoiceFromTurn opens a merge choice for a near-duplicate Dream
   assert.equal(String((result.wordingChoice as Record<string, unknown>).suggestion_label || ""), "Merge into one statement:");
 });
 
+test("buildWordingChoiceFromTurn opens a grouped compare for multiple Dream Builder wishes that are rewritten into future statements", () => {
+  const helpers = buildDreamBuilderHelpers(true);
+  const result = helpers.buildWordingChoiceFromTurn({
+    stepId: "dream",
+    state: {
+      current_step: "dream",
+      __dream_runtime_mode: "builder_collect",
+    } as any,
+    activeSpecialist: "DreamExplainer",
+    previousSpecialist: {
+      statements: [],
+      dream: "",
+    },
+    specialistResult: {
+      message: "Ik heb je persoonlijke wensen vertaald naar bredere maatschappelijke bewegingen.",
+      feedback_reason_text:
+        "Je input gaat vooral over persoonlijke verlangens, terwijl Dream Builder zoekt naar toekomstige veranderingen in de wereld of samenleving.",
+      refined_formulation: [
+        "Over 5 tot 10 jaar zal positieve impact op het leven van anderen voor meer mensen een belangrijk criterium worden in hun werk.",
+        "Mensen zullen meer waarde hechten aan het opbouwen van iets dat duurzaam blijft bestaan voorbij henzelf.",
+        "Vrijheid in tijd en keuzes zal voor steeds meer mensen een belangrijk onderdeel worden van hun werkende leven.",
+        "Trots op het eigen werk en de maatschappelijke bijdrage ervan zal voor meer mensen leidend worden in hun loopbaan.",
+        "Bedrijven zullen vaker bewust worden ingericht als een weerspiegeling van de waarden en identiteit van hun oprichters.",
+      ].join("\n"),
+      statements: [],
+      suggest_dreambuilder: "true",
+    } as Record<string, unknown>,
+    userTextRaw: [
+      "I want my work to make a positive difference in people's lives.",
+      "I want to build something that lasts beyond me.",
+      "I want to create freedom in my time and choices.",
+      "I want to feel proud when I talk about what I do.",
+      "I want my business to reflect who I am and what I stand for.",
+    ].join("\n\n"),
+    isOfftopic: false,
+    dreamRuntimeModeRaw: "builder_collect",
+  });
+
+  assert.ok(result.wordingChoice);
+  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "true");
+  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_compare_mode || ""), "grouped_units");
+  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_variant || ""), "grouped_list_units");
+  assert.deepEqual((result.specialist as Record<string, unknown>).statements, []);
+  assert.deepEqual((result.wordingChoice as Record<string, unknown>).user_items, [
+    "I want my work to make a positive difference in people's lives.",
+    "I want to build something that lasts beyond me.",
+    "I want to create freedom in my time and choices.",
+    "I want to feel proud when I talk about what I do.",
+    "I want my business to reflect who I am and what I stand for.",
+  ]);
+  assert.deepEqual((result.wordingChoice as Record<string, unknown>).suggestion_items, [
+    "Over 5 tot 10 jaar zal positieve impact op het leven van anderen voor meer mensen een belangrijk criterium worden in hun werk.",
+    "Mensen zullen meer waarde hechten aan het opbouwen van iets dat duurzaam blijft bestaan voorbij henzelf.",
+    "Vrijheid in tijd en keuzes zal voor steeds meer mensen een belangrijk onderdeel worden van hun werkende leven.",
+    "Trots op het eigen werk en de maatschappelijke bijdrage ervan zal voor meer mensen leidend worden in hun loopbaan.",
+    "Bedrijven zullen vaker bewust worden ingericht als een weerspiegeling van de waarden en identiteit van hun oprichters.",
+  ]);
+});
+
 test("applyWordingPickSelection can keep both Dream Builder near-duplicate statements", () => {
   const helpers = buildDreamBuilderHelpers(true);
   const applyResult = helpers.applyWordingPickSelection({
@@ -2707,6 +2766,51 @@ test("applyWordingPickSelection clears stale current-value refinement context af
   assert.equal(String(applyResult.specialist.current_value_refinement_feedback_text || ""), "");
   assert.equal(String(applyResult.specialist.current_value_refinement_anchor_value || ""), "");
   assert.equal(String(applyResult.specialist.feedback_reason_text || ""), "");
+});
+
+test("applyWordingPickSelection strips stale autosuggest UI contracts after suggestion pick", () => {
+  const heading = "Je huidige entiteit voor Mindd is:";
+  const chosen = "strategisch communicatiebureau";
+  const helpers = buildHeadingAwareSingleValueHelpers({
+    stepId: "entity",
+    heading,
+    suggestion: chosen,
+  });
+  const applyResult = helpers.applyWordingPickSelection({
+    stepId: "entity",
+    routeToken: "__WORDING_PICK_SUGGESTION__",
+    state: {
+      current_step: "entity",
+      active_specialist: "Entity",
+      last_specialist_result: {
+        wording_choice_pending: "true",
+        wording_choice_mode: "text",
+        wording_choice_target_field: "entity",
+        wording_choice_user_normalized: "gevoel voor communicatie",
+        wording_choice_agent_current: chosen,
+        ui_feedback_contract: {
+          kind: "single_value_canonical_suggestion",
+          heading: "OP BASIS VAN JE INPUT STEL IK DE VOLGENDE ENTITEIT VOOR:",
+          suggested_value: chosen,
+          rationale: "Je omschrijving mist nog een heldere bedrijfscontainer.",
+        },
+        ui_content: {
+          kind: "single_value",
+          heading: "OP BASIS VAN JE INPUT STEL IK DE VOLGENDE ENTITEIT VOOR:",
+          canonical_text: chosen,
+          feedback_reason_text: "Je omschrijving mist nog een heldere bedrijfscontainer.",
+        },
+      },
+    } as any,
+  });
+
+  assert.equal(applyResult.handled, true);
+  assert.equal(String(applyResult.specialist.wording_choice_selected || ""), "suggestion");
+  assert.equal(String(applyResult.specialist.entity || ""), chosen);
+  assert.match(String(applyResult.specialist.message || ""), /je huidige entiteit voor mindd is:/i);
+  assert.doesNotMatch(String(applyResult.specialist.message || ""), /op basis van je input stel ik/i);
+  assert.equal("ui_feedback_contract" in applyResult.specialist, false);
+  assert.equal("ui_content" in applyResult.specialist, false);
 });
 
 test("applyWordingPickSelection preserves feedback reason when user picks own single-value wording", () => {

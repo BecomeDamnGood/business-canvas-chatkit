@@ -401,6 +401,27 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     return clarifySuggestionLabelForState(state);
   }
 
+  function dreamBuilderKeepBothLabelForState(state: CanvasState | null | undefined): string {
+    const localized = uiStringLocaleFirst(state, "wordingChoiceDreamBuilderKeepBothLabel").trim();
+    if (localized) return localized;
+    return groupedListUserLabelForState(state);
+  }
+
+  function dreamBuilderMergeLabelForState(state: CanvasState | null | undefined): string {
+    const localized = uiStringLocaleFirst(state, "wordingChoiceDreamBuilderMergeLabel").trim();
+    if (localized) return localized;
+    return groupedListSuggestionLabelForState(state);
+  }
+
+  function dreamBuilderMergeInstructionForState(
+    state: CanvasState | null | undefined,
+    retainedItems: string[]
+  ): string {
+    const localized = uiStringLocaleFirst(state, "wordingChoiceDreamBuilderMergeInstruction").trim();
+    if (localized) return localized;
+    return groupedListInstructionForState(state, retainedItems);
+  }
+
   function groupedListInstructionForState(
     state: CanvasState | null | undefined,
     retainedItems: string[]
@@ -752,6 +773,22 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
       stepId === deps.strategyStepId ||
       stepId === deps.productsservicesStepId ||
       stepId === deps.rulesofthegameStepId
+    );
+  }
+
+  function shouldUseGroupedListCompare(params: {
+    stepId: string;
+    dreamBuilderContext: boolean;
+    baseItems: string[];
+    userItems: string[];
+    suggestionItems: string[];
+  }): boolean {
+    if (isBusinessListIntentScope(params.stepId)) return true;
+    if (!params.dreamBuilderContext) return false;
+    return (
+      params.baseItems.length > 1 ||
+      params.userItems.length > 1 ||
+      params.suggestionItems.length > 1
     );
   }
 
@@ -1372,6 +1409,83 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     };
   }
 
+  function buildDreamBuilderComparePlan(params: {
+    baseItems: string[];
+    userItems: string[];
+    suggestionItems: string[];
+    deltaUserItems: string[];
+  }): BusinessListComparePlan | null {
+    const baseItems = mergeListItems([], params.baseItems);
+    const userItems = mergeListItems([], params.userItems);
+    const suggestionItems = mergeListItems([], params.suggestionItems);
+    const deltaUserItems = mergeListItems([], params.deltaUserItems);
+    if (userItems.length === 0 || suggestionItems.length === 0) return null;
+
+    const baseKeys = new Set(baseItems.map((line) => deps.canonicalizeComparableText(line)).filter(Boolean));
+    const suggestionDeltaItems = suggestionItems.filter((line) => {
+      const key = deps.canonicalizeComparableText(line);
+      return Boolean(key) && !baseKeys.has(key);
+    });
+
+    if (deltaUserItems.length > 1 || suggestionDeltaItems.length > 1) {
+      const unit = createCompareUnit({
+        id: "unit_1",
+        userItems,
+        suggestionItems,
+        confidence: "fallback",
+      });
+      return {
+        mode: "grouped_units",
+        units: [unit],
+        segments: [{ kind: "unit", unit_id: unit.id }],
+        initialUnit: unit,
+      };
+    }
+
+    if (baseItems.length < 2 || deltaUserItems.length === 0 || suggestionDeltaItems.length !== 1) return null;
+
+    const suggestionDelta = suggestionDeltaItems[0];
+    let bestBaseIndex = -1;
+    let bestBaseScore = 0;
+    for (let index = 0; index < baseItems.length; index += 1) {
+      const score = itemSimilarity(baseItems[index], suggestionDelta);
+      if (score > bestBaseScore) {
+        bestBaseScore = score;
+        bestBaseIndex = index;
+      }
+    }
+    if (bestBaseIndex < 0 || bestBaseScore < 0.3) return null;
+
+    const clusteredUserItems = mergeListItems([], [baseItems[bestBaseIndex], ...deltaUserItems]);
+    if (clusteredUserItems.length < 2) return null;
+    const clusteredKeys = new Set(
+      clusteredUserItems
+        .map((line) => deps.canonicalizeComparableText(line))
+        .filter(Boolean)
+    );
+    const retainedItems = userItems.filter((line) => {
+      const key = deps.canonicalizeComparableText(line);
+      return Boolean(key) && !clusteredKeys.has(key);
+    });
+    const unit = createCompareUnit({
+      id: "unit_1",
+      userItems: clusteredUserItems,
+      suggestionItems: [suggestionDelta],
+      confidence: "fallback",
+    });
+    const segments: WordingChoiceCompareSegment[] = [];
+    if (retainedItems.length > 0) {
+      segments.push({ kind: "retained", items: retainedItems });
+    }
+    segments.push({ kind: "unit", unit_id: unit.id });
+    return {
+      mode: "grouped_units",
+      units: [unit],
+      segments,
+      initialUnit: unit,
+    };
+  }
+
   function selectedItemsForCompareUnit(unit: WordingChoiceCompareUnit): string[] {
     if (unit.resolution === "user") return unit.user_items;
     if (unit.resolution === "suggestion") return unit.suggestion_items;
@@ -1635,13 +1749,22 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     const nextIndex = nextUnresolvedCompareUnitIndex(params.units, params.cursor);
     if (nextIndex < 0) return null;
     const currentUnit = params.units[nextIndex];
-    const labels = wordingChoiceLabelsForStep({
-      stepId: params.stepId,
-      mode: "list",
-      state: params.state,
-      variant: "grouped_list_units",
-    });
     const retainedItems = visibleRetainedItemsForGroupedCompare(params.segments, params.units);
+    const isDreamBuilderMergeChoice =
+      params.stepId === deps.dreamStepId &&
+      currentUnit.user_items.length > 1 &&
+      currentUnit.suggestion_items.length === 1;
+    const labels = isDreamBuilderMergeChoice
+      ? {
+          userLabel: dreamBuilderKeepBothLabelForState(params.state),
+          suggestionLabel: dreamBuilderMergeLabelForState(params.state),
+        }
+      : wordingChoiceLabelsForStep({
+          stepId: params.stepId,
+          mode: "list",
+          state: params.state,
+          variant: "grouped_list_units",
+        });
     const feedbackReasonText = String(currentUnit.feedback_reason_text || "").trim();
     if (!feedbackReasonText) return null;
     const resolveString = (key: string, fallback = "") =>
@@ -1665,7 +1788,9 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
       suggestion_text: currentUnit.suggestion_text,
       user_items: currentUnit.user_items,
       suggestion_items: currentUnit.suggestion_items,
-      instruction: groupedListInstructionForState(params.state, retainedItems),
+      instruction: isDreamBuilderMergeChoice
+        ? dreamBuilderMergeInstructionForState(params.state, retainedItems)
+        : groupedListInstructionForState(params.state, retainedItems),
     };
   }
 
@@ -1923,7 +2048,16 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     localUserItems = mode === "list"
       ? mergeListItems([], localUserItems.length > 0 ? localUserItems : (effectiveUserItems.length > 0 ? effectiveUserItems : fallbackUserItems))
       : [];
-    if (mode === "list" && isBusinessListIntentScope(stepId)) {
+    const groupedListCompareEnabled =
+      mode === "list" &&
+      shouldUseGroupedListCompare({
+        stepId,
+        dreamBuilderContext,
+        baseItems,
+        userItems: effectiveUserItems.length > 0 ? effectiveUserItems : fallbackUserItems,
+        suggestionItems,
+      });
+    if (groupedListCompareEnabled) {
       const fullUserItems = mergeListItems(
         listSemantics === "full" ? [] : baseItems,
         effectiveUserItems.length > 0 ? effectiveUserItems : fallbackUserItems
@@ -2036,14 +2170,32 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
         ? "clarify_dual"
         : "default";
     const rawComparePlan =
-      mode === "list" && isBusinessListIntentScope(stepId)
-        ? buildBusinessListComparePlan({
-            baseItems,
-            userItems: effectiveUserItems,
-            suggestionItems,
-            deltaUserItems: localUserItems,
-            preferDeltaGrouping: compareDeltaListSemantics === "delta",
-          })
+      groupedListCompareEnabled
+        ? (
+          dreamBuilderContext
+            ? (
+              buildDreamBuilderComparePlan({
+                baseItems,
+                userItems: effectiveUserItems,
+                suggestionItems,
+                deltaUserItems: localUserItems,
+              }) ||
+              buildBusinessListComparePlan({
+                baseItems,
+                userItems: effectiveUserItems,
+                suggestionItems,
+                deltaUserItems: localUserItems,
+                preferDeltaGrouping: compareDeltaListSemantics === "delta",
+              })
+            )
+            : buildBusinessListComparePlan({
+                baseItems,
+                userItems: effectiveUserItems,
+                suggestionItems,
+                deltaUserItems: localUserItems,
+                preferDeltaGrouping: compareDeltaListSemantics === "delta",
+              })
+        )
         : null;
     const comparePlan = rawComparePlan
       ? withGroupedCompareUnitFeedback({
@@ -2201,6 +2353,21 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
       String(prevRaw.wording_choice_compare_mode || "").trim() === "grouped_units"
         ? "grouped_units"
         : "";
+
+    const stripStaleUiContractFields = (
+      value: Record<string, unknown>
+    ): Record<string, unknown> => {
+      const {
+        ui_content: _uiContent,
+        ui_feedback_contract: _uiFeedbackContract,
+        ui_show_step_intro_chrome: _uiShowStepIntroChrome,
+        ui_contract_id: _uiContractId,
+        ui_contract_version: _uiContractVersion,
+        ui_text_keys: _uiTextKeys,
+        ...rest
+      } = value;
+      return rest;
+    };
     if (compareMode === "grouped_units" && mode === "list") {
       const compareUnits = normalizeCompareUnits(prevRaw.wording_choice_compare_units);
       const compareSegments = normalizeCompareSegments(prevRaw.wording_choice_compare_segments);
@@ -2269,7 +2436,7 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
       const selectedMessage = deps.wordingSelectionMessage(stepId, state, String((state as any)?.active_specialist || "").trim(), chosen);
       const selected = withUpdatedTargetField(
         {
-          ...prevRaw,
+          ...stripStaleUiContractFields(prevRaw),
           ...clearedResolvedWordingTransientFields(),
           message: selectedMessage,
           wording_choice_pending: "false",
@@ -2310,13 +2477,20 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
         previousSpecialist: prevRaw,
       });
       const renderedSpecialist = rendered.specialist as Record<string, unknown>;
+      const renderedUiContent = (renderedSpecialist as Record<string, unknown>).ui_content;
+      const renderedUiFeedbackContract = (renderedSpecialist as Record<string, unknown>).ui_feedback_contract;
       const selectedWithContract: Record<string, unknown> = {
-        ...selected,
+        ...stripStaleUiContractFields(selected),
         action: "ASK",
         message: String(selected.message || "").trim() || String(renderedSpecialist?.message || "").trim(),
         question: String(renderedSpecialist?.question || ""),
         wording_choice_pending: "false",
         wording_choice_selected: pickedUser ? "user" : "suggestion",
+        ...(renderedUiContent ? { ui_content: renderedUiContent } : {}),
+        ...(renderedUiFeedbackContract ? { ui_feedback_contract: renderedUiFeedbackContract } : {}),
+        ...(typeof renderedSpecialist?.ui_show_step_intro_chrome !== "undefined"
+          ? { ui_show_step_intro_chrome: renderedSpecialist.ui_show_step_intro_chrome }
+          : {}),
         ui_contract_id: String(renderedSpecialist?.ui_contract_id || rendered.contractId || ""),
         ui_contract_version: String(renderedSpecialist?.ui_contract_version || rendered.contractVersion || ""),
         ui_text_keys: Array.isArray(renderedSpecialist?.ui_text_keys)
@@ -2369,7 +2543,7 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
       : deps.wordingSelectionMessage(stepId, state, activeSpecialist, chosen);
     const selected = withUpdatedTargetField(
       {
-        ...prevRaw,
+        ...stripStaleUiContractFields(prevRaw),
         ...clearedResolvedWordingTransientFields(),
         message: selectedMessage,
         wording_choice_pending: "false",
@@ -2410,13 +2584,20 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
       previousSpecialist: prevRaw,
     });
     const renderedSpecialist = rendered.specialist as Record<string, unknown>;
+    const renderedUiContent = (renderedSpecialist as Record<string, unknown>).ui_content;
+    const renderedUiFeedbackContract = (renderedSpecialist as Record<string, unknown>).ui_feedback_contract;
     const selectedWithContract: Record<string, unknown> = {
-      ...selected,
+      ...stripStaleUiContractFields(selected),
       action: "ASK",
       message: String(selected.message || "").trim() || String(renderedSpecialist?.message || "").trim(),
       question: String(renderedSpecialist?.question || ""),
       wording_choice_pending: "false",
       wording_choice_selected: pickedUser ? "user" : "suggestion",
+      ...(renderedUiContent ? { ui_content: renderedUiContent } : {}),
+      ...(renderedUiFeedbackContract ? { ui_feedback_contract: renderedUiFeedbackContract } : {}),
+      ...(typeof renderedSpecialist?.ui_show_step_intro_chrome !== "undefined"
+        ? { ui_show_step_intro_chrome: renderedSpecialist.ui_show_step_intro_chrome }
+        : {}),
       ui_contract_id: String(renderedSpecialist?.ui_contract_id || rendered.contractId || ""),
       ui_contract_version: String(renderedSpecialist?.ui_contract_version || rendered.contractVersion || ""),
       ui_text_keys: Array.isArray(renderedSpecialist?.ui_text_keys)

@@ -691,21 +691,13 @@ function buildSingleValueCanonicalFeedbackContract(params: {
   if (!canonicalText) return undefined;
   const heading = String(params.headingOverride || "").trim() || autoSuggestHeading(params.stepId, params.state);
   const rationale = String(params.feedbackReasonText || "").trim();
-  const supportText = singleValueSupportText({
-    message: params.message,
-    heading,
-    canonicalValue: canonicalText,
-    feedbackReasonText: rationale,
-    rawFeedbackReasonText: String(params.rawFeedbackReasonText || "").trim(),
-  });
-  if (!heading && !canonicalText && !supportText && !rationale) return undefined;
+  if (!heading && !canonicalText && !rationale) return undefined;
   return {
     version: "2026-03-16.feedback_contract.v1",
     kind: "single_value_canonical_suggestion",
     mode: "text",
     ...(heading ? { heading } : {}),
     suggested_value: canonicalText,
-    ...(supportText ? { support_text: supportText } : {}),
     ...(rationale ? { rationale } : {}),
   };
 }
@@ -2157,11 +2149,12 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
 
   const {
     ui_content: _staleUiContent,
-    ...specialistForDisplayWithoutUiContent
+    ui_feedback_contract: _staleUiFeedbackContract,
+    ...specialistForDisplayWithoutUiContracts
   } = specialistForDisplay as Record<string, unknown>;
 
   const nextSpecialist: Record<string, unknown> = {
-    ...specialistForDisplayWithoutUiContent,
+    ...specialistForDisplayWithoutUiContracts,
     action: "ASK",
     message: messageForDisplay,
     question,

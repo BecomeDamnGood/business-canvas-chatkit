@@ -216,3 +216,19 @@ test("buildSpecialistContextBlock whitelists last_specialist_result payload", ()
   assert.match(block, /PENDING SUGGESTION CONTRACT/i);
   assert.match(block, /rewrite the previous suggestion itself/i);
 });
+
+test("buildSpecialistContextBlock exposes current-turn stuck support classification for core steps", () => {
+  const helpers = buildHelpers();
+  const block = helpers.buildSpecialistContextBlock({
+    current_step: "rulesofthegame",
+    active_specialist: "RulesOfTheGame",
+    __current_turn_step_support_state: "stuck",
+    __step_stuck_count_by_step: { rulesofthegame: 1 },
+    __step_support_mode_by_step: { rulesofthegame: "normal" },
+    last_specialist_result: {},
+  } as any);
+
+  assert.match(block, /current_turn_step_support_state: stuck/);
+  assert.match(block, /current_step_stuck_count: 1/);
+  assert.match(block, /current_step_support_mode: normal/);
+});

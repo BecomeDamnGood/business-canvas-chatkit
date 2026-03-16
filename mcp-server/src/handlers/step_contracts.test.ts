@@ -429,6 +429,56 @@ test("dream follow-up menus keep exactly one exercise button with the original m
   }
 });
 
+test("dream builder interactive variants suppress the start-exercise action once the exercise is already active", () => {
+  const response = finalizeResponseContractInternals(
+    {
+      ok: true,
+      current_step_id: "dream",
+      text: "",
+      prompt: "",
+      specialist: {},
+      state: {
+        started: "true",
+        current_step: "dream",
+      } as any,
+      ui: {
+        view: {
+          mode: "interactive",
+          variant: "dream_builder_collect",
+        },
+        contract_id: "dream::incomplete_output::DREAM_EXPLAINER_MENU_SWITCH_SELF",
+        action_codes: [
+          "ACTION_DREAM_INTRO_START_EXERCISE",
+          "ACTION_DREAM_SWITCH_TO_SELF",
+        ],
+        expected_choice_count: 2,
+      },
+    } as any,
+    {
+      applyUiClientActionContract: () => {},
+      parseMenuFromContractIdForStep: () => "DREAM_EXPLAINER_MENU_SWITCH_SELF",
+      labelKeysForMenuActionCodes: () => [
+        "menuLabel.DREAM_MENU_INTRO.ACTION_DREAM_INTRO_START_EXERCISE",
+        "btnSwitchToSelfDream",
+      ],
+      onUiParityError: () => {},
+      attachRegistryPayload: (payload) => payload,
+    }
+  );
+
+  const ui = ((response.ui || {}) as Record<string, unknown>);
+  const actions = ((ui.action_contract || {}) as Record<string, unknown>).actions as Array<Record<string, unknown>>;
+
+  assert.equal(
+    actions.some((action) => String(action.role || "") === "dream_start_exercise"),
+    false
+  );
+  assert.equal(
+    actions.some((action) => String(action.role || "") === "dream_switch_to_self"),
+    true
+  );
+});
+
 test("feedback contract derives the single-value compare family from wording-choice text", () => {
   const response = finalizeResponseContractInternals(
     {
@@ -500,7 +550,6 @@ test("feedback contract keeps the canonical single-value suggestion family when 
           kind: "single_value_canonical_suggestion",
           heading: "OP BASIS VAN JE INPUT STEL IK DE VOLGENDE BESTAANSREDEN VOOR",
           suggested_value: "Wij bestaan om mensen op een positieve manier te inspireren om hun volledige potentieel te ontdekken.",
-          support_text: "Deze formulering klinkt uitnodigend en legt de nadruk op positiviteit.",
           rationale: "Je huidige formulering blijft nog te algemeen.",
         },
       },
@@ -524,7 +573,6 @@ test("feedback contract keeps the canonical single-value suggestion family when 
     String(feedbackContract.suggested_value || ""),
     "Wij bestaan om mensen op een positieve manier te inspireren om hun volledige potentieel te ontdekken."
   );
-  assert.equal(String(feedbackContract.support_text || ""), "Deze formulering klinkt uitnodigend en legt de nadruk op positiviteit.");
   assert.equal(String(feedbackContract.rationale || ""), "Je huidige formulering blijft nog te algemeen.");
 });
 

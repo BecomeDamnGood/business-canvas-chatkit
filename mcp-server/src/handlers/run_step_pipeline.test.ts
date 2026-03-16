@@ -162,7 +162,7 @@ function buildPipelineWordingHelpers() {
 function buildStrategyPipelineHarness(params: {
   specialistResult: Record<string, unknown>;
   specialistResults?: Record<string, unknown>[];
-  onSpecialistCall?: (userMessage: string) => void;
+  onSpecialistCall?: (userMessage: string, state?: Record<string, unknown>) => void;
   dreamRuntimeMode?: "self" | "builder_collect" | "builder_scoring" | "builder_refine";
   pickBigWhyCandidate?: (result: Record<string, unknown>) => string;
   buildBigWhyTooLongFeedback?: () => Record<string, unknown>;
@@ -196,8 +196,8 @@ function buildStrategyPipelineHarness(params: {
     },
     specialist: {
       buildRoutingContext: () => ({ enabled: true, shadow: false }),
-      callSpecialistStrictSafe: async ({ userMessage }) => {
-        params.onSpecialistCall?.(String(userMessage || ""));
+      callSpecialistStrictSafe: async ({ userMessage, state }) => {
+        params.onSpecialistCall?.(String(userMessage || ""), (state || null) as Record<string, unknown> | null);
         const nextResult = queuedResults.length > 0 ? queuedResults.shift() || params.specialistResult : params.specialistResult;
         return {
           ok: true,
@@ -1815,4 +1815,73 @@ test("runPostSpecialistPipeline escalates stuck support from server-side classif
     Number(((payload.state as Record<string, unknown>).__step_stuck_count_by_step as Record<string, unknown>)?.strategy || 0),
     1
   );
+});
+
+test("runPostSpecialistPipeline passes current-turn stuck classification into the specialist context", async () => {
+  let capturedState: Record<string, unknown> | null = null;
+  const helpers = buildStrategyPipelineHarness({
+    specialistResult: {
+      action: "ASK",
+      message: "Laat me strategie nog eens uitleggen.",
+      question: "Welke keuze wil je maken?",
+      refined_formulation: "",
+      strategy: "",
+      feedback_reason_text: "",
+      step_support_state: "ok",
+      wants_recap: false,
+      is_offtopic: false,
+      user_intent: "STEP_INPUT",
+      meta_topic: "NONE",
+      statements: [],
+    },
+    onSpecialistCall: (_userMessage, stateArg) => {
+      capturedState = (stateArg || null) as Record<string, unknown> | null;
+    },
+    classifyStepStuckTurn: async () => ({ is_stuck: true }),
+  });
+
+  await helpers.runPostSpecialistPipeline({
+    routing: {
+      userMessage: "ik weet het niet",
+      actionCodeRaw: "",
+      responseUiFlags: null,
+      inputMode: "widget",
+      wordingChoiceEnabled: true,
+      languageResolvedThisTurn: false,
+      isBootstrapPollCall: false,
+      motivationQuotesEnabled: false,
+    },
+    rendering: {
+      uiI18nTelemetry: null,
+      lang: "nl",
+      ensureUiStrings: async (state) => state,
+    },
+    state: {
+      state: {
+        current_step: "strategy",
+        active_specialist: "Strategy",
+        provisional_by_step: {},
+        last_specialist_result: {},
+      } as any,
+      transientPendingScores: null,
+      submittedUserText: "ik weet het niet",
+      submittedTextIntent: "",
+      submittedTextAnchor: "",
+      rawNormalized: "ik weet het niet",
+      pristineAtEntry: true,
+    },
+    specialist: {
+      model: "gpt-5-mini",
+      decideOrchestration: () =>
+        ({
+          current_step: "strategy",
+          specialist_to_call: "Strategy",
+          show_session_intro: "false",
+          show_step_intro: "false",
+        }) as any,
+      rememberLlmCall: () => {},
+    },
+  } as any);
+
+  assert.equal(String(capturedState?.__current_turn_step_support_state || ""), "stuck");
 });

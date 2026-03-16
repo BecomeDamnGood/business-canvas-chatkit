@@ -700,6 +700,10 @@ export function createRunStepRuntimeStateHelpers(deps: CreateRunStepRuntimeState
         : {};
     const currentStepStuckCount = Number(stuckCountMap[currentStepId] ?? 0) || 0;
     const currentStepSupportMode = String(supportModeMap[currentStepId] || "normal").trim() || "normal";
+    const currentTurnStepSupportState =
+      String((state as any).__current_turn_step_support_state || "").trim().toLowerCase() === "stuck"
+        ? "stuck"
+        : "ok";
     const stuckSupportLines =
       resolveSpecialistSupportFamily({
         stepId: currentStepId,
@@ -708,9 +712,11 @@ export function createRunStepRuntimeStateHelpers(deps: CreateRunStepRuntimeState
         ? [
             "",
             "STUCK SUPPORT STATE (do not output this section)",
+            `- current_turn_step_support_state: ${safe(currentTurnStepSupportState)}`,
             `- current_step_stuck_count: ${String(Math.max(0, Math.trunc(currentStepStuckCount)))}`,
             `- current_step_support_mode: ${safe(currentStepSupportMode)}`,
-            "- If the user is clearly stuck, use this state to decide whether this is a first stuck turn, the 3-question helper stage, or the final graceful exit stage.",
+            "- If current_turn_step_support_state is 'stuck', treat that as authoritative for this turn and follow the matching stuck support branch.",
+            "- Use the count and support mode to decide whether this is a first stuck turn, the 3-question helper stage, or the final graceful exit stage.",
           ].join("\n")
         : "";
 

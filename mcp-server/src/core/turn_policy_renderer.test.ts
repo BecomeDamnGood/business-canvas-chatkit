@@ -664,6 +664,52 @@ test("rulesofthegame keeps confirm available for accepted 3-5 rule sets even whe
   assert.equal(rendered.uiActionCodes.includes("ACTION_RULES_CONFIRM_ALL"), true);
 });
 
+test("rulesofthegame confirm render strips stale compare feedback contracts from prior wording states", () => {
+  const state = getDefaultState();
+  (state as any).current_step = "rulesofthegame";
+  (state as any).active_specialist = "RulesOfTheGame";
+  (state as any).business_name = "Mindd";
+  (state as any).provisional_by_step = {
+    rulesofthegame:
+      "• We communiceren proactief.\n• We werken met duidelijke scope.\n• We nemen eigenaarschap.",
+  };
+  (state as any).provisional_source_by_step = {
+    rulesofthegame: "user_input",
+  };
+
+  const rendered = renderFreeTextTurnPolicy({
+    stepId: "rulesofthegame",
+    state,
+    specialist: {
+      action: "ASK",
+      message: "So far we have these 3 Rules of the Game.",
+      question: "",
+      refined_formulation:
+        "• We communiceren proactief.\n• We werken met duidelijke scope.\n• We nemen eigenaarschap.",
+      rulesofthegame:
+        "• We communiceren proactief.\n• We werken met duidelijke scope.\n• We nemen eigenaarschap.",
+      statements: [
+        "We communiceren proactief.",
+        "We werken met duidelijke scope.",
+        "We nemen eigenaarschap.",
+      ],
+      ui_feedback_contract: {
+        kind: "grouped_list_compare",
+        mode: "list",
+        rationale: "Stale compare contract should not survive into confirm state.",
+        current_items: ["Oude regel"],
+        suggested_items: ["Nieuwe regel"],
+      },
+    },
+    previousSpecialist: {},
+  });
+
+  assert.equal(rendered.status, "valid_output");
+  assert.equal(rendered.contractId, "rulesofthegame:valid_output:RULES_MENU_CONFIRM");
+  assert.equal((rendered.specialist as Record<string, unknown>).ui_feedback_contract, undefined);
+  assert.match(String((rendered.specialist as Record<string, unknown>).message || ""), /current rules of the game/i);
+});
+
 test("entity no-output render ignores stale refine phase menu and falls back to intro menu", () => {
   const state = getDefaultState();
   (state as any).current_step = "entity";

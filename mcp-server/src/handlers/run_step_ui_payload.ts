@@ -213,7 +213,8 @@ function normalizeUiFeedbackContract(raw: unknown): Record<string, unknown> | un
   }
   const mode = String(record.mode || "").trim().toLowerCase() === "list" ? "list" : "text";
   const heading = String(record.heading || "").trim();
-  const supportText = String(record.support_text || "").trim();
+  const supportText =
+    kind === "single_value_canonical_suggestion" ? "" : String(record.support_text || "").trim();
   const rationale = String(record.rationale || "").trim();
   const currentLabel = String(record.current_label || "").trim();
   const suggestedLabel = String(record.suggested_label || "").trim();

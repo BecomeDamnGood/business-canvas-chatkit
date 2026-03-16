@@ -101,7 +101,6 @@ test("readFeedbackContract normalizes canonical single-value feedback from the s
       kind: "single_value_canonical_suggestion",
       heading: "OP BASIS VAN JE INPUT STEL IK DE VOLGENDE BESTAANSREDEN VOOR",
       suggested_value: "Wij bestaan om mensen positief in beweging te brengen.",
-      support_text: "Deze formulering is concreter en menselijker.",
       rationale: "Je huidige zin blijft nog te algemeen.",
     },
   });
@@ -111,7 +110,7 @@ test("readFeedbackContract normalizes canonical single-value feedback from the s
     mode: "text",
     rationale: "Je huidige zin blijft nog te algemeen.",
     heading: "OP BASIS VAN JE INPUT STEL IK DE VOLGENDE BESTAANSREDEN VOOR",
-    supportText: "Deze formulering is concreter en menselijker.",
+    supportText: "",
     currentLabel: "",
     suggestedLabel: "",
     currentValue: "",

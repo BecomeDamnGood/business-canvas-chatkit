@@ -662,6 +662,24 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
     const stateForSpecialist = currentValueFeedback
       ? stateWithCurrentValueFeedbackContext(state, currentStepId, currentValueForFeedback, userMessage)
       : state;
+    const preclassifiedStepSupportState = await resolveEffectiveStepSupportState({
+      state: stateForSpecialist,
+      stepId: currentStepId,
+      activeSpecialist: currentSpecialistAtTurnStart,
+      specialistResult: {},
+      userMessage,
+      actionCodeRaw: params.actionCodeRaw,
+      model: params.model,
+      language: params.lang,
+      classifyStepStuckTurn: deps.classifyStepStuckTurn,
+    });
+    const stateForSpecialistWithSupportContext =
+      preclassifiedStepSupportState === "stuck"
+        ? ({
+            ...stateForSpecialist,
+            __current_turn_step_support_state: "stuck",
+          } as CanvasState)
+        : stateForSpecialist;
     const businessListTurnResolution: BusinessListTurnResolution | null =
       isBusinessListStep(currentStepId) &&
       !String(params.actionCodeRaw || "").trim() &&
@@ -669,7 +687,7 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
         ? resolveBusinessListTurn({
             stepId: currentStepId,
             userMessage,
-            referenceItems: readBusinessListReferenceItems(stateForSpecialist, currentStepId),
+            referenceItems: readBusinessListReferenceItems(stateForSpecialistWithSupportContext, currentStepId),
           })
         : null;
     const userMessageForSpecialist =
@@ -677,13 +695,18 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
       businessListTurnResolution.kind !== "add"
         ? businessListTurnResolution.routePrompt
         : userMessage;
-    let decision1 = params.decideOrchestration(stateForSpecialist, userMessage);
+    let decision1 = params.decideOrchestration(stateForSpecialistWithSupportContext, userMessage);
     const showSessionIntro = String(decision1.show_session_intro || "");
 
     const call1 = await deps.callSpecialistStrictSafe(
-      { model: params.model, state: stateForSpecialist, decision: decision1, userMessage: userMessageForSpecialist },
+      {
+        model: params.model,
+        state: stateForSpecialistWithSupportContext,
+        decision: decision1,
+        userMessage: userMessageForSpecialist,
+      },
       deps.buildRoutingContext(userMessageForSpecialist),
-      stateForSpecialist
+      stateForSpecialistWithSupportContext
     );
     if (!call1.ok) return finalizePipelinePayload(call1.payload);
     params.rememberLlmCall(call1.value);

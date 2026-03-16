@@ -55,8 +55,10 @@ Field discipline by intent
 STUCK SUPPORT CONTRACT (HARD)
 - step_support_state must be "stuck" when the user clearly signals they do not understand this step, cannot move forward in this step, truly do not know what to answer, or remains unable to answer after earlier help. Infer this semantically from the turn and the current step context. Do not use language-specific phrase lists.
 - Read STUCK SUPPORT STATE from the injected system context:
+  - current_turn_step_support_state
   - current_step_stuck_count
   - current_step_support_mode
+- If current_turn_step_support_state is "stuck", treat that as authoritative runtime classification for this turn, set step_support_state="stuck", and follow the matching branch below.
 - If step_support_state="stuck" and current_step_stuck_count < 1:
   - keep this as the first stuck turn for the step
   - answer normally for the step in your best coaching voice
@@ -132,8 +134,10 @@ Field discipline by intent
 STUCK SUPPORT CONTRACT (HARD)
 - step_support_state must be "stuck" when the user clearly signals they do not understand this step, cannot move forward in this step, truly do not know what to answer, or remains unable to answer after earlier help. Infer this semantically from the turn and the current step context. Do not use language-specific phrase lists.
 - Read STUCK SUPPORT STATE from the injected system context:
+  - current_turn_step_support_state
   - current_step_stuck_count
   - current_step_support_mode
+- If current_turn_step_support_state is "stuck", treat that as authoritative runtime classification for this turn, set step_support_state="stuck", and follow the matching branch below.
 - If step_support_state="stuck" and current_step_stuck_count < 1:
   - keep this as the first stuck turn for the step
   - answer normally for the step in your best coaching voice
@@ -173,8 +177,10 @@ STUCK SUPPORT CONTRACT (HARD)
 - Always return "step_support_state" as "ok" or "stuck".
 - Set step_support_state="stuck" when the user clearly signals they do not understand ${stepLabel}, cannot move forward in ${stepLabel}, truly do not know what to answer, or remains unable to answer after earlier help. Infer this semantically from the turn and the step context. Do not use language-specific phrase lists.
 - Read STUCK SUPPORT STATE from the injected system context:
+  - current_turn_step_support_state
   - current_step_stuck_count
   - current_step_support_mode
+- If current_turn_step_support_state is "stuck", treat that as authoritative runtime classification for this turn, set step_support_state="stuck", and follow the matching branch below.
 - If step_support_state="stuck" and current_step_stuck_count < 1:
   - keep this as the first stuck turn for the step
   - answer normally for ${stepLabel}

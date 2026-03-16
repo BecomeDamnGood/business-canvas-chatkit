@@ -134,7 +134,6 @@ function readSingleValueCardContent(uiPayload: Record<string, unknown>): {
     if (
       !feedbackContract.heading &&
       !feedbackContract.suggestedValue &&
-      !feedbackContract.supportText &&
       !feedbackContract.rationale
     ) {
       return null;
@@ -142,7 +141,6 @@ function readSingleValueCardContent(uiPayload: Record<string, unknown>): {
     return {
       ...(feedbackContract.heading ? { heading: feedbackContract.heading } : {}),
       ...(feedbackContract.suggestedValue ? { canonicalText: feedbackContract.suggestedValue } : {}),
-      ...(feedbackContract.supportText ? { supportText: feedbackContract.supportText } : {}),
       ...(feedbackContract.rationale ? { feedbackReasonText: feedbackContract.rationale } : {}),
     };
   }

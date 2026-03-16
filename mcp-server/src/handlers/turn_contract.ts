@@ -624,6 +624,10 @@ function applyDeterministicUiActionRenderPolicy(response: RunStepContractRespons
   );
 
   const allowedRoles = new Set<UiActionRole>();
+  const dreamBuilderVariantActive =
+    variant === "dream_builder_collect" ||
+    variant === "dream_builder_refine" ||
+    variant === "dream_builder_scoring";
   if (mode === "prestart") {
     allowedRoles.add("start");
   } else if (mode === "interactive") {
@@ -632,8 +636,10 @@ function applyDeterministicUiActionRenderPolicy(response: RunStepContractRespons
       allowedRoles.add("score_submit");
     }
     if (variant !== "wording_choice") {
-      allowedRoles.add("dream_start_exercise");
       allowedRoles.add("dream_switch_to_self");
+      if (!dreamBuilderVariantActive) {
+        allowedRoles.add("dream_start_exercise");
+      }
     }
     if (hasChoiceActions) {
       allowedRoles.add("choice");
