@@ -464,6 +464,14 @@ test("runStepRuntimeActionRoutingLayer returns a deterministic Dream intro respo
   assert.ok(result.response);
   assert.equal(String((result.state as Record<string, unknown>).current_step || ""), "dream");
   assert.equal(String((result.state as Record<string, unknown>).active_specialist || ""), "Dream");
+  assert.equal(
+    String((((result.state as Record<string, unknown>).last_specialist_result as Record<string, unknown>)?.action || "")),
+    "ASK"
+  );
+  assert.equal(
+    String((((result.state as Record<string, unknown>).last_specialist_result as Record<string, unknown>)?.message || "")),
+    "Dream intro from catalog."
+  );
   assert.equal(String(((result.response as Record<string, unknown>).specialist as Record<string, unknown>).message || ""), "Dream intro from catalog.");
   assert.equal(
     String((((result.response as Record<string, unknown>).specialist as Record<string, unknown>).ui_show_step_intro_chrome || "")),
@@ -526,6 +534,14 @@ test("runStepRuntimeActionRoutingLayer returns a deterministic Purpose intro res
     assert.ok(result.response);
     assert.equal(String((result.state as Record<string, unknown>).current_step || ""), "purpose");
     assert.equal(String((result.state as Record<string, unknown>).active_specialist || ""), "Purpose");
+    assert.equal(
+      String((((result.state as Record<string, unknown>).last_specialist_result as Record<string, unknown>)?.action || "")),
+      "ASK"
+    );
+    assert.equal(
+      String((((result.state as Record<string, unknown>).last_specialist_result as Record<string, unknown>)?.message || "")),
+      "Purpose intro from catalog for Mindd."
+    );
     assert.equal(
       String((((result.response as Record<string, unknown>).specialist as Record<string, unknown>).message || "")),
       "Purpose intro from catalog for Mindd."

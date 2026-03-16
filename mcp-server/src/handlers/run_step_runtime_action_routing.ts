@@ -1063,7 +1063,10 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
       };
     }
     const renderedState = await behavior.ensureUiStrings(
-      renderedResult.value.state,
+      {
+        ...renderedResult.value.state,
+        last_specialist_result: renderedResult.value.specialist,
+      },
       runtime.actionCodeRaw || userMessage
     );
     state = renderedState;
