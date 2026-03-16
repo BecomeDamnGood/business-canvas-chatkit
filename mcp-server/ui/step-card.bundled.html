@@ -3637,7 +3637,6 @@
   function evaluatePayloadQuality(result) {
     const state = toRecord2(result.state);
     const uiPayload = toRecord2(result.ui);
-    const actionContract = toRecord2(uiPayload.action_contract);
     const uiView = toRecord2(uiPayload.view);
     const uiContent = toRecord2(uiPayload.content);
     const promptObj = toRecord2(uiPayload.prompt);
@@ -3647,7 +3646,7 @@
     const uiStrings = toRecord2(state.ui_strings);
     const hasUiStrings = Object.keys(uiStrings).length > 0;
     const hasDreamBuilderStatements = (uiView.dream_builder_statements_visible === true || (viewVariant === "dream_builder_collect" || viewVariant === "dream_builder_refine") && uiView.dream_builder_statements_visible !== false) && (Array.isArray(specialist.statements) && specialist.statements.length > 0 || Array.isArray(state.dream_builder_statements) && state.dream_builder_statements.length > 0);
-    const hasInteractiveContent = String(result.text || "").trim().length > 0 || String(result.prompt || "").trim().length > 0 || String(promptObj.body || "").trim().length > 0 || String(uiPayload.questionText || "").trim().length > 0 || String(uiContent.heading || "").trim().length > 0 || String(uiContent.canonical_text || "").trim().length > 0 || String(uiContent.support_text || "").trim().length > 0 || String(uiContent.feedback_reason_text || "").trim().length > 0 || hasDreamBuilderStatements || String(specialist.message || "").trim().length > 0 || String(specialist.question || "").trim().length > 0 || String(specialist.refined_formulation || "").trim().length > 0 || Array.isArray(actionContract.actions) && actionContract.actions.length > 0;
+    const hasInteractiveContent = String(result.text || "").trim().length > 0 || String(result.prompt || "").trim().length > 0 || String(promptObj.body || "").trim().length > 0 || String(uiPayload.questionText || "").trim().length > 0 || String(uiContent.heading || "").trim().length > 0 || String(uiContent.canonical_text || "").trim().length > 0 || String(uiContent.support_text || "").trim().length > 0 || String(uiContent.feedback_reason_text || "").trim().length > 0 || hasDreamBuilderStatements || String(specialist.message || "").trim().length > 0 || String(specialist.question || "").trim().length > 0 || String(specialist.refined_formulation || "").trim().length > 0 || Array.isArray(uiPayload.actions) && uiPayload.actions.length > 0;
     const hasState = Object.keys(state).length > 0;
     const hasCurrentStep = String(state.current_step || "").trim().length > 0 || String(result.current_step_id || "").trim().length > 0;
     const renderable = viewMode === "prestart" && hasUiStrings || viewMode === "interactive" && hasInteractiveContent || viewMode === "blocked";
@@ -4445,11 +4444,17 @@
     const inputEl2 = document.getElementById("input");
     const sendEl2 = document.getElementById("send");
     const btnStart2 = document.getElementById("btnStart");
+    const btnGoToNextStep = document.getElementById("btnGoToNextStep");
+    const btnStartDreamExercise2 = document.getElementById("btnStartDreamExercise");
+    const btnSwitchToSelfDream2 = document.getElementById("btnSwitchToSelfDream");
     const wordingChoicePickUser2 = document.getElementById("wordingChoicePickUser");
     const wordingChoicePickSuggestion2 = document.getElementById("wordingChoicePickSuggestion");
     if (inputEl2) inputEl2.disabled = loading;
     if (sendEl2) sendEl2.disabled = loading;
     if (btnStart2) btnStart2.disabled = loading;
+    if (btnGoToNextStep) btnGoToNextStep.disabled = loading;
+    if (btnStartDreamExercise2) btnStartDreamExercise2.disabled = loading;
+    if (btnSwitchToSelfDream2) btnSwitchToSelfDream2.disabled = loading;
     if (wordingChoicePickUser2) wordingChoicePickUser2.disabled = loading;
     if (wordingChoicePickSuggestion2) wordingChoicePickSuggestion2.disabled = loading;
     document.querySelectorAll("#choiceWrap button").forEach((b) => {
@@ -5046,13 +5051,6 @@
       ...feedbackReasonText ? { feedbackReasonText } : {}
     };
   }
-  function readWordingChoiceCompareFeedbackText(wordingChoiceRaw) {
-    const wordingChoice = toRecord3(wordingChoiceRaw);
-    const compareFeedback = toRecord3(wordingChoice.compare_feedback);
-    const compareFeedbackText = String(compareFeedback.text || "").trim();
-    if (compareFeedbackText) return compareFeedbackText;
-    return String(wordingChoice.feedback_reason_text || "").trim();
-  }
   function shouldSuppressMainCardForWordingChoice(uiPayloadRaw, uiViewVariantRaw) {
     const uiPayload = uiPayloadRaw && typeof uiPayloadRaw === "object" ? uiPayloadRaw : {};
     const uiViewVariant = String(uiViewVariantRaw || "").trim();
@@ -5102,6 +5100,13 @@
     if (Array.isArray(actionContract.actions)) {
       return actionContract.actions.map((entry) => toRecord3(entry)).filter((entry) => String(entry.action_code || "").trim().length > 0);
     }
+    const legacyActions = Array.isArray(uiPayload.actions) ? uiPayload.actions : [];
+    if (legacyActions.length > 0) {
+      console.warn("[ui_action_contract_missing_actions]", {
+        legacy_actions_count: legacyActions.length,
+        current_step: String(resultData.state?.current_step || "")
+      });
+    }
     return [];
   }
   function actionDescriptorForRole(resultData, role) {
@@ -5119,27 +5124,13 @@
     }
     return null;
   }
-  function actionLabelForRole(resultData, role) {
-    const roleNorm = String(role || "").trim().toLowerCase();
-    if (!roleNorm) return null;
-    const actions = actionContractActionsForResult(resultData);
-    for (const action of actions) {
-      if (String(action.role || "").trim().toLowerCase() !== roleNorm) continue;
-      return {
-        label: stripInlineText(String(action.label || "")).trim(),
-        labelKey: String(action.label_key || "").trim()
-      };
-    }
-    return null;
-  }
   function actionCodeForRole(resultData, role) {
     return actionDescriptorForRole(resultData, role)?.actionCode || "";
   }
   function choiceActionsForResult(resultData) {
-    return actionContractActionsForResult(resultData).filter((action) => {
-      const role = String(action.role || "").trim().toLowerCase();
-      return role === "choice" || role === "dream_start_exercise";
-    });
+    return actionContractActionsForResult(resultData).filter(
+      (action) => String(action.role || "").trim().toLowerCase() === "choice"
+    );
   }
   function stepIndex(stepId) {
     const idx = ORDER.indexOf(stepId);
@@ -5434,11 +5425,16 @@
     const wrap = document.getElementById("choiceWrap");
     if (!wrap) return;
     wrap.innerHTML = "";
-    const state = toRecord3(resultData?.state);
-    const lang = uiLang(state);
+    const state = resultData?.state || {};
+    const uiPayload = toRecord3(resultData?.ui);
     const structuredActions = choiceActionsForResult(resultData);
     const _unusedChoices = Array.isArray(choices) ? choices : [];
+    const lang = uiLang(state);
     if (structuredActions.length === 0) {
+      const hasLegacyActions = Array.isArray(uiPayload.actions) && uiPayload.actions.length > 0;
+      if (hasLegacyActions) {
+        setInlineNotice(uiText2(lang, "error.contract.body", ""));
+      }
       wrap.style.display = "none";
       return;
     }
@@ -5493,7 +5489,7 @@
     }
     const mode = String(wording.mode || "text") === "list" ? "list" : "text";
     const variant = String(wording.variant || "default").trim().toLowerCase();
-    const feedbackReasonText = readWordingChoiceCompareFeedbackText(wording);
+    const feedbackReasonText = String(wording.feedback_reason_text || "").trim();
     const userText = String(wording.user_text || "").trim();
     const suggestionText = String(wording.suggestion_text || "").trim();
     const userLabelFromPayload = String(wording.user_label || "").trim();
@@ -5967,16 +5963,9 @@
       }
       inputWrap.style.display = "none";
       const btnSelfDream = document.getElementById("btnSwitchToSelfDream");
-      const switchToSelfActionCode = actionCodeForRole(result, "dream_switch_to_self");
-      const switchToSelfLabel = actionLabelForRole(result, "dream_switch_to_self");
       if (btnSelfDream) {
-        btnSelfDream.style.display = switchToSelfActionCode ? "inline-flex" : "none";
-        btnSelfDream.textContent = switchToSelfLabel?.label || (switchToSelfLabel?.labelKey ? t(lang, switchToSelfLabel.labelKey) : t(lang, "btnSwitchToSelfDream"));
-        btnSelfDream.disabled = getIsLoading();
-        btnSelfDream.onclick = () => {
-          if (!switchToSelfActionCode || getIsLoading()) return;
-          callRunStep(switchToSelfActionCode);
-        };
+        btnSelfDream.style.display = "inline-flex";
+        btnSelfDream.textContent = t(lang, "btnSwitchToSelfDream");
       }
       const scoringPanelEl = document.getElementById("scoringPanel");
       if (scoringPanelEl) {
@@ -6260,8 +6249,8 @@
           active_specialist: activeSpecialist,
           "specialist.action": String(specialist.action || ""),
           promptRaw200: (promptRaw || "").slice(0, 200),
-          choicesLength: structuredActions.length,
-          choiceLabels: structuredActions.map((action) => String(action.label || "").trim()).filter(Boolean),
+          choicesLength: choicesArr.length,
+          choiceLabels: choicesArr.map((c) => c.label),
           isDreamStepPreExercise,
           isDreamExplainerMode,
           isLoading: getIsLoading()

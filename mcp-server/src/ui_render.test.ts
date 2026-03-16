@@ -6,7 +6,6 @@ import {
   buildInitialDreamScoringScores,
   dreamExerciseButtonLabelKeyForState,
   parseWordingChoiceInstruction,
-  readWordingChoiceCompareFeedbackText,
   resolveActionCodeForStateKey,
   resolveActionPayloadModeForStateKey,
   shouldRetainDreamScoringClientScores,
@@ -152,27 +151,6 @@ test("parseWordingChoiceInstruction separates retained bullets from the picker i
   assert.equal(parsed.instructionText, "Choose the version that fits best for the remaining difference.");
 });
 
-test("readWordingChoiceCompareFeedbackText prefers the dedicated compare feedback contract", () => {
-  assert.equal(
-    readWordingChoiceCompareFeedbackText({
-      compare_feedback: {
-        text: "This suggestion makes the purpose more specific to the change you want to create.",
-      },
-      feedback_reason_text: "Legacy feedback should not win.",
-    }),
-    "This suggestion makes the purpose more specific to the change you want to create."
-  );
-});
-
-test("readWordingChoiceCompareFeedbackText falls back to the legacy compare field when needed", () => {
-  assert.equal(
-    readWordingChoiceCompareFeedbackText({
-      feedback_reason_text: "Legacy compare feedback.",
-    }),
-    "Legacy compare feedback."
-  );
-});
-
 test("resolveActionCodeForStateKey falls back to action contract when lean state omits start action", () => {
   const result = {
     ui: {
@@ -191,10 +169,10 @@ test("resolveActionCodeForStateKey falls back to action contract when lean state
   assert.equal(resolveActionCodeForStateKey(result, {}, "ui_action_start"), "ACTION_START");
 });
 
-test("resolveActionCodeForStateKey does not fall back to legacy non-transport state keys", () => {
+test("resolveActionCodeForStateKey falls back to legacy state keys when no contract role is available", () => {
   assert.equal(
     resolveActionCodeForStateKey({}, { ui_action_dream_switch_to_self: "__ROUTE__DREAM_SWITCH_TO_SELF__" }, "ui_action_dream_switch_to_self"),
-    ""
+    "__ROUTE__DREAM_SWITCH_TO_SELF__"
   );
 });
 

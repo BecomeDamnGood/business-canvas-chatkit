@@ -1112,7 +1112,6 @@ type RenderCacheDecision = {
 function evaluatePayloadQuality(result: Record<string, unknown>): PayloadQuality {
   const state = toRecord(result.state);
   const uiPayload = toRecord(result.ui);
-  const actionContract = toRecord(uiPayload.action_contract);
   const uiView = toRecord(uiPayload.view);
   const uiContent = toRecord(uiPayload.content);
   const promptObj = toRecord(uiPayload.prompt);
@@ -1146,7 +1145,7 @@ function evaluatePayloadQuality(result: Record<string, unknown>): PayloadQuality
     String(specialist.message || "").trim().length > 0 ||
     String(specialist.question || "").trim().length > 0 ||
     String(specialist.refined_formulation || "").trim().length > 0 ||
-    (Array.isArray(actionContract.actions) && actionContract.actions.length > 0);
+    (Array.isArray(uiPayload.actions) && uiPayload.actions.length > 0);
   const hasState = Object.keys(state).length > 0;
   const hasCurrentStep =
     String(state.current_step || "").trim().length > 0 ||
@@ -2176,12 +2175,18 @@ export function setLoading(next: boolean): void {
   const inputEl = document.getElementById("input");
   const sendEl = document.getElementById("send");
   const btnStart = document.getElementById("btnStart") as HTMLButtonElement | null;
+  const btnGoToNextStep = document.getElementById("btnGoToNextStep") as HTMLButtonElement | null;
+  const btnStartDreamExercise = document.getElementById("btnStartDreamExercise") as HTMLButtonElement | null;
+  const btnSwitchToSelfDream = document.getElementById("btnSwitchToSelfDream") as HTMLButtonElement | null;
   const wordingChoicePickUser = document.getElementById("wordingChoicePickUser") as HTMLButtonElement | null;
   const wordingChoicePickSuggestion = document.getElementById("wordingChoicePickSuggestion") as HTMLButtonElement | null;
 
   if (inputEl) (inputEl as HTMLInputElement).disabled = loading;
   if (sendEl) (sendEl as HTMLButtonElement).disabled = loading;
   if (btnStart) btnStart.disabled = loading;
+  if (btnGoToNextStep) btnGoToNextStep.disabled = loading;
+  if (btnStartDreamExercise) btnStartDreamExercise.disabled = loading;
+  if (btnSwitchToSelfDream) btnSwitchToSelfDream.disabled = loading;
   if (wordingChoicePickUser) wordingChoicePickUser.disabled = loading;
   if (wordingChoicePickSuggestion) wordingChoicePickSuggestion.disabled = loading;
 

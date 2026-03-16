@@ -264,7 +264,7 @@ test("resolveWidgetBodyText keeps empty canonical dream-builder body authoritati
   assert.equal(body, "");
 });
 
-test("renderChoiceButtons renders auxiliary contract actions in the shared choice list", { concurrency: false }, () => {
+test("renderChoiceButtons keeps auxiliary dream actions out of the shared choice list", { concurrency: false }, () => {
   const originalDocument = (globalThis as unknown as { document?: unknown }).document;
   try {
     const wrap = {
@@ -320,12 +320,11 @@ test("renderChoiceButtons renders auxiliary contract actions in the shared choic
     const buttons = wrap.childNodes.filter(
       (node: unknown) => node && (node as { tagName?: string }).tagName === "BUTTON"
     ) as Array<{ textContent?: string }>;
-    assert.equal(buttons.length, 2);
+    assert.equal(buttons.length, 1);
     assert.deepEqual(
       buttons.map((button) => String(button.textContent || "")),
       [
         "Vertel me meer over waarom een droom belangrijk is",
-        "Doe een kleine oefening die helpt om je droom te definieren.",
       ]
     );
   } finally {
@@ -2158,14 +2157,12 @@ test("bundled runtime fail-closes missing canonical widget payloads", () => {
   assert.match(source, /widget_result:/);
 });
 
-test("bundled wording-choice view exposes a dedicated compare feedback slot", () => {
+test("bundled wording-choice view renders legacy feedback_reason_text in the compare slot", () => {
   const source = fs.readFileSync(new URL("../ui/step-card.bundled.html", import.meta.url), "utf8");
   assert.match(source, /class="wordingChoiceFeedback" id="wordingChoiceFeedback"/);
   assert.match(source, /const feedbackEl = document\.getElementById\("wordingChoiceFeedback"\);/);
-  assert.match(source, /function readWordingChoiceCompareFeedbackText\(wordingChoiceRaw\)/);
-  assert.match(source, /const compareFeedback = toRecord\d+\(wordingChoice\.compare_feedback\);/);
-  assert.match(source, /const compareFeedbackText = String\(compareFeedback\.text \|\| ""\)\.trim\(\);/);
-  assert.match(source, /const feedbackReasonText = readWordingChoiceCompareFeedbackText\(wording\);/);
+  assert.doesNotMatch(source, /function readWordingChoiceCompareFeedbackText\(wordingChoiceRaw\)/);
+  assert.match(source, /const feedbackReasonText = String\(wording\.feedback_reason_text \|\| ""\)\.trim\(\);/);
   assert.match(source, /renderStructuredText\(feedbackEl, feedbackReasonText\);/);
   assert.match(source, /feedbackEl\.style\.display = feedbackReasonText \? "block" : "none";/);
   assert.match(source, /\.wordingChoiceFeedback p,/);

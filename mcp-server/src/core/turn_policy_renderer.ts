@@ -19,9 +19,8 @@ import {
 import {
   feedbackStepLabel,
   formatCompareFeedbackForDisplay,
+  formatUserPickFeedbackForDisplay,
   sanitizeFeedbackReasonForDisplay,
-  userPickAcknowledgmentForDisplay,
-  userPickFeedbackReasonForDisplay,
 } from "./feedback_display.js";
 import { UI_STRINGS_SOURCE_EN } from "../i18n/ui_strings_defaults.js";
 import { productsServicesItemsFromText } from "../shared/productsservices_items.js";
@@ -1944,16 +1943,10 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
   });
   const isUserPickedWording =
     String((specialistForDisplay as any).wording_choice_selected || "").trim() === "user";
-  const userPickAcknowledgment =
-    isUserPickedWording
-      ? userPickAcknowledgmentForDisplay((key, fallback = "") =>
-          uiStringFromState(state, key, uiDefaultString(key, fallback))
-        )
-      : "";
   const rawFeedbackReasonForDisplay = sanitizedExplicitFeedbackReasonForDisplay;
   const feedbackReasonForDisplay =
     isUserPickedWording
-      ? userPickFeedbackReasonForDisplay({
+      ? formatUserPickFeedbackForDisplay({
           stepId,
           rawReason: rawFeedbackReasonForDisplay,
           resolveString: (key, fallback = "") => uiStringFromState(state, key, uiDefaultString(key, fallback)),
@@ -1998,27 +1991,22 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     });
   }
   if (wordingPending && wordingPresentation === "canonical" && pendingCanonicalValue) {
-    const canonicalMessage = singleValueConfirmCanonicalMessage(stepId, state, pendingCanonicalValue);
-    messageForDisplay = isUserPickedWording
-      ? [userPickAcknowledgment, effectiveFeedbackReasonForDisplay, canonicalMessage].filter(Boolean).join("\n\n").trim()
-      : singleValueSupportText({
-          message: messageForDisplay,
-          heading: singleValueConfirmHeading(stepId, state),
-          canonicalValue: pendingCanonicalValue,
-          feedbackReasonText: effectiveFeedbackReasonForDisplay,
-          rawFeedbackReasonText: effectiveRawFeedbackReasonForDisplay,
-        });
+    messageForDisplay = singleValueSupportText({
+      message: messageForDisplay,
+      heading: singleValueConfirmHeading(stepId, state),
+      canonicalValue: pendingCanonicalValue,
+      feedbackReasonText: effectiveFeedbackReasonForDisplay,
+      rawFeedbackReasonText: effectiveRawFeedbackReasonForDisplay,
+    });
   } else if (currentValueRefinementPending && currentValueRefinementCanonicalValue) {
     const canonicalMessage = singleValueConfirmCanonicalMessage(
       stepId,
       state,
       currentValueRefinementCanonicalValue
     );
-    messageForDisplay = isUserPickedWording
-      ? [userPickAcknowledgment, effectiveFeedbackReasonForDisplay, canonicalMessage].filter(Boolean).join("\n\n").trim()
-      : effectiveFeedbackReasonForDisplay
-        ? `${effectiveFeedbackReasonForDisplay}\n\n${canonicalMessage}`.trim()
-        : canonicalMessage;
+    messageForDisplay = effectiveFeedbackReasonForDisplay
+      ? `${effectiveFeedbackReasonForDisplay}\n\n${canonicalMessage}`.trim()
+      : canonicalMessage;
   }
   const useSingleValueConfirmSsot =
     shouldEnforceConfirmVisibility &&
@@ -2030,11 +2018,9 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     !recapRequested;
   if (useSingleValueConfirmSsot) {
     const canonicalMessage = singleValueConfirmCanonicalMessage(stepId, state, canonicalAcceptedValue);
-    messageForDisplay = isUserPickedWording
-      ? [userPickAcknowledgment, feedbackReasonForDisplay, canonicalMessage].filter(Boolean).join("\n\n").trim()
-      : feedbackReasonForDisplay
-        ? `${feedbackReasonForDisplay}\n\n${canonicalMessage}`.trim()
-        : canonicalMessage;
+    messageForDisplay = feedbackReasonForDisplay
+      ? `${feedbackReasonForDisplay}\n\n${canonicalMessage}`.trim()
+      : canonicalMessage;
   } else if (shouldEnforceConfirmVisibility && canonicalAcceptedValue && !wordingPending) {
     messageForDisplay = ensureCanonicalContextBlockInMessage({
       message: messageForDisplay,
@@ -2058,13 +2044,6 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     }
     return "";
   })();
-  if (isUserPickedWording && singleValueUiCanonicalValue) {
-    const canonicalMessage = singleValueConfirmCanonicalMessage(stepId, state, singleValueUiCanonicalValue);
-    messageForDisplay = [userPickAcknowledgment, effectiveFeedbackReasonForDisplay, canonicalMessage]
-      .filter(Boolean)
-      .join("\n\n")
-      .trim();
-  }
   const singleValueUiContent = buildSingleValueUiContent({
     stepId,
     state,

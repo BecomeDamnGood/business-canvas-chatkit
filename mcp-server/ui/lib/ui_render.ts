@@ -66,16 +66,6 @@ function readSingleValueCardContent(uiPayload: Record<string, unknown>): {
   };
 }
 
-export function readWordingChoiceCompareFeedbackText(
-  wordingChoiceRaw: Record<string, unknown> | null | undefined
-): string {
-  const wordingChoice = toRecord(wordingChoiceRaw);
-  const compareFeedback = toRecord(wordingChoice.compare_feedback);
-  const compareFeedbackText = String(compareFeedback.text || "").trim();
-  if (compareFeedbackText) return compareFeedbackText;
-  return String(wordingChoice.feedback_reason_text || "").trim();
-}
-
 export function shouldSuppressMainCardForWordingChoice(
   uiPayloadRaw: Record<string, unknown> | null | undefined,
   uiViewVariantRaw: string | null | undefined
@@ -177,6 +167,13 @@ function actionContractActionsForResult(resultData: Record<string, unknown>): Ar
       .map((entry) => toRecord(entry))
       .filter((entry) => String(entry.action_code || "").trim().length > 0);
   }
+  const legacyActions = Array.isArray(uiPayload.actions) ? (uiPayload.actions as unknown[]) : [];
+  if (legacyActions.length > 0) {
+    console.warn("[ui_action_contract_missing_actions]", {
+      legacy_actions_count: legacyActions.length,
+      current_step: String((resultData.state as Record<string, unknown> | undefined)?.current_step || ""),
+    });
+  }
   return [];
 }
 
@@ -191,6 +188,8 @@ const ACTION_ROLE_BY_STATE_KEY: Record<string, string> = {
   ui_action_score_submit: "score_submit",
   ui_action_wording_pick_user: "wording_pick_user",
   ui_action_wording_pick_suggestion: "wording_pick_suggestion",
+  ui_action_dream_start_exercise: "dream_start_exercise",
+  ui_action_dream_switch_to_self: "dream_switch_to_self",
 };
 
 const ACTION_PAYLOAD_MODE_STATE_KEY_BY_STATE_KEY: Record<string, string> = {
@@ -213,23 +212,6 @@ function actionDescriptorForRole(resultData: Record<string, unknown>, role: stri
   return null;
 }
 
-function actionLabelForRole(
-  resultData: Record<string, unknown>,
-  role: string
-): { label: string; labelKey: string } | null {
-  const roleNorm = String(role || "").trim().toLowerCase();
-  if (!roleNorm) return null;
-  const actions = actionContractActionsForResult(resultData);
-  for (const action of actions) {
-    if (String(action.role || "").trim().toLowerCase() !== roleNorm) continue;
-    return {
-      label: stripInlineText(String(action.label || "")).trim(),
-      labelKey: String(action.label_key || "").trim(),
-    };
-  }
-  return null;
-}
-
 function actionCodeForRole(resultData: Record<string, unknown>, role: string): string {
   return actionDescriptorForRole(resultData, role)?.actionCode || "";
 }
@@ -245,9 +227,10 @@ export function resolveActionCodeForStateKey(
 ): string {
   const state = toRecord(stateRaw);
   const role = actionRoleForStateKey(stateKey);
-  if (!role) return "";
-  const actionCodeFromContract = actionCodeForRole(resultData, role);
-  if (actionCodeFromContract) return actionCodeFromContract;
+  if (role) {
+    const actionCodeFromContract = actionCodeForRole(resultData, role);
+    if (actionCodeFromContract) return actionCodeFromContract;
+  }
   return String(state[stateKey] || "").trim();
 }
 
@@ -267,10 +250,9 @@ export function resolveActionPayloadModeForStateKey(
 }
 
 function choiceActionsForResult(resultData: Record<string, unknown>): Array<Record<string, unknown>> {
-  return actionContractActionsForResult(resultData).filter((action) => {
-    const role = String(action.role || "").trim().toLowerCase();
-    return role === "choice" || role === "dream_start_exercise";
-  });
+  return actionContractActionsForResult(resultData).filter(
+    (action) => String(action.role || "").trim().toLowerCase() === "choice"
+  );
 }
 
 function stepIndex(stepId: string): number {
@@ -787,12 +769,17 @@ export function renderChoiceButtons(choices: Choice[] | null | undefined, result
   if (!wrap) return;
   wrap.innerHTML = "";
 
-  const state = toRecord(resultData?.state);
-  const lang = uiLang(state);
+  const state = (resultData?.state as Record<string, unknown>) || {};
+  const uiPayload = toRecord(resultData?.ui);
   const structuredActions = choiceActionsForResult(resultData);
   const _unusedChoices = Array.isArray(choices) ? choices : [];
   void _unusedChoices;
+  const lang = uiLang(state);
   if (structuredActions.length === 0) {
+    const hasLegacyActions = Array.isArray(uiPayload.actions) && uiPayload.actions.length > 0;
+    if (hasLegacyActions) {
+      setInlineNotice(uiText(lang, "error.contract.body", ""));
+    }
     wrap.style.display = "none";
     return;
   }
@@ -873,7 +860,7 @@ function renderWordingChoicePanel(resultData: Record<string, unknown>, lang: str
 
   const mode = String(wording.mode || "text") === "list" ? "list" : "text";
   const variant = String(wording.variant || "default").trim().toLowerCase();
-  const feedbackReasonText = readWordingChoiceCompareFeedbackText(wording);
+  const feedbackReasonText = String(wording.feedback_reason_text || "").trim();
   const userText = String(wording.user_text || "").trim();
   const suggestionText = String(wording.suggestion_text || "").trim();
   const userLabelFromPayload = String(wording.user_label || "").trim();
@@ -1432,18 +1419,9 @@ export function render(overrideToolOutput?: unknown): void {
     }
     inputWrap.style.display = "none";
     const btnSelfDream = document.getElementById("btnSwitchToSelfDream");
-    const switchToSelfActionCode = actionCodeForRole(result, "dream_switch_to_self");
-    const switchToSelfLabel = actionLabelForRole(result, "dream_switch_to_self");
     if (btnSelfDream) {
-      (btnSelfDream as HTMLElement).style.display = switchToSelfActionCode ? "inline-flex" : "none";
-      btnSelfDream.textContent =
-        switchToSelfLabel?.label ||
-        (switchToSelfLabel?.labelKey ? t(lang, switchToSelfLabel.labelKey) : t(lang, "btnSwitchToSelfDream"));
-      (btnSelfDream as HTMLButtonElement).disabled = getIsLoading();
-      (btnSelfDream as HTMLButtonElement).onclick = () => {
-        if (!switchToSelfActionCode || getIsLoading()) return;
-        callRunStep(switchToSelfActionCode);
-      };
+      (btnSelfDream as HTMLElement).style.display = "inline-flex";
+      btnSelfDream.textContent = t(lang, "btnSwitchToSelfDream");
     }
 
     const scoringPanelEl = document.getElementById("scoringPanel");
@@ -1822,8 +1800,8 @@ export function render(overrideToolOutput?: unknown): void {
         active_specialist: activeSpecialist,
         "specialist.action": String(specialist.action || ""),
         promptRaw200: (promptRaw || "").slice(0, 200),
-        choicesLength: structuredActions.length,
-        choiceLabels: structuredActions.map((action) => String(action.label || "").trim()).filter(Boolean),
+        choicesLength: choicesArr.length,
+        choiceLabels: choicesArr.map((c) => c.label),
         isDreamStepPreExercise,
         isDreamExplainerMode,
         isLoading: getIsLoading(),
