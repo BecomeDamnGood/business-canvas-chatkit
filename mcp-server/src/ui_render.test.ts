@@ -8,6 +8,7 @@ import {
   dreamExerciseButtonLabelKeyForState,
   parseWordingChoiceInstruction,
   readFeedbackContract,
+  readDreamBuilderContract,
   readStructuredSuggestionsCardContent,
   resolveActionCodeForStateKey,
   resolveActionPayloadModeForStateKey,
@@ -206,6 +207,49 @@ test("readFeedbackContract normalizes grouped list compare contracts from the se
     retainedHeading: "Deze punten blijven al in de definitieve lijst:",
     retainedItems: ["Strategy workshops"],
     instruction: "Kies de versie die het beste past bij het resterende verschil.",
+  });
+});
+
+test("readDreamBuilderContract normalizes explicit Dream Builder compare ownership contracts", () => {
+  const contract = readDreamBuilderContract({
+    dream_builder_contract: {
+      version: "2026-03-16.dream_builder_contract.v1",
+      phase: "compare",
+      statements: ["Statement 1", "Statement 2"],
+      statements_visible: true,
+      body_mode: "support_only",
+      question: "Welke formulering past het best?",
+      compare: {
+        kind: "grouped_list_compare",
+        rationale: "Dream Builder zoekt naar bredere maatschappelijke verschuivingen.",
+        current_label: "Keep both statements",
+        suggested_label: "Merge into one statement",
+        current_items: ["I want to create freedom in my time and choices."],
+        suggested_items: ["Freedom in time and choices will become more important in working life."],
+        instruction: "Choose the version that fits best.",
+      },
+    },
+  });
+
+  assert.deepEqual(contract, {
+    phase: "compare",
+    statements: ["Statement 1", "Statement 2"],
+    statementsVisible: true,
+    bodyMode: "support_only",
+    question: "Welke formulering past het best?",
+    compare: {
+      kind: "grouped_list_compare",
+      rationale: "Dream Builder zoekt naar bredere maatschappelijke verschuivingen.",
+      currentLabel: "Keep both statements",
+      suggestedLabel: "Merge into one statement",
+      currentValue: "",
+      suggestedValue: "",
+      currentItems: ["I want to create freedom in my time and choices."],
+      suggestedItems: ["Freedom in time and choices will become more important in working life."],
+      retainedHeading: "",
+      retainedItems: [],
+      instruction: "Choose the version that fits best.",
+    },
   });
 });
 

@@ -25,6 +25,8 @@ function buildHelpers(intentEnabled: boolean) {
       "At the same time, it helps to remember what usually makes a strong {0}.",
     "wording.feedback.user_pick.reason.default":
       "Keep in mind what makes this step strong, so your wording stays clear and aligned.",
+    "wording.feedback.dream_builder.rewrite.default":
+      "Your original wording is mainly about your own wish, while Dream Builder asks for a broader change in the world.",
     "wordingChoice.chooseVersion": "Choose this version",
     "wordingChoice.useInputFallback": "Use this input",
     "autosuggest.prefix.template": "Based on your input I suggest the following {0}:",
@@ -131,6 +133,8 @@ function buildDreamBuilderHelpers(intentEnabled: boolean) {
       "At the same time, it helps to remember what usually makes a strong {0}.",
     "wording.feedback.user_pick.reason.default":
       "Keep in mind what makes this step strong, so your wording stays clear and aligned.",
+    "wording.feedback.dream_builder.rewrite.default":
+      "Your original wording is mainly about your own wish, while Dream Builder asks for a broader change in the world.",
     "wordingChoice.chooseVersion": "Choose this version",
     "wordingChoice.useInputFallback": "Use this input",
     "autosuggest.prefix.template": "Based on your input I suggest the following {0}:",
@@ -2265,6 +2269,52 @@ test("buildWordingChoiceFromTurn opens a grouped compare for multiple Dream Buil
     "Trots op het eigen werk en de maatschappelijke bijdrage ervan zal voor meer mensen leidend worden in hun loopbaan.",
     "Bedrijven zullen vaker bewust worden ingericht als een weerspiegeling van de waarden en identiteit van hun oprichters.",
   ]);
+});
+
+test("buildWordingChoiceFromTurn keeps Dream Builder grouped compare active for multiple wishes even without explicit specialist feedback text", () => {
+  const helpers = buildDreamBuilderHelpers(true);
+  const result = helpers.buildWordingChoiceFromTurn({
+    stepId: "dream",
+    state: {
+      current_step: "dream",
+      __dream_runtime_mode: "builder_collect",
+    } as any,
+    activeSpecialist: "DreamExplainer",
+    previousSpecialist: {
+      statements: [],
+      dream: "",
+    },
+    specialistResult: {
+      message: "Ik heb je persoonlijke wensen vertaald naar bredere maatschappelijke bewegingen.",
+      feedback_reason_text: "",
+      refined_formulation: [
+        "Over 5 tot 10 jaar zal positieve impact op het leven van anderen voor meer mensen een belangrijk criterium worden in hun werk.",
+        "Mensen zullen meer waarde hechten aan het opbouwen van iets dat duurzaam blijft bestaan voorbij henzelf.",
+        "Vrijheid in tijd en keuzes zal voor steeds meer mensen een belangrijk onderdeel worden van hun werkende leven.",
+        "Trots op het eigen werk en de maatschappelijke bijdrage ervan zal voor meer mensen leidend worden in hun loopbaan.",
+        "Bedrijven zullen vaker bewust worden ingericht als een weerspiegeling van de waarden en identiteit van hun oprichters.",
+      ].join("\n"),
+      statements: [],
+      suggest_dreambuilder: "true",
+    } as Record<string, unknown>,
+    userTextRaw: [
+      "I want my work to make a positive difference in people's lives.",
+      "I want to build something that lasts beyond me.",
+      "I want to create freedom in my time and choices.",
+      "I want to feel proud when I talk about what I do.",
+      "I want my business to reflect who I am and what I stand for.",
+    ].join("\n\n"),
+    isOfftopic: false,
+    dreamRuntimeModeRaw: "builder_collect",
+  });
+
+  assert.ok(result.wordingChoice);
+  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "true");
+  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_variant || ""), "grouped_list_units");
+  assert.match(
+    String((result.wordingChoice as Record<string, unknown>).feedback_reason_text || ""),
+    /broader change|bredere verandering/i
+  );
 });
 
 test("applyWordingPickSelection can keep both Dream Builder near-duplicate statements", () => {

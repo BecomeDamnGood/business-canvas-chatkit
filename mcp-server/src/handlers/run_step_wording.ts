@@ -1708,20 +1708,39 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
   }
 
   function resolveGroupedCompareFeedbackForUnit(params: {
+    stepId: string;
     specialistResult: Record<string, unknown>;
     unit: WordingChoiceCompareUnit;
     state: CanvasState;
   }): string {
-    void params.unit;
-    return resolveFeedbackReasonFromSpecialist(params.state, params.specialistResult);
+    const explicitReason = resolveFeedbackReasonFromSpecialist(params.state, params.specialistResult);
+    if (explicitReason) return explicitReason;
+    if (
+      params.stepId === deps.dreamStepId &&
+      deps.isMaterialRewriteCandidate(params.unit.user_text, params.unit.suggestion_text)
+    ) {
+      return sanitizeFeedbackReasonForDisplay({
+        stepId: params.stepId,
+        rawReason: deps.uiStringFromStateMap(
+          params.state,
+          "wording.feedback.dream_builder.rewrite.default",
+          deps.uiDefaultString("wording.feedback.dream_builder.rewrite.default", "")
+        ),
+        resolveString: (key, fallback = "") =>
+          deps.uiStringFromStateMap(params.state, key, fallback || deps.uiDefaultString(key, fallback)),
+      });
+    }
+    return "";
   }
 
   function withGroupedCompareUnitFeedback(params: {
+    stepId: string;
     plan: BusinessListComparePlan;
     specialistResult: Record<string, unknown>;
     state: CanvasState;
   }): BusinessListComparePlan {
     const sharedFeedbackReason = resolveGroupedCompareFeedbackForUnit({
+      stepId: params.stepId,
       specialistResult: params.specialistResult,
       unit: params.plan.initialUnit,
       state: params.state,
@@ -2199,11 +2218,15 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
         : null;
     const comparePlan = rawComparePlan
       ? withGroupedCompareUnitFeedback({
+          stepId,
           plan: rawComparePlan,
           specialistResult,
           state,
         })
       : null;
+    const effectiveFeedbackReason =
+      String(feedbackReason || "").trim() ||
+      String(comparePlan?.initialUnit.feedback_reason_text || "").trim();
     if (comparePlan) {
       variant = "grouped_list_units";
     }
@@ -2247,7 +2270,7 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
           ? (acceptedOutputUserTurnClassification.user_variant_is_stepworthy ? "true" : "false")
           : "",
       feedback_reason_key: "",
-      feedback_reason_text: feedbackReason,
+      feedback_reason_text: effectiveFeedbackReason,
       feedback_mode: feedbackMode,
       pending_suggestion_intent: submittedIntent,
       pending_suggestion_anchor: submittedAnchor,
@@ -2278,7 +2301,7 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
       enriched.wording_choice_presentation = "canonical";
       return { specialist: enriched, wordingChoice: null };
     }
-    if (!feedbackReason) {
+    if (!effectiveFeedbackReason) {
       enriched.wording_choice_presentation = "canonical";
       return { specialist: enriched, wordingChoice: null };
     }

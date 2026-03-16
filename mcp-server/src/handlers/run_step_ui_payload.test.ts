@@ -163,6 +163,67 @@ test("attachRegistryPayload keeps accepted dream score submits in refine even wh
   assert.equal(payload.ui?.view?.variant, "dream_builder_refine");
 });
 
+test("attachRegistryPayload emits explicit Dream Builder compare ownership contracts", () => {
+  const helpers = buildHelpers();
+  const payload = helpers.attachRegistryPayload(
+    {
+      text: "",
+      prompt: "Kies welke formulering past.",
+      current_step_id: "dream",
+      state: {
+        current_step: "dream",
+        active_specialist: "DreamExplainer",
+        __dream_runtime_mode: "builder_collect",
+        dream_builder_statements: ["Statement 1", "Statement 2"],
+      } as any,
+    },
+    {
+      ui_contract_id: "dream:incomplete_output:DREAM_EXPLAINER_MENU_SWITCH_SELF:v1",
+      suggest_dreambuilder: "true",
+      wording_choice_pending: "true",
+      wording_choice_mode: "list",
+      wording_choice_presentation: "picker",
+      wording_choice_variant: "grouped_list_units",
+      wording_choice_target_field: "dream",
+    },
+    { require_wording_pick: true },
+    [],
+    [],
+    {
+      enabled: true,
+      mode: "list",
+      variant: "grouped_list_units",
+      compare_feedback: {
+        text: "Dream Builder zoekt naar bredere maatschappelijke verschuivingen.",
+      },
+      user_text: "",
+      suggestion_text: "",
+      user_label: "Keep both statements",
+      suggestion_label: "Merge into one statement",
+      user_items: ["I want my work to make a positive difference in people's lives."],
+      suggestion_items: ["Over 5 tot 10 jaar zal positieve impact op het leven van anderen belangrijker worden."],
+      instruction: "Choose the version that fits best.",
+    }
+  );
+
+  assert.deepEqual(payload.ui?.dream_builder_contract, {
+    version: "2026-03-16.dream_builder_contract.v1",
+    phase: "compare",
+    statements: ["Statement 1", "Statement 2"],
+    statements_visible: true,
+    body_mode: "none",
+    compare: {
+      kind: "grouped_list_compare",
+      rationale: "Dream Builder zoekt naar bredere maatschappelijke verschuivingen.",
+      current_label: "Keep both statements",
+      suggested_label: "Merge into one statement",
+      current_items: ["I want my work to make a positive difference in people's lives."],
+      suggested_items: ["Over 5 tot 10 jaar zal positieve impact op het leven van anderen belangrijker worden."],
+      instruction: "Choose the version that fits best.",
+    },
+  });
+});
+
 test("attachRegistryPayload forwards structured single-value content into ui.content", () => {
   const helpers = buildHelpers();
   const canonical = "Een strategisch reclamebureau voor complexe keuzes";

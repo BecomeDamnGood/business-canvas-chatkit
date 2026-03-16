@@ -76,6 +76,31 @@ type NormalizedFeedbackContract = {
   instruction: string;
 };
 
+type DreamBuilderContractPhase = "collect" | "compare" | "scoring" | "refine";
+
+type NormalizedDreamBuilderCompareContract = {
+  kind: "grouped_list_compare";
+  rationale: string;
+  currentLabel: string;
+  suggestedLabel: string;
+  currentValue: string;
+  suggestedValue: string;
+  currentItems: string[];
+  suggestedItems: string[];
+  retainedHeading: string;
+  retainedItems: string[];
+  instruction: string;
+};
+
+type NormalizedDreamBuilderContract = {
+  phase: DreamBuilderContractPhase;
+  statements: string[];
+  statementsVisible: boolean;
+  bodyMode: "" | "none" | "support_only" | "full_narrative";
+  question: string;
+  compare: NormalizedDreamBuilderCompareContract | null;
+};
+
 function normalizeStringArray(raw: unknown): string[] {
   if (!Array.isArray(raw)) return [];
   return raw
@@ -93,6 +118,14 @@ function normalizeFeedbackContractKind(raw: unknown): FeedbackContractKind | "" 
     kind === "list_duplicate_merge_compare"
   ) {
     return kind;
+  }
+  return "";
+}
+
+function normalizeDreamBuilderContractPhase(raw: unknown): DreamBuilderContractPhase | "" {
+  const phase = String(raw || "").trim();
+  if (phase === "collect" || phase === "compare" || phase === "scoring" || phase === "refine") {
+    return phase;
   }
   return "";
 }
@@ -120,6 +153,50 @@ export function readFeedbackContract(
     retainedHeading: String(feedback.retained_heading || "").trim(),
     retainedItems: normalizeStringArray(feedback.retained_items),
     instruction: String(feedback.instruction || "").trim(),
+  };
+}
+
+export function readDreamBuilderContract(
+  uiPayloadRaw: Record<string, unknown> | null | undefined
+): NormalizedDreamBuilderContract | null {
+  const uiPayload = toRecord(uiPayloadRaw);
+  const contract = toRecord(uiPayload.dream_builder_contract);
+  const phase = normalizeDreamBuilderContractPhase(contract.phase);
+  if (!phase) return null;
+  const statements = normalizeStringArray(contract.statements);
+  const statementsVisible = contract.statements_visible === true;
+  const bodyModeRaw = String(contract.body_mode || "").trim();
+  const bodyMode =
+    bodyModeRaw === "none" ||
+    bodyModeRaw === "support_only" ||
+    bodyModeRaw === "full_narrative"
+      ? bodyModeRaw
+      : "";
+  const compareRaw = toRecord(contract.compare);
+  const compareKind = String(compareRaw.kind || "").trim();
+  const compare =
+    compareKind === "grouped_list_compare"
+      ? {
+          kind: "grouped_list_compare" as const,
+          rationale: String(compareRaw.rationale || "").trim(),
+          currentLabel: String(compareRaw.current_label || "").trim(),
+          suggestedLabel: String(compareRaw.suggested_label || "").trim(),
+          currentValue: String(compareRaw.current_value || "").trim(),
+          suggestedValue: String(compareRaw.suggested_value || "").trim(),
+          currentItems: normalizeStringArray(compareRaw.current_items),
+          suggestedItems: normalizeStringArray(compareRaw.suggested_items),
+          retainedHeading: String(compareRaw.retained_heading || "").trim(),
+          retainedItems: normalizeStringArray(compareRaw.retained_items),
+          instruction: String(compareRaw.instruction || "").trim(),
+        }
+      : null;
+  return {
+    phase,
+    statements,
+    statementsVisible,
+    bodyMode,
+    question: String(contract.question || "").trim(),
+    compare,
   };
 }
 
@@ -213,6 +290,7 @@ export function shouldSuppressMainCardForWordingChoice(
 ): boolean {
   const uiPayload = uiPayloadRaw && typeof uiPayloadRaw === "object" ? uiPayloadRaw : {};
   const feedbackContract = readFeedbackContract(uiPayload);
+  const dreamBuilderContract = readDreamBuilderContract(uiPayload);
   const uiViewVariant = String(uiViewVariantRaw || "").trim();
   const wordingChoicePayload =
     uiPayload && typeof uiPayload.wording_choice === "object" && uiPayload.wording_choice
@@ -224,6 +302,7 @@ export function shouldSuppressMainCardForWordingChoice(
     feedbackContract?.kind === "grouped_list_compare" ||
     feedbackContract?.kind === "list_edit_compare" ||
     feedbackContract?.kind === "list_duplicate_merge_compare" ||
+    dreamBuilderContract?.phase === "compare" ||
     uiViewVariant === "wording_choice" ||
     wordingChoicePayload.enabled === true ||
     String(flags.require_wording_pick || "").trim() === "true"
@@ -1147,6 +1226,7 @@ function renderWordingChoicePanel(resultData: Record<string, unknown>, lang: str
       ? (resultData.ui as Record<string, unknown>)
       : {};
   const feedbackContract = readFeedbackContract(uiPayload);
+  const dreamBuilderContract = readDreamBuilderContract(uiPayload);
   const flags =
     uiPayload && typeof uiPayload.flags === "object" && uiPayload.flags
       ? (uiPayload.flags as Record<string, unknown>)
@@ -1161,7 +1241,9 @@ function renderWordingChoicePanel(resultData: Record<string, unknown>, lang: str
     feedbackContract?.kind === "grouped_list_compare" ||
     feedbackContract?.kind === "list_edit_compare" ||
     feedbackContract?.kind === "list_duplicate_merge_compare";
-  const enabled = feedbackContractEnabled || requirePick || wording.enabled === true;
+  const dreamBuilderCompareEnabled =
+    dreamBuilderContract?.phase === "compare" && dreamBuilderContract.compare?.kind === "grouped_list_compare";
+  const enabled = feedbackContractEnabled || dreamBuilderCompareEnabled || requirePick || wording.enabled === true;
   if (!enabled) {
     (wrap as HTMLElement).style.display = "none";
     return false;
@@ -1169,21 +1251,42 @@ function renderWordingChoicePanel(resultData: Record<string, unknown>, lang: str
 
   const legacyInstruction = String(wording.instruction || "").trim();
   const legacyInstructionParts = parseWordingChoiceInstruction(legacyInstruction);
-  const mode = feedbackContract?.mode || (String(wording.mode || "text") === "list" ? "list" : "text");
+  const mode = feedbackContract?.mode ||
+    (dreamBuilderCompareEnabled ? "list" : (String(wording.mode || "text") === "list" ? "list" : "text"));
   const variant = String(wording.variant || "default").trim().toLowerCase();
-  const feedbackReasonText = feedbackContract?.rationale || String(wording.feedback_reason_text || "").trim();
-  const userText = feedbackContract?.currentValue || String(wording.user_text || "").trim();
-  const suggestionText = feedbackContract?.suggestedValue || String(wording.suggestion_text || "").trim();
-  const userLabelFromPayload = feedbackContract?.currentLabel || String(wording.user_label || "").trim();
-  const suggestionLabelFromPayload = feedbackContract?.suggestedLabel || String(wording.suggestion_label || "").trim();
-  const userItems = feedbackContract?.currentItems || (Array.isArray(wording.user_items) ? wording.user_items : []);
-  const suggestionItems = feedbackContract?.suggestedItems || (Array.isArray(wording.suggestion_items) ? wording.suggestion_items : []);
-  const instruction = feedbackContract?.instruction || legacyInstruction || t(lang, "wordingChoiceInstruction");
-  const instructionParts = feedbackContract
+  const compareContract = feedbackContract?.kind === "grouped_list_compare"
+    ? feedbackContract
+    : dreamBuilderCompareEnabled
+      ? {
+          kind: "grouped_list_compare" as const,
+          mode: "list" as const,
+          rationale: String(dreamBuilderContract?.compare?.rationale || "").trim(),
+          heading: "",
+          supportText: "",
+          currentLabel: String(dreamBuilderContract?.compare?.currentLabel || "").trim(),
+          suggestedLabel: String(dreamBuilderContract?.compare?.suggestedLabel || "").trim(),
+          currentValue: String(dreamBuilderContract?.compare?.currentValue || "").trim(),
+          suggestedValue: String(dreamBuilderContract?.compare?.suggestedValue || "").trim(),
+          currentItems: dreamBuilderContract?.compare?.currentItems || [],
+          suggestedItems: dreamBuilderContract?.compare?.suggestedItems || [],
+          retainedHeading: String(dreamBuilderContract?.compare?.retainedHeading || "").trim(),
+          retainedItems: dreamBuilderContract?.compare?.retainedItems || [],
+          instruction: String(dreamBuilderContract?.compare?.instruction || "").trim(),
+        }
+      : feedbackContract;
+  const feedbackReasonText = compareContract?.rationale || String(wording.feedback_reason_text || "").trim();
+  const userText = compareContract?.currentValue || String(wording.user_text || "").trim();
+  const suggestionText = compareContract?.suggestedValue || String(wording.suggestion_text || "").trim();
+  const userLabelFromPayload = compareContract?.currentLabel || String(wording.user_label || "").trim();
+  const suggestionLabelFromPayload = compareContract?.suggestedLabel || String(wording.suggestion_label || "").trim();
+  const userItems = compareContract?.currentItems || (Array.isArray(wording.user_items) ? wording.user_items : []);
+  const suggestionItems = compareContract?.suggestedItems || (Array.isArray(wording.suggestion_items) ? wording.suggestion_items : []);
+  const instruction = compareContract?.instruction || legacyInstruction || t(lang, "wordingChoiceInstruction");
+  const instructionParts = compareContract
     ? {
-        retainedHeading: feedbackContract.retainedHeading,
-        retainedItems: feedbackContract.retainedItems,
-        instructionText: feedbackContract.instruction || instruction,
+        retainedHeading: compareContract?.retainedHeading || "",
+        retainedItems: compareContract?.retainedItems || [],
+        instructionText: compareContract?.instruction || instruction,
       }
     : legacyInstructionParts;
   const ensureLabelColon = (value: string): string => {
@@ -1557,10 +1660,15 @@ export function render(overrideToolOutput?: unknown): void {
     current === "dream" && String(state.dream_awaiting_direction || "").trim() === "true";
 
   const uiViewVariant = String((uiView.variant || "")).trim();
+  const dreamBuilderContract = readDreamBuilderContract(uiPayload);
+  const dreamBuilderPhase = dreamBuilderContract?.phase || "";
   const isViewModeWordingChoice = uiViewVariant === "wording_choice";
-  const isViewModeDreamBuilderCollect = uiViewVariant === "dream_builder_collect";
-  const isViewModeDreamBuilderRefine = uiViewVariant === "dream_builder_refine";
-  const isViewModeDreamBuilderScoring = uiViewVariant === "dream_builder_scoring";
+  const isViewModeDreamBuilderCollect =
+    uiViewVariant === "dream_builder_collect" || dreamBuilderPhase === "collect";
+  const isViewModeDreamBuilderRefine =
+    uiViewVariant === "dream_builder_refine" || dreamBuilderPhase === "refine";
+  const isViewModeDreamBuilderScoring =
+    uiViewVariant === "dream_builder_scoring" || dreamBuilderPhase === "scoring";
   const dreamBuilderViewContract = readDreamBuilderViewContract(uiView);
   const uiQuestionText = String(uiPayload.questionText || "").trim();
   const wordingChoiceActive = shouldSuppressMainCardForWordingChoice(uiPayload, uiViewVariant);
@@ -1715,9 +1823,11 @@ export function render(overrideToolOutput?: unknown): void {
     (state.dream_builder_statements as unknown[]).length > 0
       ? (state.dream_builder_statements as string[])
       : [];
-  let statementsArray = canonicalDreamStatements.length > 0
-    ? canonicalDreamStatements
-    : (Array.isArray(specialistStatements) ? (specialistStatements as string[]) : []);
+  let statementsArray = dreamBuilderContract?.statements && dreamBuilderContract.statements.length > 0
+    ? dreamBuilderContract.statements
+    : canonicalDreamStatements.length > 0
+      ? canonicalDreamStatements
+      : (Array.isArray(specialistStatements) ? (specialistStatements as string[]) : []);
   const lastStatements = Array.isArray((lastSpecialist as { statements?: unknown[] }).statements)
     ? (lastSpecialist as { statements: unknown[] }).statements
     : [];
