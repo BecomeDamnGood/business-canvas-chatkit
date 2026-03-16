@@ -14,6 +14,7 @@ import {
   pickEntitySuggestionFromPreviousState,
   pickRoleSuggestionFromPreviousState,
 } from "./run_step_wording_heuristics_defaults.js";
+import { isValidStepValueForStorage } from "./run_step_value_shape.js";
 
 test("parseListItems splits run-on strategy style sentences into logical list items", () => {
   const input =
@@ -169,6 +170,38 @@ test("pickDualChoiceSuggestion ignores examples framing-only message for purpose
     ""
   );
   assert.equal(picked, "");
+});
+
+test("pickDualChoiceSuggestion keeps Dream Builder multiline rewrites even though they are not final dream storage candidates", () => {
+  const multilineSuggestion = [
+    "Over 5 tot 10 jaar zal het voor mensen belangrijker zijn dat hun werk een positieve impact heeft op anderen.",
+    "Mensen zullen steeds meer waarde hechten aan het bouwen van iets dat generaties overstijgt.",
+    "Vrijheid in tijd en keuzes wordt een centrale waarde in het werkende leven.",
+    "Trots op het eigen werk en de bijdrage aan de samenleving wordt belangrijker voor mensen.",
+    "Bedrijven zullen vaker een weerspiegeling zijn van de waarden en identiteit van hun oprichters.",
+  ].join("\n");
+  assert.equal(isValidStepValueForStorage("dream", multilineSuggestion), false);
+
+  const picked = pickDualChoiceSuggestion(
+    "dream",
+    {
+      dream: "",
+      refined_formulation: multilineSuggestion,
+      statements: [],
+      message: "",
+    } as any,
+    {} as any,
+    [
+      "I want my work to make a positive difference in people's lives.",
+      "I want to build something that lasts beyond me.",
+      "I want to create freedom in my time and choices.",
+      "I want to feel proud when I talk about what I do.",
+      "I want my business to reflect who I am and what I stand for.",
+    ].join("\n\n"),
+    { allowDreamBuilderSuggestionShape: true }
+  );
+
+  assert.equal(picked, multilineSuggestion);
 });
 
 test("pickBigWhySuggestionFromPreviousState skips framing and tail lines", () => {

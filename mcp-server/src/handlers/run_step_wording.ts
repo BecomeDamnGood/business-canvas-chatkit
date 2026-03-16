@@ -122,7 +122,10 @@ type RunStepWordingDeps = {
     stepId: string,
     specialistResult: unknown,
     previousSpecialist: unknown,
-    userRaw?: string
+    userRaw?: string,
+    options?: {
+      allowDreamBuilderSuggestionShape?: boolean;
+    }
   ) => string;
   areEquivalentWordingVariants: (params: EquivalentWordingVariantsParams) => boolean;
   normalizeEntityPhrase: (input: string) => string;
@@ -2001,7 +2004,14 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     }
     const submittedIntent = normalizePendingSuggestionIntent(params.submittedTextIntent);
     const submittedAnchor = normalizePendingSuggestionAnchor(params.submittedTextAnchor);
-    const suggestionRawCandidate = deps.pickDualChoiceSuggestion(stepId, specialistResult, previousSpecialist, userRaw);
+    const dreamBuilderContext = isDreamBuilderContext(stepId, dreamRuntimeModeRaw);
+    const suggestionRawCandidate = deps.pickDualChoiceSuggestion(
+      stepId,
+      specialistResult,
+      previousSpecialist,
+      userRaw,
+      { allowDreamBuilderSuggestionShape: dreamBuilderContext }
+    );
     const suggestionRaw = unwrapSelectionHeadingFromText(
       stepId,
       state,
@@ -2009,7 +2019,6 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
       suggestionRawCandidate
     );
     if (!userRaw || !suggestionRaw) return { specialist: specialistResult, wordingChoice: null };
-    const dreamBuilderContext = isDreamBuilderContext(stepId, dreamRuntimeModeRaw);
     const mode: WordingChoiceMode =
       isListChoiceScope(stepId, activeSpecialist) || dreamBuilderContext ? "list" : "text";
     const basePresentation: WordingChoicePresentation = resolveWordingChoicePresentation({

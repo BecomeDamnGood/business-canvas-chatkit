@@ -702,6 +702,17 @@ function buildSingleValueCanonicalFeedbackContract(params: {
   };
 }
 
+function singleValueSuggestedCandidateForDisplay(
+  stepId: string,
+  specialist: Record<string, unknown>
+): string {
+  const direct = String((specialist as any)?.[stepId] || "").trim();
+  if (isRenderableAcceptedValue(stepId, direct)) return direct;
+  const refined = String((specialist as any)?.refined_formulation || "").trim();
+  if (isRenderableAcceptedValue(stepId, refined)) return refined;
+  return "";
+}
+
 function hasCanonicalContextBlockShape(message: string, heading: string, canonicalValue: string): boolean {
   const canonicalKey = comparableText(canonicalValue);
   if (!canonicalKey) return false;
@@ -2040,10 +2051,13 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     if (
       !wordingPending &&
       effectiveStatus === "valid_output" &&
-      canonicalAcceptedValue &&
       hasSingleValueStructuredContent(stepId)
     ) {
-      return canonicalAcceptedValue;
+      if (!shouldUseCurrentValueHeading(stepId, state)) {
+        const suggestedCandidate = singleValueSuggestedCandidateForDisplay(stepId, specialistForDisplay);
+        if (suggestedCandidate) return suggestedCandidate;
+      }
+      if (canonicalAcceptedValue) return canonicalAcceptedValue;
     }
     return "";
   })();

@@ -1,4 +1,5 @@
 import type { CanvasState } from "../core/state.js";
+import { isStageableDreamCandidate } from "../steps/dream_runtime_policy.js";
 
 type CreateRunStepRuntimeDreamHelpersDeps = {
   strategyStepId: string;
@@ -49,9 +50,13 @@ export function createRunStepRuntimeDreamHelpers(deps: CreateRunStepRuntimeDream
   function hasDreamSpecialistCandidate(result: unknown): boolean {
     const source =
       result && typeof result === "object" ? (result as Record<string, unknown>) : {};
+    const statements = Array.isArray(source.statements)
+      ? (source.statements as unknown[]).map((line) => String(line || "").trim()).filter(Boolean)
+      : [];
+    if (statements.length > 0) return true;
     const dreamValue = String(source.dream || "").trim();
     const refinedValue = String(source.refined_formulation || "").trim();
-    return Boolean(dreamValue || refinedValue);
+    return isStageableDreamCandidate(dreamValue) || isStageableDreamCandidate(refinedValue);
   }
 
   function strategyStatementsForConsolidateGuard(result: unknown, state: CanvasState): string[] {

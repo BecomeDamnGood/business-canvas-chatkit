@@ -960,14 +960,41 @@ export function createRunStepWordingHeuristicHelpers(deps: RunStepWordingHeurist
     stepId: string,
     specialistResult: any,
     previousSpecialist: any,
-    userRaw = ""
+    userRaw = "",
+    options?: {
+      allowDreamBuilderSuggestionShape?: boolean;
+    }
   ): string {
     const candidates: string[] = [];
+    const isDreamBuilderSuggestionCandidate = (value: string): boolean => {
+      const lines = String(value || "")
+        .replace(/\r/g, "\n")
+        .split(/\n+/)
+        .map((line) => line.trim())
+        .filter(Boolean);
+      if (lines.length < 2 || lines.length > 12) return false;
+      return lines.every((line) => {
+        if (looksLikeExamplesFramingLine(line)) return false;
+        if (/^[\-*•]\s+/.test(line)) return false;
+        if (/^\d+[\).]\s+/.test(line)) return false;
+        if (line.includes("?")) return false;
+        const words = tokenizeWords(line);
+        return words.length >= 5 && words.length <= 32;
+      });
+    };
+    const canStoreCandidateForThisChoice = (value: string): boolean => {
+      if (isValidStepValueForStorage(stepId, value)) return true;
+      return Boolean(
+        stepId === deps.dreamStepId &&
+        options?.allowDreamBuilderSuggestionShape === true &&
+        isDreamBuilderSuggestionCandidate(value)
+      );
+    };
     const pushCandidate = (value: string) => {
       const raw = String(value || "").trim();
       const trimmed = stepId === deps.entityStepId ? deps.normalizeEntityPhrase(raw) : raw;
       if (!trimmed) return;
-      if (!isValidStepValueForStorage(stepId, trimmed)) return;
+      if (!canStoreCandidateForThisChoice(trimmed)) return;
       if (candidates.includes(trimmed)) return;
       candidates.push(trimmed);
     };

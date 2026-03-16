@@ -2287,6 +2287,85 @@ test("single-value current-value refinement uses its own state without wording-c
   assert.equal(String((rendered.specialist as any).wording_choice_pending || ""), "");
 });
 
+test("single-value autosuggest contracts use the specialist suggestion instead of the provisional raw input across the family", () => {
+  const cases = [
+    {
+      stepId: "purpose",
+      field: "purpose",
+      activeSpecialist: "Purpose",
+      contractId: "purpose:valid_output:PURPOSE_MENU_REFINE",
+      rawInput: "dit gaat over iets als zorgzaamheid",
+      suggestion: "Mindd bestaat om mensen rust en zorgzaamheid te bieden bij lastige keuzes.",
+    },
+    {
+      stepId: "bigwhy",
+      field: "bigwhy",
+      activeSpecialist: "BigWhy",
+      contractId: "bigwhy:valid_output:BIGWHY_MENU_REFINE",
+      rawInput: "dit gaat over iets als zorgzaamheid",
+      suggestion: "Mensen verdienen rust en zorgzaamheid wanneer ingewikkelde keuzes hun leven raken.",
+    },
+    {
+      stepId: "role",
+      field: "role",
+      activeSpecialist: "Role",
+      contractId: "role:valid_output:ROLE_MENU_REFINE",
+      rawInput: "dit gaat over iets als zorgzaamheid",
+      suggestion: "Mindd vertaalt zorgzaamheid naar heldere keuzes voor mensen en teams.",
+    },
+    {
+      stepId: "entity",
+      field: "entity",
+      activeSpecialist: "Entity",
+      contractId: "entity:valid_output:ENTITY_MENU_EXAMPLE",
+      rawInput: "dit gaat over iets als zorgzaamheid",
+      suggestion: "een strategisch bureau voor zorgzame keuzes",
+    },
+    {
+      stepId: "targetgroup",
+      field: "targetgroup",
+      activeSpecialist: "TargetGroup",
+      contractId: "targetgroup:valid_output:TARGETGROUP_MENU_POSTREFINE",
+      rawInput: "dit gaat over iets als zorgzaamheid",
+      suggestion: "Mensen en teams die behoefte hebben aan rust en richting bij belangrijke keuzes.",
+    },
+  ] as const;
+
+  for (const current of cases) {
+    const state = getDefaultState();
+    (state as any).current_step = current.stepId;
+    (state as any).active_specialist = current.activeSpecialist;
+    (state as any).business_name = "Mindd";
+    (state as any).provisional_by_step = { [current.stepId]: current.rawInput };
+    (state as any).provisional_source_by_step = { [current.stepId]: "user_input" };
+
+    const rendered = renderFreeTextTurnPolicy({
+      stepId: current.stepId,
+      state,
+      specialist: {
+        action: "ASK",
+        message: "",
+        question: "",
+        refined_formulation: current.suggestion,
+        [current.field]: current.suggestion,
+        is_offtopic: false,
+      },
+      previousSpecialist: {},
+    });
+
+    assert.equal(rendered.contractId, current.contractId);
+    assert.equal(String((rendered.specialist as any).ui_content || ""), "");
+    assert.equal(
+      String((rendered.specialist as any).ui_feedback_contract?.suggested_value || ""),
+      current.suggestion
+    );
+    assert.notEqual(
+      String((rendered.specialist as any).ui_feedback_contract?.suggested_value || ""),
+      current.rawInput
+    );
+  }
+});
+
 test("single-value current-value refinement drops generic editorial feedback boilerplate", () => {
   const state = getDefaultState();
   const canonical = "een toonaangevend positioneringsbureau voor merkverbinding";

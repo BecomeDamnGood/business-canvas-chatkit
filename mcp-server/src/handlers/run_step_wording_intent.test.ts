@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { createRunStepWordingHelpers } from "./run_step_wording.js";
+import { pickDualChoiceSuggestion as defaultPickDualChoiceSuggestion } from "./run_step_wording_heuristics_defaults.js";
 
 function buildHelpers(intentEnabled: boolean) {
   const defaultUi: Record<string, string> = {
@@ -215,6 +216,89 @@ function buildDreamBuilderHelpers(intentEnabled: boolean) {
     applyUiPhaseByStep: () => {},
     isUiWordingFeedbackKeyedV1Enabled: () => false,
     isWordingChoiceIntentV1Enabled: () => intentEnabled,
+    bumpUiI18nCounter: () => {},
+    wordingSelectionMessage: () => "",
+  });
+}
+
+function buildDreamBuilderHelpersWithRealSuggestionGate() {
+  const defaultUi: Record<string, string> = {
+    wordingChoiceHeading: "This is your input:",
+    wordingChoiceInterpretedListHeading: "This is what I took from your input:",
+    wordingChoiceGroupedCompareUserLabel: "This is your compact wording:",
+    wordingChoiceGroupedCompareSuggestionLabel: "This is my suggestion:",
+    wordingChoiceGroupedCompareInstruction: "Choose the version that fits best for the remaining difference.",
+    wordingChoiceGroupedCompareRetainedHeading: "These points already stay in the final list:",
+    wordingChoiceDreamBuilderKeepBothLabel: "Keep both statements:",
+    wordingChoiceDreamBuilderMergeLabel: "Merge into one statement:",
+    wordingChoiceDreamBuilderMergeInstruction:
+      "Choose whether you want to keep both similar statements or merge them into one stronger statement.",
+    wordingChoiceSuggestionLabel: "This would be my suggestion:",
+    wordingChoiceInstruction: "Please click what suits you best.",
+    "wording.choice.context.default": "Please choose the wording that fits best.",
+    "wording.feedback.dream_builder.rewrite.default":
+      "Your original wording is mainly about your own wish, while Dream Builder asks for a broader change in the world.",
+    "wordingChoice.chooseVersion": "Choose this version",
+    "wordingChoice.useInputFallback": "Use this input",
+    "autosuggest.prefix.template": "Based on your input I suggest the following {0}:",
+  };
+  const canonicalize = (input: string) =>
+    String(input || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/gi, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  return createRunStepWordingHelpers({
+    step0Id: "step0",
+    presentationStepId: "presentation",
+    dreamStepId: "dream",
+    strategyStepId: "strategy",
+    productsservicesStepId: "productsservices",
+    rulesofthegameStepId: "rulesofthegame",
+    entityStepId: "entity",
+    dreamExplainerSpecialist: "DreamExplainer",
+    normalizeDreamRuntimeMode: (raw) =>
+      String(raw || "").trim() === "builder_collect" ? "builder_collect" : "self",
+    uiDefaultString: (key: string) => defaultUi[key] || "",
+    uiStringFromStateMap: (_state, _key, fallback) => fallback,
+    fieldForStep: (stepId: string) => (stepId === "dream" ? "dream" : ""),
+    parseListItems: (input: string) =>
+      String(input || "")
+        .split(/\n+/)
+        .map((line) => line.trim())
+        .filter(Boolean),
+    splitSentenceItems: (input: string) =>
+      String(input || "")
+        .split(/[.!?]+\s+/)
+        .map((line) => line.trim())
+        .filter(Boolean),
+    normalizeListUserInput: (input: string) => String(input || "").trim(),
+    normalizeLightUserInput: (input: string) => String(input || "").trim(),
+    normalizeUserInputAgainstSuggestion: (input: string) => String(input || "").trim(),
+    canonicalizeComparableText: canonicalize,
+    stripChoiceInstructionNoise: (input: string) => String(input || "").trim(),
+    tokenizeWords: (input: string) =>
+      String(input || "")
+        .toLowerCase()
+        .split(/\s+/)
+        .map((token) => token.trim())
+        .filter(Boolean),
+    isMaterialRewriteCandidate: () => true,
+    shouldTreatAsStepContributingInput: () => true,
+    pickDualChoiceSuggestion: defaultPickDualChoiceSuggestion,
+    areEquivalentWordingVariants: ({ userItems, suggestionItems }) =>
+      JSON.stringify(userItems.map(canonicalize)) === JSON.stringify(suggestionItems.map(canonicalize)),
+    normalizeEntityPhrase: (input: string) => String(input || "").trim(),
+    withProvisionalValue: (state) => state,
+    renderFreeTextTurnPolicy: () => ({
+      specialist: {},
+      contractId: "",
+      contractVersion: "",
+      textKeys: [],
+    }),
+    applyUiPhaseByStep: () => {},
+    isUiWordingFeedbackKeyedV1Enabled: () => false,
+    isWordingChoiceIntentV1Enabled: () => true,
     bumpUiI18nCounter: () => {},
     wordingSelectionMessage: () => "",
   });
@@ -2268,6 +2352,62 @@ test("buildWordingChoiceFromTurn opens a grouped compare for multiple Dream Buil
     "Vrijheid in tijd en keuzes zal voor steeds meer mensen een belangrijk onderdeel worden van hun werkende leven.",
     "Trots op het eigen werk en de maatschappelijke bijdrage ervan zal voor meer mensen leidend worden in hun loopbaan.",
     "Bedrijven zullen vaker bewust worden ingericht als een weerspiegeling van de waarden en identiteit van hun oprichters.",
+  ]);
+});
+
+test("buildWordingChoiceFromTurn uses the real Dream Builder suggestion gate for multiline future-statement rewrites", () => {
+  const helpers = buildDreamBuilderHelpersWithRealSuggestionGate();
+  const result = helpers.buildWordingChoiceFromTurn({
+    stepId: "dream",
+    state: {
+      current_step: "dream",
+      __dream_runtime_mode: "builder_collect",
+    } as any,
+    activeSpecialist: "DreamExplainer",
+    previousSpecialist: {
+      statements: [],
+      dream: "",
+    },
+    specialistResult: {
+      message: "Je hebt mooie persoonlijke wensen gedeeld. Hier vind je vijf mogelijke bredere formuleringen.",
+      feedback_reason_text: "",
+      refined_formulation: [
+        "Over 5 tot 10 jaar zal het voor mensen belangrijker zijn dat hun werk een positieve impact heeft op anderen.",
+        "Mensen zullen steeds meer waarde hechten aan het bouwen van iets dat generaties overstijgt.",
+        "Vrijheid in tijd en keuzes wordt een centrale waarde in het werkende leven.",
+        "Trots op het eigen werk en de bijdrage aan de samenleving wordt belangrijker voor mensen.",
+        "Bedrijven zullen vaker een weerspiegeling zijn van de waarden en identiteit van hun oprichters.",
+      ].join("\n"),
+      statements: [],
+      suggest_dreambuilder: "true",
+    } as Record<string, unknown>,
+    userTextRaw: [
+      "I want my work to make a positive difference in people's lives.",
+      "I want to build something that lasts beyond me.",
+      "I want to create freedom in my time and choices.",
+      "I want to feel proud when I talk about what I do.",
+      "I want my business to reflect who I am and what I stand for.",
+    ].join("\n\n"),
+    isOfftopic: false,
+    dreamRuntimeModeRaw: "builder_collect",
+  });
+
+  assert.ok(result.wordingChoice);
+  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "true");
+  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_compare_mode || ""), "grouped_units");
+  assert.deepEqual((result.wordingChoice as Record<string, unknown>).user_items, [
+    "I want my work to make a positive difference in people's lives.",
+    "I want to build something that lasts beyond me.",
+    "I want to create freedom in my time and choices.",
+    "I want to feel proud when I talk about what I do.",
+    "I want my business to reflect who I am and what I stand for.",
+  ]);
+  assert.deepEqual((result.wordingChoice as Record<string, unknown>).suggestion_items, [
+    "Over 5 tot 10 jaar zal het voor mensen belangrijker zijn dat hun werk een positieve impact heeft op anderen.",
+    "Mensen zullen steeds meer waarde hechten aan het bouwen van iets dat generaties overstijgt.",
+    "Vrijheid in tijd en keuzes wordt een centrale waarde in het werkende leven.",
+    "Trots op het eigen werk en de bijdrage aan de samenleving wordt belangrijker voor mensen.",
+    "Bedrijven zullen vaker een weerspiegeling zijn van de waarden en identiteit van hun oprichters.",
   ]);
 });
 
