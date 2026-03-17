@@ -139,8 +139,12 @@ function ensureUnifiedUiFeedbackContract(response: RunStepContractResponse): voi
 function stripLegacyUiWordingChoice(response: RunStepContractResponse): void {
   const ui = toRecord(response.ui);
   const feedback = toRecord(ui.feedback_contract);
+  const dreamBuilder = toRecord(ui.dream_builder_contract);
   const feedbackKind = String(feedback.kind || "").trim();
-  if (!UI_FEEDBACK_KINDS.has(feedbackKind as UiFeedbackKind)) return;
+  const dreamBuilderCompareActive =
+    String(dreamBuilder.phase || "").trim() === "compare" &&
+    String(toRecord(dreamBuilder.compare).kind || "").trim() === "grouped_list_compare";
+  if (!UI_FEEDBACK_KINDS.has(feedbackKind as UiFeedbackKind) && !dreamBuilderCompareActive) return;
   delete ui.wording_choice;
   response.ui = ui;
 }

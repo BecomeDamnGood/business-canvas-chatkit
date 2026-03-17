@@ -2286,14 +2286,17 @@ test("buildWordingChoiceFromTurn opens a merge choice for a near-duplicate Dream
     "Er zal meer behoefte zijn aan bedrijven en initiatieven die een blijvende waarde nalaten voor toekomstige generaties.",
   ]);
   assert.deepEqual((result.wordingChoice as Record<string, unknown>).user_items, [
-    "Over 5 tot 10 jaar zullen meer mensen streven naar werk dat een positieve impact heeft op het leven van anderen.",
     "Over 5 tot 10 jaar zal het belangrijker worden dat werk zichtbaar iets goeds doet in het leven van mensen.",
   ]);
   assert.deepEqual((result.wordingChoice as Record<string, unknown>).suggestion_items, [
     "Over 5 tot 10 jaar zal werk steeds vaker worden gezien als iets dat zichtbaar betekenis toevoegt aan het leven van anderen.",
   ]);
-  assert.equal(String((result.wordingChoice as Record<string, unknown>).user_label || ""), "Keep both statements:");
-  assert.equal(String((result.wordingChoice as Record<string, unknown>).suggestion_label || ""), "Merge into one statement:");
+  assert.match(
+    String((result.wordingChoice as Record<string, unknown>).instruction || ""),
+    /Er zal meer behoefte zijn aan bedrijven en initiatieven/i
+  );
+  assert.ok(String((result.wordingChoice as Record<string, unknown>).user_label || "").trim().length > 0);
+  assert.ok(String((result.wordingChoice as Record<string, unknown>).suggestion_label || "").trim().length > 0);
 });
 
 test("buildWordingChoiceFromTurn opens a grouped compare for multiple Dream Builder wishes that are rewritten into future statements", () => {
@@ -2524,6 +2527,81 @@ test("buildWordingChoiceFromTurn keeps existing Dream Builder statements retaine
   }
 });
 
+test("buildWordingChoiceFromTurn keeps a full 14-line Dream Builder rewrite in one compare contract", () => {
+  const helpers = buildDreamBuilderHelpersWithRealSuggestionGate();
+  const previousStatements = [
+    "Over 5 tot 10 jaar zal het voor mensen belangrijker zijn dat hun werk een positieve impact heeft op het leven van anderen.",
+    "Steeds meer mensen zullen streven naar het opbouwen van iets dat hun eigen leven overstijgt en blijvende waarde toevoegt aan de samenleving.",
+    "Vrijheid in tijd en keuzes zal een centrale waarde worden in hoe mensen hun werk en leven vormgeven.",
+    "Mensen zullen meer belang hechten aan trots kunnen zijn op hun werk en openlijk kunnen delen waar ze voor staan.",
+    "Bedrijven zullen vaker een weerspiegeling zijn van persoonlijke waarden en identiteit, in plaats van alleen winstgedreven te zijn.",
+  ];
+  const userWishBatch = [
+    "I want to help people solve a problem they truly care about.",
+    "I want to bring clarity and simplicity to a confusing area.",
+    "I want to create a safe space where people feel seen and supported.",
+    "I want to challenge the status quo and improve how things are done.",
+    "I want to grow into the best version of myself through this business.",
+    "I want to build a community around a shared belief or movement.",
+    "I want to create opportunities for others (customers, partners, team).",
+    "I want to do meaningful work without sacrificing my health or relationships.",
+    "I want to be financially secure while doing work that feels right.",
+    "I want to create beauty, quality, or craftsmanship people can feel.",
+    "I want to make a complex process easier, faster, or more human.",
+    "I want to inspire people to take action and believe in themselves.",
+    "I want to contribute to a future I would be proud to leave behind.",
+    "I want my business to be known for honesty, trust, and integrity.",
+  ];
+  const rewrittenBatch = [
+    "Over 5 tot 10 jaar zullen meer mensen vooral problemen willen oplossen die voor henzelf en hun omgeving echt betekenisvol zijn.",
+    "De behoefte aan helderheid en eenvoud in complexe of verwarrende domeinen zal sterk toenemen.",
+    "Er zal meer aandacht zijn voor veilige omgevingen waarin mensen zich gezien en gesteund voelen.",
+    "Het uitdagen van de status quo en het verbeteren van vastgeroeste systemen zal aan belang winnen.",
+    "Steeds meer mensen zullen werk zien als een weg om zichzelf verder te ontwikkelen en te versterken.",
+    "Mensen zullen zich vaker verbinden rond gedeelde overtuigingen en bewegingen die groter zijn dan henzelf.",
+    "Er zal meer waarde worden gehecht aan ondernemingen die kansen creëren voor klanten, partners en teams.",
+    "Duurzaam en betekenisvol werk zal steeds vaker worden afgewogen tegen gezondheid en relaties.",
+    "Financiele zekerheid zal vaker worden gezocht in werk dat ook moreel en persoonlijk klopt.",
+    "Mensen zullen meer waardering hebben voor schoonheid, kwaliteit en vakmanschap die tastbaar voelbaar zijn.",
+    "De vraag naar processen die eenvoudiger, sneller en menselijker aanvoelen zal toenemen.",
+    "Steeds meer mensen zullen behoefte hebben aan aanmoediging om in beweging te komen en in zichzelf te geloven.",
+    "Er zal meer aandacht komen voor bijdragen aan een toekomst waar mensen later trots op kunnen terugkijken.",
+    "Eerlijkheid, vertrouwen en integriteit zullen zwaarder wegen in hoe bedrijven bekend willen staan.",
+  ];
+  const result = helpers.buildWordingChoiceFromTurn({
+    stepId: "dream",
+    state: {
+      current_step: "dream",
+      __dream_runtime_mode: "builder_collect",
+    } as any,
+    activeSpecialist: "DreamExplainer",
+    previousSpecialist: {
+      statements: previousStatements,
+      dream: "",
+    },
+    specialistResult: {
+      message: "Ik heb je persoonlijke wensen vertaald naar bredere maatschappelijke bewegingen.",
+      feedback_reason_text:
+        "Je input gaat vooral over persoonlijke verlangens, terwijl Dream Builder zoekt naar toekomstige veranderingen in de wereld of samenleving.",
+      refined_formulation: rewrittenBatch.join("\n"),
+      statements: previousStatements,
+      suggest_dreambuilder: "true",
+    } as Record<string, unknown>,
+    userTextRaw: userWishBatch.join("\n"),
+    isOfftopic: false,
+    dreamRuntimeModeRaw: "builder_collect",
+  });
+
+  assert.ok(result.wordingChoice);
+  assert.deepEqual((result.wordingChoice as Record<string, unknown>).user_items, userWishBatch);
+  assert.deepEqual((result.wordingChoice as Record<string, unknown>).suggestion_items, rewrittenBatch);
+  const instruction = String((result.wordingChoice as Record<string, unknown>).instruction || "");
+  assert.match(instruction, /These points already stay in the final list/i);
+  for (const statement of previousStatements) {
+    assert.match(instruction, new RegExp(statement.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  }
+});
+
 test("buildWordingChoiceFromTurn uses the merged Dream Builder rewrite instead of unchanged statements when overlap requires REFINE", () => {
   const helpers = buildDreamBuilderHelpersWithRealSuggestionGate();
   const previousStatements = [
@@ -2561,15 +2639,14 @@ test("buildWordingChoiceFromTurn uses the merged Dream Builder rewrite instead o
 
   assert.ok(result.wordingChoice);
   assert.deepEqual((result.wordingChoice as Record<string, unknown>).user_items, [
-    "Bedrijven zullen vaker een weerspiegeling zijn van persoonlijke waarden en identiteit, in plaats van alleen winstgedreven te zijn.",
     "Ondernemingen worden een weerspiegeling van eigen waarden en identiteit, in plaats van alleen de focus te leggen op winst.",
   ]);
   assert.deepEqual((result.wordingChoice as Record<string, unknown>).suggestion_items, [
     "Ondernemingen zullen steeds vaker een weerspiegeling worden van de waarden en identiteit van hun oprichters, in plaats van alleen winst na te streven.",
   ]);
-  assert.equal(
+  assert.match(
     String((result.wordingChoice as Record<string, unknown>).instruction || ""),
-    "Choose whether you want to keep both similar statements or merge them into one stronger statement."
+    /Vrijheid in tijd en keuzes zal een centrale waarde worden/i
   );
 });
 

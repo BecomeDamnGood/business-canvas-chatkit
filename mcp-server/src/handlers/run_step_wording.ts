@@ -1430,67 +1430,34 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
       return Boolean(key) && !baseKeys.has(key);
     });
 
-    if (deltaUserItems.length > 1 || suggestionDeltaItems.length > 1) {
-      if (baseItems.length > 0 && deltaUserItems.length > 0 && suggestionDeltaItems.length > 0) {
-        const unit = createCompareUnit({
-          id: "unit_1",
-          userItems: deltaUserItems,
-          suggestionItems: suggestionDeltaItems,
-          confidence: "fallback",
-        });
-        return {
-          mode: "grouped_units",
-          units: [unit],
-          segments: [
-            { kind: "retained", items: baseItems },
-            { kind: "unit", unit_id: unit.id },
-          ],
-          initialUnit: unit,
-        };
+    const compareUserItems = deltaUserItems.length > 0 ? deltaUserItems : userItems;
+    const compareSuggestionItems = suggestionDeltaItems.length > 0 ? suggestionDeltaItems : suggestionItems;
+    if (compareUserItems.length === 0 || compareSuggestionItems.length === 0) return null;
+
+    let retainedItems = mergeListItems([], baseItems);
+    if (compareUserItems.length === 1 && compareSuggestionItems.length === 1 && baseItems.length > 0) {
+      const overlapSeed = compareSuggestionItems[0];
+      let bestBaseIndex = -1;
+      let bestBaseScore = 0;
+      for (let index = 0; index < baseItems.length; index += 1) {
+        const score = Math.max(
+          itemSimilarity(baseItems[index], overlapSeed),
+          itemSimilarity(baseItems[index], compareUserItems[0])
+        );
+        if (score > bestBaseScore) {
+          bestBaseScore = score;
+          bestBaseIndex = index;
+        }
       }
-      const unit = createCompareUnit({
-        id: "unit_1",
-        userItems,
-        suggestionItems,
-        confidence: "fallback",
-      });
-      return {
-        mode: "grouped_units",
-        units: [unit],
-        segments: [{ kind: "unit", unit_id: unit.id }],
-        initialUnit: unit,
-      };
-    }
-
-    if (baseItems.length < 2 || deltaUserItems.length === 0 || suggestionDeltaItems.length !== 1) return null;
-
-    const suggestionDelta = suggestionDeltaItems[0];
-    let bestBaseIndex = -1;
-    let bestBaseScore = 0;
-    for (let index = 0; index < baseItems.length; index += 1) {
-      const score = itemSimilarity(baseItems[index], suggestionDelta);
-      if (score > bestBaseScore) {
-        bestBaseScore = score;
-        bestBaseIndex = index;
+      if (bestBaseIndex >= 0 && bestBaseScore >= 0.3) {
+        retainedItems = baseItems.filter((_, index) => index !== bestBaseIndex);
       }
     }
-    if (bestBaseIndex < 0 || bestBaseScore < 0.3) return null;
 
-    const clusteredUserItems = mergeListItems([], [baseItems[bestBaseIndex], ...deltaUserItems]);
-    if (clusteredUserItems.length < 2) return null;
-    const clusteredKeys = new Set(
-      clusteredUserItems
-        .map((line) => deps.canonicalizeComparableText(line))
-        .filter(Boolean)
-    );
-    const retainedItems = userItems.filter((line) => {
-      const key = deps.canonicalizeComparableText(line);
-      return Boolean(key) && !clusteredKeys.has(key);
-    });
     const unit = createCompareUnit({
       id: "unit_1",
-      userItems: clusteredUserItems,
-      suggestionItems: [suggestionDelta],
+      userItems: compareUserItems,
+      suggestionItems: compareSuggestionItems,
       confidence: "fallback",
     });
     const segments: WordingChoiceCompareSegment[] = [];
@@ -2222,21 +2189,12 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
       groupedListCompareEnabled
         ? (
           dreamBuilderContext
-            ? (
-              buildDreamBuilderComparePlan({
+            ? buildDreamBuilderComparePlan({
                 baseItems,
                 userItems: effectiveUserItems,
                 suggestionItems,
                 deltaUserItems: localUserItems,
-              }) ||
-              buildBusinessListComparePlan({
-                baseItems,
-                userItems: effectiveUserItems,
-                suggestionItems,
-                deltaUserItems: localUserItems,
-                preferDeltaGrouping: compareDeltaListSemantics === "delta",
               })
-            )
             : buildBusinessListComparePlan({
                 baseItems,
                 userItems: effectiveUserItems,

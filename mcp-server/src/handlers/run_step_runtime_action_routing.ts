@@ -1113,10 +1113,23 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     pendingBeforeTurn = suspended;
     hasPendingWordingChoice = false;
   };
+  const dreamBuilderPendingCompare =
+    hasPendingWordingChoice &&
+    currentStepId === ids.dreamStepId &&
+    action.getDreamRuntimeMode(state) !== "self" &&
+    String(pendingBeforeTurn.wording_choice_mode || "").trim() === "list" &&
+    (
+      String(pendingBeforeTurn.wording_choice_compare_mode || "").trim() === "grouped_units" ||
+      String(pendingBeforeTurn.wording_choice_variant || "").trim() === "grouped_list_units"
+    );
   const shouldResolvePendingWordingFromTextIntent =
     hasPendingWordingChoice &&
     hasFreeTextWhilePending &&
-    !isRulesProceedBlockTurn;
+    !isRulesProceedBlockTurn &&
+    !dreamBuilderPendingCompare;
+  if (dreamBuilderPendingCompare && hasFreeTextWhilePending) {
+    suspendPendingWordingChoice(pendingBeforeTurn);
+  }
   if (shouldResolvePendingWordingFromTextIntent) {
     const pendingSuggestion = String(
       pendingBeforeTurn.wording_choice_agent_current || pendingBeforeTurn.refined_formulation || ""

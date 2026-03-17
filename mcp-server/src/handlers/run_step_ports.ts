@@ -215,6 +215,7 @@ export type RunStepPipelineIdPorts = {
 export type RunStepPipelinePolicyPorts = {
   dreamForceRefineRoutePrefix: string;
   dreamExplainerOverlapRepairRoutePrefix: string;
+  dreamExplainerMultiRewriteRepairRoutePrefix: string;
   strategyConsolidateRouteToken: string;
   bigwhyMaxWords: number;
   uiContractVersion: string;

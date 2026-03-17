@@ -222,6 +222,8 @@ test("attachRegistryPayload emits explicit Dream Builder compare ownership contr
       instruction: "Choose the version that fits best.",
     },
   });
+  assert.equal(payload.ui?.view?.variant, "dream_builder_collect");
+  assert.equal("wording_choice" in (payload.ui || {}), false);
 });
 
 test("attachRegistryPayload forwards structured single-value content into ui.content", () => {

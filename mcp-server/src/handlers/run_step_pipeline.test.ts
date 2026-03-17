@@ -191,6 +191,7 @@ function buildStrategyPipelineHarness(params: {
     policy: {
       dreamForceRefineRoutePrefix: "__DREAM_FORCE_REFINE__",
       dreamExplainerOverlapRepairRoutePrefix: "__ROUTE__DREAM_EXPLAINER_OVERLAP_REPAIR__",
+      dreamExplainerMultiRewriteRepairRoutePrefix: "__ROUTE__DREAM_EXPLAINER_MULTI_REWRITE_REPAIR__",
       strategyConsolidateRouteToken: "__ROUTE__STRATEGY_CONSOLIDATE__",
       bigwhyMaxWords: 50,
       uiContractVersion: "test",
@@ -1337,6 +1338,147 @@ test("runPostSpecialistPipeline repairs a near-duplicate Dream Builder append in
     String((payload.specialist as Record<string, unknown>).feedback_reason_text || ""),
     /samengevoegde formulering|lijst scherper/i
   );
+});
+
+test("runPostSpecialistPipeline repairs incomplete multi-wish Dream Builder rewrites before publishing compare", async () => {
+  const userWishBatch = [
+    "I want to help people solve a problem they truly care about.",
+    "I want to bring clarity and simplicity to a confusing area.",
+    "I want to create a safe space where people feel seen and supported.",
+    "I want to challenge the status quo and improve how things are done.",
+    "I want to grow into the best version of myself through this business.",
+    "I want to build a community around a shared belief or movement.",
+  ];
+  const specialistCalls: string[] = [];
+  const helpers = buildStrategyPipelineHarness({
+    specialistResults: [
+      {
+        action: "REFINE",
+        message: "Ik heb je wensen breder geformuleerd.",
+        question: "Klopt dit met wat je bedoelt?",
+        feedback_reason_text:
+          "Je input gaat vooral over persoonlijke verlangens, terwijl Dream Builder zoekt naar toekomstige veranderingen in de wereld of samenleving.",
+        refined_formulation: [
+          "Over 5 tot 10 jaar zullen meer mensen vooral problemen willen oplossen die voor henzelf en hun omgeving echt betekenisvol zijn.",
+          "De behoefte aan helderheid en eenvoud in complexe of verwarrende domeinen zal sterk toenemen.",
+          "Er zal meer aandacht zijn voor veilige omgevingen waarin mensen zich gezien en gesteund voelen.",
+        ].join("\n"),
+        statements: [
+          "Over 5 tot 10 jaar zal het voor mensen belangrijker zijn dat hun werk een positieve impact heeft op het leven van anderen.",
+          "Steeds meer mensen zullen streven naar het opbouwen van iets dat hun eigen leven overstijgt en blijvende waarde toevoegt aan de samenleving.",
+        ],
+        suggest_dreambuilder: "true",
+        scoring_phase: "false",
+        clusters: [],
+        user_state: "ok",
+        wants_recap: false,
+        is_offtopic: false,
+        user_intent: "STEP_INPUT",
+        meta_topic: "NONE",
+      },
+      {
+        action: "REFINE",
+        message: "Ik heb je wensen breder geformuleerd.",
+        question: "Klopt dit met wat je bedoelt?",
+        feedback_reason_text:
+          "Je input gaat vooral over persoonlijke verlangens, terwijl Dream Builder zoekt naar toekomstige veranderingen in de wereld of samenleving.",
+        refined_formulation: [
+          "Over 5 tot 10 jaar zullen meer mensen vooral problemen willen oplossen die voor henzelf en hun omgeving echt betekenisvol zijn.",
+          "De behoefte aan helderheid en eenvoud in complexe of verwarrende domeinen zal sterk toenemen.",
+          "Er zal meer aandacht zijn voor veilige omgevingen waarin mensen zich gezien en gesteund voelen.",
+          "Het uitdagen van de status quo en het verbeteren van vastgeroeste systemen zal aan belang winnen.",
+          "Steeds meer mensen zullen werk zien als een weg om zichzelf verder te ontwikkelen en te versterken.",
+          "Mensen zullen zich vaker verbinden rond gedeelde overtuigingen en bewegingen die groter zijn dan henzelf.",
+        ].join("\n"),
+        statements: [
+          "Over 5 tot 10 jaar zal het voor mensen belangrijker zijn dat hun werk een positieve impact heeft op het leven van anderen.",
+          "Steeds meer mensen zullen streven naar het opbouwen van iets dat hun eigen leven overstijgt en blijvende waarde toevoegt aan de samenleving.",
+        ],
+        suggest_dreambuilder: "true",
+        scoring_phase: "false",
+        clusters: [],
+        user_state: "ok",
+        wants_recap: false,
+        is_offtopic: false,
+        user_intent: "STEP_INPUT",
+        meta_topic: "NONE",
+      },
+    ],
+    dreamRuntimeMode: "builder_collect",
+    onSpecialistCall: (userMessage) => {
+      specialistCalls.push(userMessage);
+    },
+  });
+
+  const payload = await helpers.runPostSpecialistPipeline({
+    routing: {
+      userMessage: userWishBatch.join("\n"),
+      actionCodeRaw: "",
+      responseUiFlags: null,
+      inputMode: "widget",
+      wordingChoiceEnabled: true,
+      languageResolvedThisTurn: false,
+      isBootstrapPollCall: false,
+      motivationQuotesEnabled: false,
+    },
+    rendering: {
+      uiI18nTelemetry: null,
+      lang: "nl",
+      ensureUiStrings: async (state) => state,
+    },
+    state: {
+      state: {
+        current_step: "dream",
+        active_specialist: "DreamExplainer",
+        __dream_runtime_mode: "builder_collect",
+        dream_builder_statements: [
+          "Over 5 tot 10 jaar zal het voor mensen belangrijker zijn dat hun werk een positieve impact heeft op het leven van anderen.",
+          "Steeds meer mensen zullen streven naar het opbouwen van iets dat hun eigen leven overstijgt en blijvende waarde toevoegt aan de samenleving.",
+        ],
+        provisional_by_step: {},
+        last_specialist_result: {
+          statements: [
+            "Over 5 tot 10 jaar zal het voor mensen belangrijker zijn dat hun werk een positieve impact heeft op het leven van anderen.",
+            "Steeds meer mensen zullen streven naar het opbouwen van iets dat hun eigen leven overstijgt en blijvende waarde toevoegt aan de samenleving.",
+          ],
+          dream: "",
+          refined_formulation: "",
+        },
+      } as any,
+      transientPendingScores: null,
+      submittedUserText: userWishBatch.join("\n"),
+      submittedTextIntent: "content_input",
+      submittedTextAnchor: "user_input",
+      rawNormalized: userWishBatch.join("\n"),
+      pristineAtEntry: true,
+    },
+    specialist: {
+      model: "gpt-5-mini",
+      decideOrchestration: () =>
+        ({
+          current_step: "dream",
+          specialist_to_call: "DreamExplainer",
+          show_session_intro: "false",
+          show_step_intro: "false",
+        }) as any,
+      rememberLlmCall: () => {},
+    },
+  } as any);
+
+  assert.equal(specialistCalls.length, 2);
+  assert.equal(
+    specialistCalls[1]?.startsWith("__ROUTE__DREAM_EXPLAINER_MULTI_REWRITE_REPAIR__"),
+    true
+  );
+  assert.equal(String((payload.specialist as Record<string, unknown>).wording_choice_pending || ""), "true");
+  assert.deepEqual((payload.wordingChoiceOverride as Record<string, unknown>)?.suggestion_items, [
+    "Over 5 tot 10 jaar zullen meer mensen vooral problemen willen oplossen die voor henzelf en hun omgeving echt betekenisvol zijn.",
+    "De behoefte aan helderheid en eenvoud in complexe of verwarrende domeinen zal sterk toenemen.",
+    "Er zal meer aandacht zijn voor veilige omgevingen waarin mensen zich gezien en gesteund voelen.",
+    "Het uitdagen van de status quo en het verbeteren van vastgeroeste systemen zal aan belang winnen.",
+    "Steeds meer mensen zullen werk zien als een weg om zichzelf verder te ontwikkelen en te versterken.",
+    "Mensen zullen zich vaker verbinden rond gedeelde overtuigingen en bewegingen die groter zijn dan henzelf.",
+  ]);
 });
 
 test("runPostSpecialistPipeline keeps overlapping strategy merge proposals in a grouped compare picker", async () => {

@@ -675,6 +675,13 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
         suggestDreamBuilder ||
         contractMenuId.startsWith("DREAM_EXPLAINER_MENU_")
       );
+    const rawFeedbackContractPayload =
+      normalizeUiFeedbackContract((specialist as Record<string, unknown>)?.ui_feedback_contract) ||
+      synthesizeUiFeedbackContractFromWordingChoice(wordingChoiceOverride, flags);
+    const dreamBuilderCompareActive =
+      effectiveStepId === DREAM_STEP_ID &&
+      dreamBuilderFlowActive &&
+      String((rawFeedbackContractPayload as Record<string, unknown> | undefined)?.kind || "").trim() === "grouped_list_compare";
     let viewVariant: UiViewVariant = "default";
     if (
       effectiveStepId === DREAM_STEP_ID &&
@@ -683,22 +690,19 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
         dreamRuntimeMode === "builder_scoring")
     ) {
       viewVariant = "dream_builder_scoring";
-    } else if (wordingPickPending) {
-      viewVariant = "wording_choice";
     } else if (dreamBuilderFlowActive) {
       viewVariant =
         forceDreamBuilderRefine || contractMenuId === "DREAM_EXPLAINER_MENU_REFINE"
           ? "dream_builder_refine"
           : "dream_builder_collect";
+    } else if (wordingPickPending) {
+      viewVariant = "wording_choice";
     }
     const questionTextPayload =
-      viewVariant === "wording_choice"
+      viewVariant === "wording_choice" && !dreamBuilderCompareActive
         ? {}
         : (questionText ? { questionText } : {});
     const rawContentPayload = normalizeUiContentPayload((specialist as Record<string, unknown>)?.ui_content);
-    const rawFeedbackContractPayload =
-      normalizeUiFeedbackContract((specialist as Record<string, unknown>)?.ui_feedback_contract) ||
-      synthesizeUiFeedbackContractFromWordingChoice(wordingChoiceOverride, flags);
     const shouldSuppressSingleValueContent =
       Boolean(rawContentPayload) &&
       isSingleValueTextPickerState({
@@ -750,7 +754,7 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
       feedbackContractPayload: rawFeedbackContractPayload,
     });
     const shouldExposeLegacyWordingChoice =
-      Boolean(wordingChoiceOverride) && !rawFeedbackContractPayload;
+      Boolean(wordingChoiceOverride) && !rawFeedbackContractPayload && !dreamBuilderCompareActive;
     const legacyWordingChoicePayload = shouldExposeLegacyWordingChoice
       ? (wordingChoiceOverride || undefined)
       : undefined;

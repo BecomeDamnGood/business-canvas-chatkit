@@ -129,6 +129,20 @@ function renderStructuredSuggestionsTranscript(content: {
   return parts.filter(Boolean).join("\n\n").trim();
 }
 
+function parseDreamBuilderRewriteItems(rawValue: string): string[] {
+  const raw = String(rawValue || "").replace(/\r/g, "\n").trim();
+  if (!raw) return [];
+  const lines = raw
+    .split("\n")
+    .map((line) => String(line || "").trim())
+    .filter(Boolean);
+  if (lines.length >= 2) return lines;
+  return raw
+    .split(/(?<=[.!?])\s+(?=\S)/)
+    .map((line) => String(line || "").trim())
+    .filter(Boolean);
+}
+
 function canonicalizeDreamBuilderOverlapText(input: string): string {
   return String(input || "")
     .toLowerCase()
@@ -885,6 +899,53 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
           scoring_phase: "false",
           clusters: [],
         };
+      }
+    }
+
+    if (
+      decision1.specialist_to_call === deps.dreamExplainerSpecialist &&
+      String(decision1.current_step || "") === deps.dreamStepId &&
+      !isTrueFlag(specialistResult.is_offtopic) &&
+      String(specialistResult.action || "").trim() === "REFINE"
+    ) {
+      const expectedRewriteItems = parseDreamBuilderRewriteItems(String(userMessage || "").trim());
+      const actualRewriteItems = parseDreamBuilderRewriteItems(
+        String(specialistResult.refined_formulation || "").trim()
+      );
+      if (
+        expectedRewriteItems.length >= 2 &&
+        actualRewriteItems.length > 0 &&
+        actualRewriteItems.length < expectedRewriteItems.length
+      ) {
+        const repairInput = [
+          deps.dreamExplainerMultiRewriteRepairRoutePrefix,
+          `EXPECTED_COUNT: ${expectedRewriteItems.length}`,
+          "USER_MESSAGE:",
+          String(userMessage || "").trim(),
+          "CURRENT_REWRITE:",
+          String(specialistResult.refined_formulation || "").trim(),
+        ]
+          .filter(Boolean)
+          .join("\n");
+        const repairCall = await deps.callSpecialistStrictSafe(
+          { model: params.model, state, decision: decision1, userMessage: repairInput },
+          deps.buildRoutingContext(repairInput),
+          state
+        );
+        if (repairCall.ok) {
+          params.rememberLlmCall(repairCall.value);
+          attempts = Math.max(attempts, repairCall.value.attempts);
+          const repaired = asRecord(repairCall.value.specialistResult);
+          const repairedItems = parseDreamBuilderRewriteItems(
+            String(repaired.refined_formulation || "").trim()
+          );
+          if (
+            String(repaired.action || "").trim() === "REFINE" &&
+            repairedItems.length >= expectedRewriteItems.length
+          ) {
+            specialistResult = repaired;
+          }
+        }
       }
     }
 

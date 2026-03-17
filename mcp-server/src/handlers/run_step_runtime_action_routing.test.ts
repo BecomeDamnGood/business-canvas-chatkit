@@ -1186,6 +1186,105 @@ test("runStepRuntimeActionRoutingLayer suspends pending wording choice for local
   );
 });
 
+test("runStepRuntimeActionRoutingLayer treats new Dream Builder text as fresh input instead of pending wording feedback", async () => {
+  const params = buildParams(true) as any;
+  let classifyCalls = 0;
+  let resolveIntentCalls = 0;
+  params.runtime.userMessage =
+    "I want to build a community around a shared belief or movement.\nI want to create opportunities for others.";
+  params.runtime.state = {
+    current_step: "dream",
+    active_specialist: "DreamExplainer",
+    __dream_runtime_mode: "builder_collect",
+    last_specialist_result: {
+      wording_choice_pending: "true",
+      wording_choice_mode: "list",
+      wording_choice_presentation: "picker",
+      wording_choice_variant: "grouped_list_units",
+      wording_choice_compare_mode: "grouped_units",
+      wording_choice_target_field: "dream",
+      wording_choice_user_raw: "I want to help people solve a problem they truly care about.",
+      wording_choice_user_normalized: "I want to help people solve a problem they truly care about.",
+      wording_choice_agent_current:
+        "Over 5 tot 10 jaar zullen meer mensen vooral problemen willen oplossen die voor henzelf en hun omgeving echt betekenisvol zijn.",
+      wording_choice_user_items: ["I want to help people solve a problem they truly care about."],
+      wording_choice_suggestion_items: [
+        "Over 5 tot 10 jaar zullen meer mensen vooral problemen willen oplossen die voor henzelf en hun omgeving echt betekenisvol zijn.",
+      ],
+      wording_choice_compare_units: [
+        {
+          id: "unit_1",
+          user_items: ["I want to help people solve a problem they truly care about."],
+          suggestion_items: [
+            "Over 5 tot 10 jaar zullen meer mensen vooral problemen willen oplossen die voor henzelf en hun omgeving echt betekenisvol zijn.",
+          ],
+          user_text: "I want to help people solve a problem they truly care about.",
+          suggestion_text:
+            "Over 5 tot 10 jaar zullen meer mensen vooral problemen willen oplossen die voor henzelf en hun omgeving echt betekenisvol zijn.",
+          feedback_reason_text:
+            "Dream Builder zoekt naar bredere maatschappelijke verschuivingen.",
+          resolution: "",
+          confidence: "fallback",
+        },
+      ],
+      wording_choice_compare_segments: [{ kind: "unit", unit_id: "unit_1" }],
+      wording_choice_compare_cursor: "0",
+      feedback_reason_text: "Dream Builder zoekt naar bredere maatschappelijke verschuivingen.",
+    },
+  };
+  params.action.getDreamRuntimeMode = () => "builder_collect";
+  params.state.classifyAcceptedOutputUserTurn = async () => {
+    classifyCalls += 1;
+    return {
+      turn_kind: "feedback_on_existing_content" as const,
+      user_variant_is_stepworthy: false,
+    };
+  };
+  params.state.resolvePendingWordingChoiceIntent = async () => {
+    resolveIntentCalls += 1;
+    return { intent: "feedback_on_suggestion" as const, anchor: "suggestion" as const };
+  };
+  params.wording.buildWordingChoiceFromTurn = () => ({
+    specialist: {
+      action: "ASK",
+      wording_choice_pending: "true",
+      wording_choice_mode: "list",
+      wording_choice_variant: "grouped_list_units",
+      wording_choice_compare_mode: "grouped_units",
+      wording_choice_user_items: [
+        "I want to build a community around a shared belief or movement.",
+        "I want to create opportunities for others.",
+      ],
+      wording_choice_suggestion_items: [
+        "Mensen zullen zich vaker verbinden rond gedeelde overtuigingen en bewegingen die groter zijn dan henzelf.",
+        "Er zal meer waarde worden gehecht aan ondernemingen die kansen creëren voor anderen.",
+      ],
+    },
+    wordingChoice: {
+      enabled: true,
+      mode: "list" as const,
+      variant: "grouped_list_units" as const,
+      user_items: [
+        "I want to build a community around a shared belief or movement.",
+        "I want to create opportunities for others.",
+      ],
+      suggestion_items: [
+        "Mensen zullen zich vaker verbinden rond gedeelde overtuigingen en bewegingen die groter zijn dan henzelf.",
+        "Er zal meer waarde worden gehecht aan ondernemingen die kansen creëren voor anderen.",
+      ],
+      instruction: "Choose the version that fits best.",
+    },
+  });
+
+  const result = await runStepRuntimeActionRoutingLayer(params);
+
+  assert.equal(classifyCalls, 0);
+  assert.equal(resolveIntentCalls, 0);
+  assert.equal(result.submittedTextIntent, "");
+  const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
+  assert.equal(String(specialist.wording_choice_pending || ""), "false");
+});
+
 test("runStepRuntimeActionRoutingLayer lets refine-adjust action codes continue as specialist routes", async () => {
   const scenarios = [
     {

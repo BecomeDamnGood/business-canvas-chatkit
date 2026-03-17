@@ -33,7 +33,7 @@ export async function runStepRuntimeExecute(
     applyWordingPickSelection, isWordingPickRouteToken, isRefineAdjustRouteToken, buildWordingChoiceFromTurn,
     pickWordingAgentBase, copyPendingWordingChoiceState, normalizeNonStep0OfftopicSpecialist,
     uiStringFromStateMap, uiDefaultString, attachRegistryPayload, langFromState, UI_CONTRACT_VERSION,
-    DREAM_FORCE_REFINE_ROUTE_PREFIX, DREAM_EXPLAINER_OVERLAP_REPAIR_ROUTE_PREFIX, STRATEGY_CONSOLIDATE_ROUTE_TOKEN, DREAM_SPECIALIST, PURPOSE_SPECIALIST, BIGWHY_SPECIALIST, ENTITY_SPECIALIST, STRATEGY_SPECIALIST,
+    DREAM_FORCE_REFINE_ROUTE_PREFIX, DREAM_EXPLAINER_OVERLAP_REPAIR_ROUTE_PREFIX, DREAM_EXPLAINER_MULTI_REWRITE_REPAIR_ROUTE_PREFIX, STRATEGY_CONSOLIDATE_ROUTE_TOKEN, DREAM_SPECIALIST, PURPOSE_SPECIALIST, BIGWHY_SPECIALIST, ENTITY_SPECIALIST, STRATEGY_SPECIALIST,
     callSpecialistStrictSafe, normalizeLocalizedConceptTerms, normalizeEntitySpecialistResult, applyCentralMetaTopicRouter,
     normalizeStep0AskDisplayContract, hasValidStep0Final, applyPostSpecialistStateMutations,
     isMetaOfftopicFallbackTurn, shouldTreatAsStepContributingInput, resolvePendingWordingChoiceIntent, hasDreamSpecialistCandidate,
@@ -475,6 +475,7 @@ export async function runStepRuntimeExecute(
     policy: {
       dreamForceRefineRoutePrefix: DREAM_FORCE_REFINE_ROUTE_PREFIX,
       dreamExplainerOverlapRepairRoutePrefix: DREAM_EXPLAINER_OVERLAP_REPAIR_ROUTE_PREFIX,
+      dreamExplainerMultiRewriteRepairRoutePrefix: DREAM_EXPLAINER_MULTI_REWRITE_REPAIR_ROUTE_PREFIX,
       strategyConsolidateRouteToken: STRATEGY_CONSOLIDATE_ROUTE_TOKEN,
       bigwhyMaxWords: actionRoutingLayer.bigwhyMaxWords,
       uiContractVersion: UI_CONTRACT_VERSION,

@@ -247,6 +247,16 @@ If USER_MESSAGE is exactly one of these tokens, follow the specified route:
   - question must invite the user to choose or adjust the merged wording before anything is added.
   - If they are clearly different, output action="ASK", feedback_reason_text="", and append NEW_STATEMENT to statements.
 
+- "__ROUTE__DREAM_EXPLAINER_MULTI_REWRITE_REPAIR__" → Internal route: rebuild a complete rewrite set for multi-wish input when a previous REFINE returned too few rewritten lines.
+  Required behavior:
+  - Rewrite EVERY distinct wish in USER_MESSAGE into one future-facing societal/world statement.
+  - Keep the number of rewritten lines equal to the number of distinct wishes you recognized.
+  - Output action="REFINE".
+  - refined_formulation MUST contain all rewritten lines separated by line breaks.
+  - statements MUST stay equal to PREVIOUS_STATEMENTS unchanged.
+  - feedback_reason_text must be one short localized sentence explaining that the wording was broadened from personal wishes to societal change.
+  - question must invite the user to choose or adjust the wording before anything is added.
+
 (Output in the target language only.)
 
 Scope guard (off-topic / ASK)
