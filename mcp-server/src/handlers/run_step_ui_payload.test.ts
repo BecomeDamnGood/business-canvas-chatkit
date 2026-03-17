@@ -597,7 +597,7 @@ test("attachRegistryPayload preserves compare rationale and retained items from 
   assert.equal("wording_choice" in (payload.ui || {}), false);
 });
 
-test("attachRegistryPayload suppresses single-value ui.content while wording-choice picker is active", () => {
+test("attachRegistryPayload keeps Dream single-value ui.content when stale wording-choice picker state is present", () => {
   const helpers = buildHelpers();
   const canonical = "Mindd droomt van een wereld waarin keuzes rust geven.";
   const payload = helpers.attachRegistryPayload(
@@ -631,6 +631,57 @@ test("attachRegistryPayload suppresses single-value ui.content while wording-cho
       enabled: true,
       mode: "text",
       user_text: "Wij willen bedrijven helpen groeien.",
+      suggestion_text: canonical,
+      user_items: [],
+      suggestion_items: [],
+      instruction: "Kies welke formulering je wilt gebruiken.",
+    }
+  );
+
+  assert.notEqual(payload.ui?.view?.variant, "wording_choice");
+  assert.deepEqual(payload.ui?.content, {
+    kind: "single_value",
+    heading: "JE HUIDIGE DROOM VOOR MINDD IS",
+    canonical_text: canonical,
+  });
+  assert.equal(payload.ui?.feedback_contract, undefined);
+  assert.equal("wording_choice" in (payload.ui || {}), false);
+});
+
+test("attachRegistryPayload suppresses single-value ui.content while wording-choice picker is active for non-Dream steps", () => {
+  const helpers = buildHelpers();
+  const canonical = "Mindd bestaat om complexe keuzes begrijpelijk te maken.";
+  const payload = helpers.attachRegistryPayload(
+    {
+      text: canonical,
+      prompt: "",
+      current_step_id: "purpose",
+      state: {
+        current_step: "purpose",
+        active_specialist: "Purpose",
+      } as any,
+    },
+    {
+      ui_contract_id: "purpose:ASK:PURPOSE_MENU_REFINE:v1",
+      wording_choice_pending: "true",
+      wording_choice_mode: "text",
+      wording_choice_presentation: "picker",
+      wording_choice_target_field: "purpose",
+      wording_choice_user_normalized: "Wij willen iets goeds doen.",
+      wording_choice_agent_current: canonical,
+      ui_content: {
+        kind: "single_value",
+        heading: "JE HUIDIGE BESTAANSREDEN VOOR MINDD IS",
+        canonical_text: canonical,
+      },
+    },
+    { require_wording_pick: true },
+    [],
+    [],
+    {
+      enabled: true,
+      mode: "text",
+      user_text: "Wij willen iets goeds doen.",
       suggestion_text: canonical,
       user_items: [],
       suggestion_items: [],

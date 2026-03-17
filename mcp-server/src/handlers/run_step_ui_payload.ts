@@ -808,11 +808,14 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
       effectiveStepId === DREAM_STEP_ID &&
       dreamBuilderFlowActive &&
       String((specialist as Record<string, unknown>).__dream_builder_compare_pending || "").trim() === "true";
+    const explicitFeedbackContractPayload = normalizeUiFeedbackContract(
+      (specialist as Record<string, unknown>)?.ui_feedback_contract
+    );
     const rawFeedbackContractPayload =
-      effectiveStepId === DREAM_STEP_ID && dreamBuilderFlowActive
-        ? undefined
+      effectiveStepId === DREAM_STEP_ID
+        ? (dreamBuilderFlowActive ? undefined : explicitFeedbackContractPayload)
         : (
-          normalizeUiFeedbackContract((specialist as Record<string, unknown>)?.ui_feedback_contract) ||
+          explicitFeedbackContractPayload ||
           (dreamBuilderCompareActive
             ? undefined
             : synthesizeUiFeedbackContractFromWordingChoice(wordingChoiceOverride, flags))
@@ -830,7 +833,7 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
         forceDreamBuilderRefine || contractMenuId === "DREAM_EXPLAINER_MENU_REFINE"
           ? "dream_builder_refine"
           : "dream_builder_collect";
-    } else if (wordingPickPending && !(effectiveStepId === DREAM_STEP_ID && dreamBuilderFlowActive)) {
+    } else if (wordingPickPending && effectiveStepId !== DREAM_STEP_ID) {
       viewVariant = "wording_choice";
     }
     const questionTextPayload =
@@ -891,6 +894,7 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
     });
     const shouldExposeLegacyWordingChoice =
       Boolean(wordingChoiceOverride) &&
+      effectiveStepId !== DREAM_STEP_ID &&
       !(effectiveStepId === DREAM_STEP_ID && dreamBuilderFlowActive) &&
       !rawFeedbackContractPayload &&
       !dreamBuilderCompareActive &&

@@ -1030,13 +1030,6 @@ test("buildTextForWidget keeps canonical pending suggestion visible across singl
 
 test("buildTextForWidget suppresses standalone body text for single-value wording-choice picker states", () => {
   const helpers = buildTextHelpers((stepId) => {
-    if (stepId === "dream") {
-      return [
-        "JE HUIDIGE DROOM VOOR MINDD IS",
-        "",
-        "Mindd droomt van een wereld waarin ondernemers rust ervaren in hun keuzes.",
-      ].join("\n");
-    }
     if (stepId === "purpose") {
       return [
         "JE HUIDIGE PURPOSE VOOR MINDD IS",
@@ -1048,18 +1041,6 @@ test("buildTextForWidget suppresses standalone body text for single-value wordin
   });
 
   const scenarios = [
-    {
-      contract: "dream:ASK:DREAM_MENU_REFINE:v1",
-      stepId: "dream",
-      message: [
-        "Je voorstel is te algemeen voor een droom.",
-        "",
-        "JE HUIDIGE DROOM VOOR MINDD IS",
-        "",
-        "Mindd droomt van een wereld waarin ondernemers rust ervaren in hun keuzes.",
-      ].join("\n"),
-      suggestion: "Mindd droomt van een wereld waarin ondernemers rust ervaren in hun keuzes.",
-    },
     {
       contract: "purpose:ASK:PURPOSE_MENU_QUESTIONS:v1",
       stepId: "purpose",
@@ -1095,6 +1076,45 @@ test("buildTextForWidget suppresses standalone body text for single-value wordin
 
     assert.equal(output, "");
   }
+});
+
+test("buildTextForWidget keeps Dream single-value body visible even when stale wording-choice picker state is present", () => {
+  const helpers = buildTextHelpers((stepId) => {
+    if (stepId !== "dream") return "";
+    return [
+      "JE HUIDIGE DROOM VOOR MINDD IS",
+      "",
+      "Mindd droomt van een wereld waarin ondernemers rust ervaren in hun keuzes.",
+    ].join("\n");
+  });
+
+  const output = helpers.buildTextForWidget({
+    specialist: {
+      ui_contract_id: "dream:ASK:DREAM_MENU_REFINE:v1",
+      message: [
+        "Je voorstel is te algemeen voor een droom.",
+        "",
+        "JE HUIDIGE DROOM VOOR MINDD IS",
+        "",
+        "Mindd droomt van een wereld waarin ondernemers rust ervaren in hun keuzes.",
+      ].join("\n"),
+      refined_formulation: "Mindd droomt van een wereld waarin ondernemers rust ervaren in hun keuzes.",
+      wording_choice_pending: "true",
+      wording_choice_mode: "text",
+      wording_choice_presentation: "picker",
+      wording_choice_target_field: "dream",
+      wording_choice_user_normalized: "Originele input",
+      wording_choice_agent_current: "Mindd droomt van een wereld waarin ondernemers rust ervaren in hun keuzes.",
+    },
+    state: {
+      active_specialist: "Dream",
+      current_step: "dream",
+    } as any,
+  });
+
+  assert.match(output, /Je voorstel is te algemeen voor een droom\./);
+  assert.match(output, /JE HUIDIGE DROOM VOOR MINDD IS/);
+  assert.match(output, /Mindd droomt van een wereld waarin ondernemers rust ervaren in hun keuzes\./);
 });
 
 test("buildTextForWidget strips raw HTML tags from user-facing text", () => {
