@@ -1431,6 +1431,23 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     });
 
     if (deltaUserItems.length > 1 || suggestionDeltaItems.length > 1) {
+      if (baseItems.length > 0 && deltaUserItems.length > 0 && suggestionDeltaItems.length > 0) {
+        const unit = createCompareUnit({
+          id: "unit_1",
+          userItems: deltaUserItems,
+          suggestionItems: suggestionDeltaItems,
+          confidence: "fallback",
+        });
+        return {
+          mode: "grouped_units",
+          units: [unit],
+          segments: [
+            { kind: "retained", items: baseItems },
+            { kind: "unit", unit_id: unit.id },
+          ],
+          initialUnit: unit,
+        };
+      }
       const unit = createCompareUnit({
         id: "unit_1",
         userItems,
@@ -1879,14 +1896,18 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
   }
 
   function pickWordingSuggestionList(currentSpecialist: Record<string, unknown>, fallbackText: string): string[] {
+    const refined = String(currentSpecialist.refined_formulation || "").trim();
+    const proposalItems = mergeListItems([], deps.parseListItems(refined || fallbackText));
+    if (proposalItems.length > 0) {
+      return proposalItems;
+    }
     if (Array.isArray(currentSpecialist.statements) && currentSpecialist.statements.length > 0) {
       return mergeListItems(
         [],
         currentSpecialist.statements.map((line) => String(line || "").trim()).filter(Boolean)
       );
     }
-    const refined = String(currentSpecialist.refined_formulation || "").trim();
-    return mergeListItems([], deps.parseListItems(refined || fallbackText));
+    return [];
   }
 
   function isRefineAdjustRouteToken(token: string): boolean {

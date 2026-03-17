@@ -2457,6 +2457,122 @@ test("buildWordingChoiceFromTurn keeps Dream Builder grouped compare active for 
   );
 });
 
+test("buildWordingChoiceFromTurn keeps existing Dream Builder statements retained while comparing new multi-line wishes against rewritten suggestions", () => {
+  const helpers = buildDreamBuilderHelpersWithRealSuggestionGate();
+  const previousStatements = [
+    "Over 5 tot 10 jaar zal het voor mensen belangrijker zijn dat hun werk een positieve impact heeft op het leven van anderen.",
+    "Steeds meer mensen zullen streven naar het opbouwen van iets dat hun eigen leven overstijgt en blijvende waarde toevoegt aan de samenleving.",
+    "Vrijheid in tijd en keuzes zal een centrale waarde worden in hoe mensen hun werk en leven vormgeven.",
+    "Mensen zullen meer belang hechten aan trots kunnen zijn op hun werk en openlijk kunnen delen waar ze voor staan.",
+    "Bedrijven zullen vaker een weerspiegeling zijn van persoonlijke waarden en identiteit, in plaats van alleen winstgedreven te zijn.",
+  ];
+  const result = helpers.buildWordingChoiceFromTurn({
+    stepId: "dream",
+    state: {
+      current_step: "dream",
+      __dream_runtime_mode: "builder_collect",
+    } as any,
+    activeSpecialist: "DreamExplainer",
+    previousSpecialist: {
+      statements: previousStatements,
+      dream: "",
+    },
+    specialistResult: {
+      message: "We zoeken hier naar uitspraken over hoe de wereld of samenleving verandert, niet naar persoonlijke doelen of bedrijfsambities.",
+      feedback_reason_text:
+        "Je input gaat vooral over persoonlijke verlangens, terwijl Dream Builder zoekt naar toekomstige veranderingen in de wereld of samenleving.",
+      refined_formulation: [
+        "Over 5 tot 10 jaar zullen meer mensen hulp zoeken bij problemen die voor hen echt betekenisvol zijn.",
+        "Duidelijkheid en eenvoud worden belangrijker in domeinen die nu nog verwarrend of complex zijn.",
+        "Er zal meer behoefte ontstaan aan omgevingen waarin mensen zich gezien, veilig en gesteund voelen.",
+        "Steeds meer mensen zullen bestaande systemen ter discussie stellen en zoeken naar betere manieren van werken.",
+        "Persoonlijke groei en zelfontwikkeling zullen vaker een drijvende kracht worden achter ondernemerschap en werk.",
+      ].join("\n"),
+      statements: previousStatements,
+      suggest_dreambuilder: "true",
+    } as Record<string, unknown>,
+    userTextRaw: [
+      "I want to help people solve a problem they truly care about.",
+      "I want to bring clarity and simplicity to a confusing area.",
+      "I want to create a safe space where people feel seen and supported.",
+      "I want to challenge the status quo and improve how things are done.",
+      "I want to grow into the best version of myself through this business.",
+    ].join("\n"),
+    isOfftopic: false,
+    dreamRuntimeModeRaw: "builder_collect",
+  });
+
+  assert.ok(result.wordingChoice);
+  assert.deepEqual((result.wordingChoice as Record<string, unknown>).user_items, [
+    "I want to help people solve a problem they truly care about.",
+    "I want to bring clarity and simplicity to a confusing area.",
+    "I want to create a safe space where people feel seen and supported.",
+    "I want to challenge the status quo and improve how things are done.",
+    "I want to grow into the best version of myself through this business.",
+  ]);
+  assert.deepEqual((result.wordingChoice as Record<string, unknown>).suggestion_items, [
+    "Over 5 tot 10 jaar zullen meer mensen hulp zoeken bij problemen die voor hen echt betekenisvol zijn.",
+    "Duidelijkheid en eenvoud worden belangrijker in domeinen die nu nog verwarrend of complex zijn.",
+    "Er zal meer behoefte ontstaan aan omgevingen waarin mensen zich gezien, veilig en gesteund voelen.",
+    "Steeds meer mensen zullen bestaande systemen ter discussie stellen en zoeken naar betere manieren van werken.",
+    "Persoonlijke groei en zelfontwikkeling zullen vaker een drijvende kracht worden achter ondernemerschap en werk.",
+  ]);
+  const instruction = String((result.wordingChoice as Record<string, unknown>).instruction || "");
+  assert.match(instruction, /These points already stay in the final list/i);
+  for (const statement of previousStatements) {
+    assert.match(instruction, new RegExp(statement.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  }
+});
+
+test("buildWordingChoiceFromTurn uses the merged Dream Builder rewrite instead of unchanged statements when overlap requires REFINE", () => {
+  const helpers = buildDreamBuilderHelpersWithRealSuggestionGate();
+  const previousStatements = [
+    "Over 5 tot 10 jaar zal het voor mensen belangrijker zijn dat hun werk een positieve impact heeft op het leven van anderen.",
+    "Steeds meer mensen zullen streven naar het opbouwen van iets dat hun eigen leven overstijgt en blijvende waarde toevoegt aan de samenleving.",
+    "Vrijheid in tijd en keuzes zal een centrale waarde worden in hoe mensen hun werk en leven vormgeven.",
+    "Mensen zullen meer belang hechten aan trots kunnen zijn op hun werk en openlijk kunnen delen waar ze voor staan.",
+    "Bedrijven zullen vaker een weerspiegeling zijn van persoonlijke waarden en identiteit, in plaats van alleen winstgedreven te zijn.",
+  ];
+  const result = helpers.buildWordingChoiceFromTurn({
+    stepId: "dream",
+    state: {
+      current_step: "dream",
+      __dream_runtime_mode: "builder_collect",
+    } as any,
+    activeSpecialist: "DreamExplainer",
+    previousSpecialist: {
+      statements: previousStatements,
+      dream: "",
+    },
+    specialistResult: {
+      message: "Deze formulering overlapt sterk met een bestaand statement, dus ik stel een sterkere samengevoegde zin voor.",
+      feedback_reason_text:
+        "Deze formulering overlapt sterk met een bestaand statement, dus een samengevoegde zin houdt je lijst scherper.",
+      refined_formulation:
+        "Ondernemingen zullen steeds vaker een weerspiegeling worden van de waarden en identiteit van hun oprichters, in plaats van alleen winst na te streven.",
+      statements: previousStatements,
+      suggest_dreambuilder: "true",
+    } as Record<string, unknown>,
+    userTextRaw:
+      "Ondernemingen worden een weerspiegeling van eigen waarden en identiteit, in plaats van alleen de focus te leggen op winst.",
+    isOfftopic: false,
+    dreamRuntimeModeRaw: "builder_collect",
+  });
+
+  assert.ok(result.wordingChoice);
+  assert.deepEqual((result.wordingChoice as Record<string, unknown>).user_items, [
+    "Bedrijven zullen vaker een weerspiegeling zijn van persoonlijke waarden en identiteit, in plaats van alleen winstgedreven te zijn.",
+    "Ondernemingen worden een weerspiegeling van eigen waarden en identiteit, in plaats van alleen de focus te leggen op winst.",
+  ]);
+  assert.deepEqual((result.wordingChoice as Record<string, unknown>).suggestion_items, [
+    "Ondernemingen zullen steeds vaker een weerspiegeling worden van de waarden en identiteit van hun oprichters, in plaats van alleen winst na te streven.",
+  ]);
+  assert.equal(
+    String((result.wordingChoice as Record<string, unknown>).instruction || ""),
+    "Choose whether you want to keep both similar statements or merge them into one stronger statement."
+  );
+});
+
 test("applyWordingPickSelection can keep both Dream Builder near-duplicate statements", () => {
   const helpers = buildDreamBuilderHelpers(true);
   const applyResult = helpers.applyWordingPickSelection({
