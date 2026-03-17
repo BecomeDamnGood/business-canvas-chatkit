@@ -56,6 +56,8 @@ type BuildWordingChoiceFromTurnParams = {
   acceptedOutputUserTurnClassification?: AcceptedOutputUserTurnClassification | null;
 };
 
+type DreamBuilderCompareKind = "batch_rewrite_compare" | "overlap_merge_compare";
+
 type WordingPickSelectionParams = {
   stepId: string;
   routeToken: string;
@@ -1473,6 +1475,263 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     };
   }
 
+  function buildDreamBuilderOverlapComparePlan(params: {
+    baseItems: string[];
+    existingItem: string;
+    incomingItem: string;
+    suggestionItem: string;
+  }): BusinessListComparePlan | null {
+    const baseItems = mergeListItems([], params.baseItems);
+    const existingItem = String(params.existingItem || "").trim();
+    const incomingItem = String(params.incomingItem || "").trim();
+    const suggestionItem = String(params.suggestionItem || "").trim();
+    if (!existingItem || !incomingItem || !suggestionItem || baseItems.length === 0) return null;
+
+    const existingComparable = deps.canonicalizeComparableText(existingItem);
+    if (!existingComparable) return null;
+    const existingIndex = baseItems.findIndex(
+      (item) => deps.canonicalizeComparableText(item) === existingComparable
+    );
+    if (existingIndex < 0) return null;
+
+    const unit = createCompareUnit({
+      id: "unit_1",
+      userItems: [existingItem, incomingItem],
+      suggestionItems: [suggestionItem],
+      confidence: "fallback",
+    });
+
+    const segments: WordingChoiceCompareSegment[] = [];
+    let retainedBuffer: string[] = [];
+    const flushRetained = () => {
+      if (retainedBuffer.length === 0) return;
+      segments.push({ kind: "retained", items: retainedBuffer });
+      retainedBuffer = [];
+    };
+
+    for (let index = 0; index < baseItems.length; index += 1) {
+      const item = baseItems[index];
+      if (!item) continue;
+      if (index === existingIndex) {
+        flushRetained();
+        segments.push({ kind: "unit", unit_id: unit.id });
+        continue;
+      }
+      retainedBuffer.push(item);
+    }
+    flushRetained();
+
+    return {
+      mode: "grouped_units",
+      units: [unit],
+      segments,
+      initialUnit: unit,
+    };
+  }
+
+  function clearedDreamBuilderCompareFields(): Record<string, unknown> {
+    return {
+      __dream_builder_compare_pending: "false",
+      __dream_builder_compare_kind: "",
+      __dream_builder_compare_current_items: [],
+      __dream_builder_compare_suggested_items: [],
+      __dream_builder_compare_segments: [],
+      __dream_builder_compare_rationale: "",
+      __dream_builder_compare_current_label: "",
+      __dream_builder_compare_suggested_label: "",
+      __dream_builder_compare_retained_heading: "",
+      __dream_builder_compare_instruction: "",
+    };
+  }
+
+  function buildDreamBuilderPendingCompareSpecialist(params: {
+    specialistResult: Record<string, unknown>;
+    comparePlan: BusinessListComparePlan;
+    compareKind: DreamBuilderCompareKind;
+    message: string;
+    rationale: string;
+    currentLabel: string;
+    suggestedLabel: string;
+    retainedHeading: string;
+    instruction: string;
+    targetField: string;
+    committedText: string;
+    baseItems: string[];
+  }): Record<string, unknown> {
+    const {
+      specialistResult,
+      comparePlan,
+      compareKind,
+      message,
+      rationale,
+      currentLabel,
+      suggestedLabel,
+      retainedHeading,
+      instruction,
+      targetField,
+      committedText,
+      baseItems,
+    } = params;
+    return {
+      ...specialistResult,
+      ...clearedResolvedWordingTransientFields(),
+      ...clearedDreamBuilderCompareFields(),
+      message,
+      wording_choice_pending: "false",
+      wording_choice_selected: "",
+      wording_choice_user_raw: "",
+      wording_choice_user_normalized: "",
+      wording_choice_user_items: [],
+      wording_choice_suggestion_items: [],
+      wording_choice_base_items: [],
+      wording_choice_list_semantics: "delta",
+      wording_choice_agent_current: "",
+      wording_choice_mode: "",
+      wording_choice_target_field: "",
+      wording_choice_presentation: "",
+      wording_choice_variant: "",
+      wording_choice_user_label: "",
+      wording_choice_suggestion_label: "",
+      wording_choice_compare_mode: "",
+      wording_choice_compare_cursor: "",
+      wording_choice_compare_units: [],
+      wording_choice_compare_segments: [],
+      wording_choice_user_variant_semantics: "",
+      wording_choice_user_variant_stepworthy: "",
+      feedback_reason_key: "",
+      feedback_reason_text: rationale,
+      pending_suggestion_intent: "",
+      pending_suggestion_anchor: "",
+      pending_suggestion_seed_source: "",
+      pending_suggestion_feedback_text: "",
+      pending_suggestion_presentation_mode: "",
+      __dream_builder_compare_pending: "true",
+      __dream_builder_compare_kind: compareKind,
+      __dream_builder_compare_current_items: comparePlan.initialUnit.user_items,
+      __dream_builder_compare_suggested_items: comparePlan.initialUnit.suggestion_items,
+      __dream_builder_compare_segments: comparePlan.segments,
+      __dream_builder_compare_rationale: rationale,
+      __dream_builder_compare_current_label: currentLabel,
+      __dream_builder_compare_suggested_label: suggestedLabel,
+      __dream_builder_compare_retained_heading: retainedHeading,
+      __dream_builder_compare_instruction: instruction,
+      ...(targetField ? { [targetField]: committedText } : {}),
+      statements: baseItems,
+      refined_formulation: committedText,
+    };
+  }
+
+  function buildDreamBuilderPendingSimpleCompareSpecialist(params: {
+    specialistResult: Record<string, unknown>;
+    compareKind: DreamBuilderCompareKind;
+    message: string;
+    rationale: string;
+    currentLabel: string;
+    suggestedLabel: string;
+    retainedHeading: string;
+    instruction: string;
+    targetField: string;
+    committedText: string;
+    baseItems: string[];
+    currentItems: string[];
+    suggestedItems: string[];
+    retainedItems: string[];
+  }): Record<string, unknown> {
+    const {
+      specialistResult,
+      compareKind,
+      message,
+      rationale,
+      currentLabel,
+      suggestedLabel,
+      retainedHeading,
+      instruction,
+      targetField,
+      committedText,
+      baseItems,
+      currentItems,
+      suggestedItems,
+      retainedItems,
+    } = params;
+    const segments: WordingChoiceCompareSegment[] = [];
+    if (retainedItems.length > 0) {
+      segments.push({ kind: "retained", items: retainedItems });
+    }
+    segments.push({ kind: "unit", unit_id: "unit_1" });
+    return {
+      ...specialistResult,
+      ...clearedResolvedWordingTransientFields(),
+      ...clearedDreamBuilderCompareFields(),
+      message,
+      wording_choice_pending: "false",
+      wording_choice_selected: "",
+      wording_choice_user_raw: "",
+      wording_choice_user_normalized: "",
+      wording_choice_user_items: [],
+      wording_choice_suggestion_items: [],
+      wording_choice_base_items: [],
+      wording_choice_list_semantics: "delta",
+      wording_choice_agent_current: "",
+      wording_choice_mode: "",
+      wording_choice_target_field: "",
+      wording_choice_presentation: "",
+      wording_choice_variant: "",
+      wording_choice_user_label: "",
+      wording_choice_suggestion_label: "",
+      wording_choice_compare_mode: "",
+      wording_choice_compare_cursor: "",
+      wording_choice_compare_units: [],
+      wording_choice_compare_segments: [],
+      wording_choice_user_variant_semantics: "",
+      wording_choice_user_variant_stepworthy: "",
+      feedback_reason_key: "",
+      feedback_reason_text: rationale,
+      pending_suggestion_intent: "",
+      pending_suggestion_anchor: "",
+      pending_suggestion_seed_source: "",
+      pending_suggestion_feedback_text: "",
+      pending_suggestion_presentation_mode: "",
+      __dream_builder_compare_pending: "true",
+      __dream_builder_compare_kind: compareKind,
+      __dream_builder_compare_current_items: currentItems,
+      __dream_builder_compare_suggested_items: suggestedItems,
+      __dream_builder_compare_segments: segments,
+      __dream_builder_compare_rationale: rationale,
+      __dream_builder_compare_current_label: currentLabel,
+      __dream_builder_compare_suggested_label: suggestedLabel,
+      __dream_builder_compare_retained_heading: retainedHeading,
+      __dream_builder_compare_instruction: instruction,
+      ...(targetField ? { [targetField]: committedText } : {}),
+      statements: baseItems,
+      refined_formulation: committedText,
+    };
+  }
+
+  function hasDreamBuilderPendingCompare(specialist: Record<string, unknown>): boolean {
+    return String(specialist.__dream_builder_compare_pending || "").trim() === "true";
+  }
+
+  function composeDreamBuilderCompareSelection(params: {
+    segments: WordingChoiceCompareSegment[];
+    currentItems: string[];
+    suggestedItems: string[];
+    pickedUser: boolean;
+  }): string[] {
+    const selectedItems = params.pickedUser ? params.currentItems : params.suggestedItems;
+    const composed: string[] = [];
+    for (const segment of params.segments) {
+      if (!segment || typeof segment !== "object") continue;
+      if (segment.kind === "retained") {
+        composed.push(...segment.items.map((item) => String(item || "").trim()).filter(Boolean));
+        continue;
+      }
+      if (segment.kind === "unit") {
+        composed.push(...selectedItems.map((item) => String(item || "").trim()).filter(Boolean));
+      }
+    }
+    return mergeListItems([], composed);
+  }
+
   function selectedItemsForCompareUnit(unit: WordingChoiceCompareUnit): string[] {
     if (unit.resolution === "user") return unit.user_items;
     if (unit.resolution === "suggestion") return unit.suggestion_items;
@@ -2064,6 +2323,19 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     localUserItems = mode === "list"
       ? mergeListItems([], localUserItems.length > 0 ? localUserItems : (effectiveUserItems.length > 0 ? effectiveUserItems : fallbackUserItems))
       : [];
+    const dreamBuilderOverlapComparePlan =
+      dreamBuilderContext &&
+      mode === "list" &&
+      String(specialistResult.__dream_builder_overlap_existing_statement || "").trim() &&
+      String(specialistResult.__dream_builder_overlap_incoming_statement || "").trim() &&
+      suggestionFullItems.length === 1
+        ? buildDreamBuilderOverlapComparePlan({
+            baseItems,
+            existingItem: String(specialistResult.__dream_builder_overlap_existing_statement || "").trim(),
+            incomingItem: String(specialistResult.__dream_builder_overlap_incoming_statement || "").trim(),
+            suggestionItem: suggestionFullItems[0],
+          })
+        : null;
     const groupedListCompareEnabled =
       mode === "list" &&
       shouldUseGroupedListCompare({
@@ -2186,7 +2458,8 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
         ? "clarify_dual"
         : "default";
     const rawComparePlan =
-      groupedListCompareEnabled
+      dreamBuilderOverlapComparePlan ||
+      (groupedListCompareEnabled
         ? (
           dreamBuilderContext
             ? buildDreamBuilderComparePlan({
@@ -2203,7 +2476,7 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
                 preferDeltaGrouping: compareDeltaListSemantics === "delta",
               })
         )
-        : null;
+        : null);
     const comparePlan = rawComparePlan
       ? withGroupedCompareUnitFeedback({
           stepId,
@@ -2297,6 +2570,127 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
       enriched.wording_choice_presentation = "canonical";
       return { specialist: enriched, wordingChoice: null };
     }
+    if (dreamBuilderContext && comparePlan) {
+      const compareKind: DreamBuilderCompareKind = dreamBuilderOverlapComparePlan
+        ? "overlap_merge_compare"
+        : "batch_rewrite_compare";
+      const retainedItems = visibleRetainedItemsForGroupedCompare(comparePlan.segments, comparePlan.units);
+      const currentLabel = wordingLabels.userLabel || "";
+      const suggestedLabel = wordingLabels.suggestionLabel || "";
+      const retainedHeading = retainedItems.length > 0
+        ? uiStringLocaleFirst(state, "wordingChoiceGroupedCompareRetainedHeading").trim()
+        : "";
+      const instruction = dreamBuilderOverlapComparePlan
+        ? dreamBuilderMergeInstructionForState(state, retainedItems)
+        : groupedListInstructionForState(state, retainedItems);
+      const dreamBuilderSpecialist = buildDreamBuilderPendingCompareSpecialist({
+        specialistResult: enriched,
+        comparePlan,
+        compareKind,
+        message: pendingMessage,
+        rationale: String(comparePlan.initialUnit.feedback_reason_text || effectiveFeedbackReason || "").trim(),
+        currentLabel,
+        suggestedLabel,
+        retainedHeading,
+        instruction,
+        targetField,
+        committedText,
+        baseItems,
+      });
+      const dreamBuilderWordingChoice: WordingChoiceUiPayload =
+        groupedCompareWordingChoicePayload({
+          stepId,
+          state,
+          units: comparePlan.units,
+          segments: comparePlan.segments,
+          cursor: 0,
+        }) || {
+          enabled: true,
+          mode,
+          variant: "grouped_list_units",
+          ...(String(comparePlan.initialUnit.feedback_reason_text || effectiveFeedbackReason || "").trim()
+            ? {
+                feedback_reason_text: formattedCompareFeedback(
+                  stepId,
+                  state,
+                  String(comparePlan.initialUnit.feedback_reason_text || effectiveFeedbackReason || "").trim()
+                ),
+              }
+            : {}),
+          ...(currentLabel ? { user_label: currentLabel } : {}),
+          ...(suggestedLabel ? { suggestion_label: suggestedLabel } : {}),
+          user_text: comparePlan.initialUnit.user_text,
+          suggestion_text: comparePlan.initialUnit.suggestion_text,
+          user_items: comparePlan.initialUnit.user_items,
+          suggestion_items: comparePlan.initialUnit.suggestion_items,
+          instruction,
+        };
+      return {
+        specialist: dreamBuilderSpecialist,
+        wordingChoice: dreamBuilderWordingChoice,
+      };
+    }
+    const dreamBuilderSuggestedItems =
+      suggestionItems.length > 0
+        ? suggestionItems
+        : suggestionFullItems;
+    if (dreamBuilderContext && effectiveUserItems.length > 0 && dreamBuilderSuggestedItems.length > 0) {
+      const overlapExisting = String(specialistResult.__dream_builder_overlap_existing_statement || "").trim();
+      const overlapIncoming = String(specialistResult.__dream_builder_overlap_incoming_statement || "").trim();
+      const compareKind: DreamBuilderCompareKind =
+        overlapExisting && overlapIncoming ? "overlap_merge_compare" : "batch_rewrite_compare";
+      const currentItems = compareKind === "overlap_merge_compare"
+        ? [overlapExisting, overlapIncoming].filter(Boolean)
+        : effectiveUserItems;
+      const suggestedItems = dreamBuilderSuggestedItems;
+      const retainedItems = compareKind === "overlap_merge_compare" && overlapExisting
+        ? baseItems.filter((item) => item !== overlapExisting)
+        : baseItems;
+      const labels = compareKind === "overlap_merge_compare"
+        ? {
+            userLabel: dreamBuilderKeepBothLabelForState(state),
+            suggestionLabel: dreamBuilderMergeLabelForState(state),
+          }
+        : wordingLabels;
+      const retainedHeading = retainedItems.length > 0
+        ? uiStringLocaleFirst(state, "wordingChoiceGroupedCompareRetainedHeading").trim()
+        : "";
+      const instruction = compareKind === "overlap_merge_compare"
+        ? dreamBuilderMergeInstructionForState(state, retainedItems)
+        : groupedListInstructionForState(state, retainedItems);
+      const dreamBuilderSpecialist = buildDreamBuilderPendingSimpleCompareSpecialist({
+        specialistResult: enriched,
+        compareKind,
+        message: pendingMessage,
+        rationale: effectiveFeedbackReason,
+        currentLabel: labels.userLabel || "",
+        suggestedLabel: labels.suggestionLabel || "",
+        retainedHeading,
+        instruction,
+        targetField,
+        committedText,
+        baseItems,
+        currentItems,
+        suggestedItems,
+        retainedItems,
+      });
+      return {
+        specialist: dreamBuilderSpecialist,
+        wordingChoice: {
+          enabled: true,
+          mode,
+          variant: "grouped_list_units",
+          compare_feedback: { text: formattedCompareFeedback(stepId, state, effectiveFeedbackReason) },
+          ...(labels.userLabel ? { user_label: labels.userLabel } : {}),
+          ...(labels.suggestionLabel ? { suggestion_label: labels.suggestionLabel } : {}),
+          user_text: currentItems.join("\n"),
+          suggestion_text: suggestedItems.join("\n"),
+          user_items: currentItems,
+          suggestion_items: suggestedItems,
+          instruction,
+        },
+      };
+    }
     const wordingChoice: WordingChoiceUiPayload =
       comparePlan
         ? (groupedCompareWordingChoicePayload({
@@ -2354,17 +2748,6 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     if (!isWordingPickRouteToken(routeToken)) {
       return { handled: false, specialist: {}, nextState: state };
     }
-    const prevRaw = ((state as any).last_specialist_result || {}) as Record<string, unknown>;
-    if (String(prevRaw.wording_choice_pending || "") !== "true") {
-      return { handled: false, specialist: prevRaw, nextState: state };
-    }
-    const pickedUser = routeToken === "__WORDING_PICK_USER__";
-    const mode: WordingChoiceMode = String(prevRaw.wording_choice_mode || "text") === "list" ? "list" : "text";
-    const compareMode: WordingChoiceCompareMode =
-      String(prevRaw.wording_choice_compare_mode || "").trim() === "grouped_units"
-        ? "grouped_units"
-        : "";
-
     const stripStaleUiContractFields = (
       value: Record<string, unknown>
     ): Record<string, unknown> => {
@@ -2379,6 +2762,110 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
       } = value;
       return rest;
     };
+    const prevRaw = ((state as any).last_specialist_result || {}) as Record<string, unknown>;
+    if (stepId === deps.dreamStepId && hasDreamBuilderPendingCompare(prevRaw)) {
+      const pickedUser = routeToken === "__WORDING_PICK_USER__";
+      const segments = normalizeCompareSegments(prevRaw.__dream_builder_compare_segments);
+      const currentItems = toTrimmedStringArray(prevRaw.__dream_builder_compare_current_items);
+      const suggestedItems = toTrimmedStringArray(prevRaw.__dream_builder_compare_suggested_items);
+      if (segments.length === 0 || currentItems.length === 0 || suggestedItems.length === 0) {
+        return { handled: false, specialist: prevRaw, nextState: state };
+      }
+      const composedItems = composeDreamBuilderCompareSelection({
+        segments,
+        currentItems,
+        suggestedItems,
+        pickedUser,
+      });
+      const chosen = stripMarkupPreserveLines(composedItems.join("\n"));
+      if (!chosen) return { handled: false, specialist: prevRaw, nextState: state };
+      const selectedMessage = deps.wordingSelectionMessage(
+        stepId,
+        state,
+        String((state as any)?.active_specialist || "").trim(),
+        chosen
+      );
+      const selected = withUpdatedTargetField(
+        {
+          ...prevRaw,
+          ...stripStaleUiContractFields(prevRaw),
+          ...clearedResolvedWordingTransientFields(),
+          ...clearedDreamBuilderCompareFields(),
+          message: selectedMessage,
+          wording_choice_pending: "false",
+          wording_choice_selected: pickedUser ? "user" : "suggestion",
+          wording_choice_user_raw: "",
+          wording_choice_user_normalized: "",
+          wording_choice_user_items: [],
+          wording_choice_suggestion_items: [],
+          wording_choice_base_items: composedItems,
+          wording_choice_list_semantics: "delta",
+          refined_formulation: chosen,
+          wording_choice_agent_current: chosen,
+          wording_choice_presentation: "",
+          wording_choice_variant: "",
+          wording_choice_user_label: "",
+          wording_choice_suggestion_label: "",
+          wording_choice_compare_mode: "",
+          wording_choice_compare_cursor: "",
+          wording_choice_compare_units: [],
+          wording_choice_compare_segments: [],
+          wording_choice_user_variant_semantics: "",
+          wording_choice_user_variant_stepworthy: "",
+          feedback_reason_text: pickedUser ? userPickFeedbackReason(state, prevRaw) : "",
+          statements: composedItems,
+        },
+        stepId,
+        chosen
+      );
+      const targetField = deps.fieldForStep(stepId);
+      const provisionalValue = targetField ? String(selected[targetField] || "").trim() : "";
+      const stateForRender = provisionalValue
+        ? deps.withProvisionalValue(state, stepId, provisionalValue, "wording_pick" as ProvisionalSource)
+        : state;
+      const rendered = deps.renderFreeTextTurnPolicy({
+        stepId,
+        state: stateForRender,
+        specialist: selected as Record<string, unknown>,
+        previousSpecialist: prevRaw,
+      });
+      const renderedSpecialist = rendered.specialist as Record<string, unknown>;
+      const selectedWithContract: Record<string, unknown> = {
+        ...stripStaleUiContractFields(selected),
+        action: "ASK",
+        message: String(selected.message || "").trim() || String(renderedSpecialist?.message || "").trim(),
+        question: String(renderedSpecialist?.question || ""),
+        wording_choice_pending: "false",
+        wording_choice_selected: pickedUser ? "user" : "suggestion",
+        ...(typeof renderedSpecialist?.ui_show_step_intro_chrome !== "undefined"
+          ? { ui_show_step_intro_chrome: renderedSpecialist.ui_show_step_intro_chrome }
+          : {}),
+        ui_contract_id: String(renderedSpecialist?.ui_contract_id || rendered.contractId || ""),
+        ui_contract_version: String(renderedSpecialist?.ui_contract_version || rendered.contractVersion || ""),
+        ui_text_keys: Array.isArray(renderedSpecialist?.ui_text_keys)
+          ? renderedSpecialist.ui_text_keys
+          : (rendered.textKeys || []),
+      };
+      const nextState: CanvasState = {
+        ...state,
+        dream_builder_statements: composedItems,
+        last_specialist_result: selectedWithContract,
+      };
+      return {
+        handled: true,
+        specialist: selectedWithContract,
+        nextState,
+      };
+    }
+    if (String(prevRaw.wording_choice_pending || "") !== "true") {
+      return { handled: false, specialist: prevRaw, nextState: state };
+    }
+    const pickedUser = routeToken === "__WORDING_PICK_USER__";
+    const mode: WordingChoiceMode = String(prevRaw.wording_choice_mode || "text") === "list" ? "list" : "text";
+    const compareMode: WordingChoiceCompareMode =
+      String(prevRaw.wording_choice_compare_mode || "").trim() === "grouped_units"
+        ? "grouped_units"
+        : "";
     if (compareMode === "grouped_units" && mode === "list") {
       const compareUnits = normalizeCompareUnits(prevRaw.wording_choice_compare_units);
       const compareSegments = normalizeCompareSegments(prevRaw.wording_choice_compare_segments);
@@ -2632,9 +3119,67 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     stepIdHint = "",
     dreamRuntimeModeRaw?: unknown
   ): WordingChoiceUiPayload | null {
-    if (String(specialist?.wording_choice_pending || "") !== "true") return null;
     const stepId = String(stepIdHint || specialist?.wording_choice_target_field || "").trim();
+    const dreamBuilderComparePending =
+      stepId === deps.dreamStepId &&
+      String(specialist?.__dream_builder_compare_pending || "").trim().toLowerCase() === "true";
+    const wordingChoicePending = String(specialist?.wording_choice_pending || "").trim().toLowerCase() === "true";
+    if (!wordingChoicePending && !dreamBuilderComparePending) return null;
     if (!stepId) return null;
+    if (dreamBuilderComparePending) {
+      const currentItems = toTrimmedStringArray(specialist?.__dream_builder_compare_current_items).map((line) =>
+        stripMarkupPreserveLines(line)
+      );
+      const suggestedItems = toTrimmedStringArray(specialist?.__dream_builder_compare_suggested_items).map((line) =>
+        stripMarkupPreserveLines(line)
+      );
+      if (currentItems.length === 0 || suggestedItems.length === 0) return null;
+      const retainedItems = Array.isArray(specialist?.__dream_builder_compare_segments)
+        ? ((specialist.__dream_builder_compare_segments as unknown[]) as Array<Record<string, unknown>>).flatMap((segment) =>
+            String(segment?.kind || "").trim() === "retained" && Array.isArray(segment.items)
+              ? (segment.items as unknown[]).map((value) => String(value || "").trim()).filter(Boolean)
+              : []
+          )
+        : [];
+      const compareKind = String(specialist?.__dream_builder_compare_kind || "").trim();
+      const labels = wordingChoiceLabelsForStep({
+        stepId,
+        mode: "list",
+        state,
+        variant: "grouped_list_units",
+      });
+      const feedbackReasonText = String(specialist?.__dream_builder_compare_rationale || "").trim();
+      if (!feedbackReasonText) return null;
+      return {
+        enabled: true,
+        mode: "list",
+        variant: "grouped_list_units",
+        compare_feedback: { text: feedbackReasonText },
+        ...(String(specialist?.__dream_builder_compare_current_label || "").trim() || labels.userLabel
+          ? {
+              user_label:
+                String(specialist?.__dream_builder_compare_current_label || "").trim() || labels.userLabel || "",
+            }
+          : {}),
+        ...(String(specialist?.__dream_builder_compare_suggested_label || "").trim() || labels.suggestionLabel
+          ? {
+              suggestion_label:
+                String(specialist?.__dream_builder_compare_suggested_label || "").trim() ||
+                labels.suggestionLabel ||
+                "",
+            }
+          : {}),
+        user_text: currentItems.join("\n"),
+        suggestion_text: suggestedItems.join("\n"),
+        user_items: currentItems,
+        suggestion_items: suggestedItems,
+        instruction:
+          String(specialist?.__dream_builder_compare_instruction || "").trim() ||
+          (compareKind === "overlap_merge_compare"
+            ? dreamBuilderMergeInstructionForState(state, retainedItems)
+            : groupedListInstructionForState(state, retainedItems)),
+      };
+    }
     if (!isWordingChoiceIntentEligibleSpecialist(specialist)) return null;
     if (
       !isWordingChoiceEligibleContext(

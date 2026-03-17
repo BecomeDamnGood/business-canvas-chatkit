@@ -209,6 +209,36 @@ function findDreamBuilderOverlapRepairPair(params: {
   return bestScore >= 0.72 ? { existing: bestExisting, incoming } : null;
 }
 
+function findDreamBuilderOverlapRepairPairFromUserInput(params: {
+  previousStatements: string[];
+  userMessage: string;
+}): { existing: string; incoming: string } | null {
+  const previousStatements = readStringArray(params.previousStatements);
+  const incoming = String(params.userMessage || "").replace(/\r/g, "\n").trim();
+  if (previousStatements.length === 0 || !incoming) return null;
+
+  const candidateParts = parseDreamBuilderRewriteItems(incoming);
+  if (candidateParts.length === 0 || candidateParts.length > 2) return null;
+
+  let bestExisting = "";
+  let bestExistingScore = 0;
+  for (let index = 0; index < previousStatements.length; index += 1) {
+    const existing = previousStatements[index];
+    const scores = [
+      dreamBuilderTokenJaccard(existing, incoming),
+      ...candidateParts.map((part) => dreamBuilderTokenJaccard(existing, part)),
+    ];
+    const score = Math.max(...scores);
+    if (score > bestExistingScore) {
+      bestExistingScore = score;
+      bestExisting = existing;
+    }
+  }
+  if (!bestExisting || bestExistingScore < 0.4) return null;
+
+  return { existing: bestExisting, incoming };
+}
+
 export function shouldForcePendingWordingChoiceFromIntent(params: {
   submittedTextIntent: string;
   submittedTextAnchor: string;
@@ -793,6 +823,7 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
 
     let attempts = call1.value.attempts;
     let specialistResult = asRecord(call1.value.specialistResult);
+    let dreamBuilderOverlapRepairApplied = false;
     const stateRecord = asStateRecord(stateForSpecialist);
     if (
       businessListTurnResolution &&
@@ -908,11 +939,23 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
       !isTrueFlag(specialistResult.is_offtopic) &&
       String(specialistResult.action || "").trim() === "REFINE"
     ) {
+      const previousStatements = (() => {
+        const canonical = readStringArray(stateRecord.dream_builder_statements);
+        if (canonical.length > 0) return canonical;
+        const previousSpecialist = asRecord(stateRecord.last_specialist_result);
+        return readStringArray(previousSpecialist.statements);
+      })();
+      const overlapRepairPairFromUserInput = findDreamBuilderOverlapRepairPairFromUserInput({
+        previousStatements,
+        userMessage,
+      });
       const expectedRewriteItems = parseDreamBuilderRewriteItems(String(userMessage || "").trim());
       const actualRewriteItems = parseDreamBuilderRewriteItems(
         String(specialistResult.refined_formulation || "").trim()
       );
       if (
+        !overlapRepairPairFromUserInput &&
+        !dreamBuilderOverlapRepairApplied &&
         expectedRewriteItems.length >= 2 &&
         actualRewriteItems.length > 0 &&
         actualRewriteItems.length < expectedRewriteItems.length
@@ -981,7 +1024,64 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
         if (overlapRepairCall.ok) {
           params.rememberLlmCall(overlapRepairCall.value);
           attempts = Math.max(attempts, overlapRepairCall.value.attempts);
-          specialistResult = asRecord(overlapRepairCall.value.specialistResult);
+          specialistResult = {
+            ...asRecord(overlapRepairCall.value.specialistResult),
+            __dream_builder_overlap_existing_statement: overlapRepairPair.existing,
+            __dream_builder_overlap_incoming_statement: overlapRepairPair.incoming,
+          };
+          dreamBuilderOverlapRepairApplied = true;
+        }
+      }
+    }
+
+    if (
+      decision1.specialist_to_call === deps.dreamExplainerSpecialist &&
+      String(decision1.current_step || "") === deps.dreamStepId &&
+      !isTrueFlag(specialistResult.is_offtopic) &&
+      !dreamBuilderOverlapRepairApplied &&
+      !isTrueFlag(specialistResult.wording_choice_pending) &&
+      String(specialistResult.action || "").trim() === "REFINE" &&
+      String(specialistResult.refined_formulation || "").trim()
+    ) {
+      const previousStatements = (() => {
+        const canonical = readStringArray(stateRecord.dream_builder_statements);
+        if (canonical.length > 0) return canonical;
+        const previousSpecialist = asRecord(stateRecord.last_specialist_result);
+        return readStringArray(previousSpecialist.statements);
+      })();
+      const unchangedStatements = (() => {
+        const currentStatements = readStringArray(specialistResult.statements);
+        return (
+          currentStatements.length === previousStatements.length &&
+          currentStatements.every((item, index) => item === previousStatements[index])
+        );
+      })();
+      const overlapRepairPair = unchangedStatements
+        ? findDreamBuilderOverlapRepairPairFromUserInput({
+            previousStatements,
+            userMessage,
+          })
+        : null;
+      if (overlapRepairPair) {
+        const repairInput = [
+          deps.dreamExplainerOverlapRepairRoutePrefix,
+          `EXISTING_STATEMENT: ${overlapRepairPair.existing}`,
+          `NEW_STATEMENT: ${overlapRepairPair.incoming}`,
+        ].join("\n");
+        const overlapRepairCall = await deps.callSpecialistStrictSafe(
+          { model: params.model, state, decision: decision1, userMessage: repairInput },
+          deps.buildRoutingContext(repairInput),
+          state
+        );
+        if (overlapRepairCall.ok) {
+          params.rememberLlmCall(overlapRepairCall.value);
+          attempts = Math.max(attempts, overlapRepairCall.value.attempts);
+          specialistResult = {
+            ...asRecord(overlapRepairCall.value.specialistResult),
+            __dream_builder_overlap_existing_statement: overlapRepairPair.existing,
+            __dream_builder_overlap_incoming_statement: overlapRepairPair.incoming,
+          };
+          dreamBuilderOverlapRepairApplied = true;
         }
       }
     }

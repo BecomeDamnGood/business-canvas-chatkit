@@ -240,7 +240,10 @@ function buildStrategyPipelineHarness(params: {
         }
         return nextState as any;
       },
-      getDreamRuntimeMode: () => params.dreamRuntimeMode || "self",
+      getDreamRuntimeMode: (state) =>
+        params.dreamRuntimeMode ||
+        String((state as Record<string, unknown> | null | undefined)?.__dream_runtime_mode || "").trim() ||
+        "self",
       isMetaOfftopicFallbackTurn: () => false,
       shouldTreatAsStepContributingInput: () => true,
       hasDreamSpecialistCandidate: () => false,
@@ -920,7 +923,8 @@ test("runPostSpecialistPipeline keeps strategy local when a small addition is an
   } as any);
 
   assert.equal(specialistUserMessage, smallAddition);
-  assert.equal(String((payload.specialist as Record<string, unknown>).wording_choice_pending || ""), "true");
+  assert.equal(String((payload.specialist as Record<string, unknown>).wording_choice_pending || ""), "false");
+  assert.equal(String((payload.specialist as Record<string, unknown>).__dream_builder_compare_pending || ""), "true");
   assert.equal(String((payload.specialist as Record<string, unknown>).wording_choice_compare_mode || ""), "grouped_units");
   assert.deepEqual((payload.specialist as Record<string, unknown>).statements, existingStatements);
   assert.equal(String((payload.specialist as Record<string, unknown>).strategy || ""), existingStatements.join("\n"));
@@ -1010,7 +1014,8 @@ test("runPostSpecialistPipeline restores Dream Builder canonical statements when
     },
   } as any);
 
-  assert.equal(String((payload.specialist as Record<string, unknown>).wording_choice_pending || ""), "true");
+  assert.equal(String((payload.specialist as Record<string, unknown>).wording_choice_pending || ""), "false");
+  assert.equal(String((payload.specialist as Record<string, unknown>).__dream_builder_compare_pending || ""), "true");
   assert.deepEqual((payload.specialist as Record<string, unknown>).statements, existingStatements);
   assert.deepEqual((payload.state as Record<string, unknown>).dream_builder_statements, existingStatements);
   assert.ok(payload.wordingChoiceOverride);
@@ -1107,7 +1112,8 @@ test("runPostSpecialistPipeline recovers Dream Builder compare when a material r
     },
   } as any);
 
-  assert.equal(String((payload.specialist as Record<string, unknown>).wording_choice_pending || ""), "true");
+  assert.equal(String((payload.specialist as Record<string, unknown>).wording_choice_pending || ""), "false");
+  assert.equal(String((payload.specialist as Record<string, unknown>).__dream_builder_compare_pending || ""), "true");
   assert.deepEqual((payload.specialist as Record<string, unknown>).statements, existingStatements);
   assert.deepEqual((payload.state as Record<string, unknown>).dream_builder_statements, existingStatements);
   assert.ok(payload.wordingChoiceOverride);
@@ -1212,7 +1218,8 @@ test("runPostSpecialistPipeline keeps Dream Builder compare active even when a c
     },
   } as any);
 
-  assert.equal(String((payload.specialist as Record<string, unknown>).wording_choice_pending || ""), "true");
+  assert.equal(String((payload.specialist as Record<string, unknown>).wording_choice_pending || ""), "false");
+  assert.equal(String((payload.specialist as Record<string, unknown>).__dream_builder_compare_pending || ""), "true");
   assert.deepEqual((payload.specialist as Record<string, unknown>).statements, existingStatements);
   assert.deepEqual((payload.state as Record<string, unknown>).dream_builder_statements, existingStatements);
   assert.ok(payload.wordingChoiceOverride);
@@ -1330,7 +1337,8 @@ test("runPostSpecialistPipeline repairs a near-duplicate Dream Builder append in
     specialistCalls[1]?.startsWith("__ROUTE__DREAM_EXPLAINER_OVERLAP_REPAIR__"),
     true
   );
-  assert.equal(String((payload.specialist as Record<string, unknown>).wording_choice_pending || ""), "true");
+  assert.equal(String((payload.specialist as Record<string, unknown>).wording_choice_pending || ""), "false");
+  assert.equal(String((payload.specialist as Record<string, unknown>).__dream_builder_compare_pending || ""), "true");
   assert.deepEqual((payload.specialist as Record<string, unknown>).statements, existingStatements);
   assert.deepEqual((payload.state as Record<string, unknown>).dream_builder_statements, existingStatements);
   assert.ok(payload.wordingChoiceOverride);
@@ -1338,6 +1346,130 @@ test("runPostSpecialistPipeline repairs a near-duplicate Dream Builder append in
     String((payload.specialist as Record<string, unknown>).feedback_reason_text || ""),
     /samengevoegde formulering|lijst scherper/i
   );
+});
+
+test("runPostSpecialistPipeline repairs Dream Builder REFINE overlap cases before publishing compare", async () => {
+  const existingStatements = [
+    "Over 5 tot 10 jaar wordt het maken van een positieve impact op het leven van anderen steeds belangrijker in de samenleving.",
+    "Mensen streven ernaar om iets te bouwen dat een blijvende waarde heeft, ook na hun eigen tijd.",
+    "Vrijheid in tijd en keuzes wordt een centrale waarde in hoe mensen hun leven en werk inrichten.",
+    "Trots op het eigen werk en het kunnen delen van betekenisvolle verhalen wordt steeds belangrijker voor mensen.",
+    "Bedrijven worden steeds meer een weerspiegeling van de waarden en identiteit van hun oprichters.",
+  ];
+  const specialistCalls: string[] = [];
+  const helpers = buildStrategyPipelineHarness({
+    specialistResults: [
+      {
+        action: "REFINE",
+        message: "Ik heb je persoonlijke wens omgezet naar een bredere maatschappelijke verandering.",
+        question: "Klopt dit met wat je bedoelt?",
+        feedback_reason_text:
+          "Je input gaat vooral over persoonlijke wensentaal, terwijl Dream Builder zoekt naar een bredere maatschappelijke verandering.",
+        refined_formulation:
+          "Betekenisvolle verhalen krijgen een steeds grotere rol in hoe mensen zichzelf en de samenleving zien in de komende 5 tot 10 jaar.",
+        dream: "",
+        statements: existingStatements,
+        suggest_dreambuilder: "true",
+        scoring_phase: "false",
+        clusters: [],
+        user_state: "ok",
+        wants_recap: false,
+        is_offtopic: false,
+        user_intent: "STEP_INPUT",
+        meta_topic: "NONE",
+      },
+      {
+        action: "REFINE",
+        message: "Ik heb de overlap samengebracht in een scherpere maatschappelijke formulering.",
+        question: "Past deze samengevoegde formulering beter, of wil je hem aanpassen?",
+        feedback_reason_text:
+          "Deze nieuwe zin overlapt sterk met een bestaande statement, dus een samengevoegde formulering houdt je lijst scherper.",
+        refined_formulation:
+          "Betekenisvolle verhalen krijgen een steeds grotere rol in hoe mensen zichzelf en de samenleving zien, en mensen delen die verhalen vaker als uiting van trots en verbondenheid.",
+        dream: "",
+        statements: existingStatements,
+        suggest_dreambuilder: "true",
+        scoring_phase: "false",
+        clusters: [],
+        user_state: "ok",
+        wants_recap: false,
+        is_offtopic: false,
+        user_intent: "STEP_INPUT",
+        meta_topic: "NONE",
+      },
+    ],
+    onSpecialistCall: (userMessage) => {
+      specialistCalls.push(userMessage);
+    },
+  });
+
+  const payload = await helpers.runPostSpecialistPipeline({
+    routing: {
+      userMessage:
+        "Betekenisvolle verhalen wordt steeds belangrijker voor mensen. dat willen ze ook delen als ze er trots op zijn",
+      actionCodeRaw: "",
+      responseUiFlags: null,
+      inputMode: "widget",
+      wordingChoiceEnabled: true,
+      languageResolvedThisTurn: false,
+      isBootstrapPollCall: false,
+      motivationQuotesEnabled: false,
+    },
+    rendering: {
+      uiI18nTelemetry: null,
+      lang: "nl",
+      ensureUiStrings: async (state) => state,
+    },
+    state: {
+      state: {
+        current_step: "dream",
+        active_specialist: "DreamExplainer",
+        __dream_runtime_mode: "builder_collect",
+        dream_builder_statements: existingStatements,
+        provisional_by_step: {},
+        last_specialist_result: {
+          statements: existingStatements,
+          dream: "",
+          refined_formulation: "",
+        },
+      } as any,
+      transientPendingScores: null,
+      submittedUserText:
+        "Betekenisvolle verhalen wordt steeds belangrijker voor mensen. dat willen ze ook delen als ze er trots op zijn",
+      submittedTextIntent: "content_input",
+      submittedTextAnchor: "user_input",
+      rawNormalized:
+        "Betekenisvolle verhalen wordt steeds belangrijker voor mensen. dat willen ze ook delen als ze er trots op zijn",
+      pristineAtEntry: true,
+    },
+    specialist: {
+      model: "gpt-5-mini",
+      decideOrchestration: () =>
+        ({
+          current_step: "dream",
+          specialist_to_call: "DreamExplainer",
+          show_session_intro: "false",
+          show_step_intro: "false",
+        }) as any,
+      rememberLlmCall: () => {},
+    },
+  } as any);
+
+  assert.equal(specialistCalls.length, 2);
+  assert.equal(
+    specialistCalls[1]?.startsWith("__ROUTE__DREAM_EXPLAINER_OVERLAP_REPAIR__"),
+    true
+  );
+  assert.equal(
+    String((payload.specialist as Record<string, unknown>).__dream_builder_overlap_existing_statement || ""),
+    existingStatements[3]
+  );
+  assert.equal(
+    String((payload.specialist as Record<string, unknown>).__dream_builder_overlap_incoming_statement || ""),
+    "Betekenisvolle verhalen wordt steeds belangrijker voor mensen. dat willen ze ook delen als ze er trots op zijn"
+  );
+  assert.equal(String((payload.specialist as Record<string, unknown>).wording_choice_pending || ""), "false");
+  assert.equal(String((payload.specialist as Record<string, unknown>).__dream_builder_compare_pending || ""), "true");
 });
 
 test("runPostSpecialistPipeline repairs incomplete multi-wish Dream Builder rewrites before publishing compare", async () => {
@@ -1470,7 +1602,8 @@ test("runPostSpecialistPipeline repairs incomplete multi-wish Dream Builder rewr
     specialistCalls[1]?.startsWith("__ROUTE__DREAM_EXPLAINER_MULTI_REWRITE_REPAIR__"),
     true
   );
-  assert.equal(String((payload.specialist as Record<string, unknown>).wording_choice_pending || ""), "true");
+  assert.equal(String((payload.specialist as Record<string, unknown>).wording_choice_pending || ""), "false");
+  assert.equal(String((payload.specialist as Record<string, unknown>).__dream_builder_compare_pending || ""), "true");
   assert.deepEqual((payload.wordingChoiceOverride as Record<string, unknown>)?.suggestion_items, [
     "Over 5 tot 10 jaar zullen meer mensen vooral problemen willen oplossen die voor henzelf en hun omgeving echt betekenisvol zijn.",
     "De behoefte aan helderheid en eenvoud in complexe of verwarrende domeinen zal sterk toenemen.",

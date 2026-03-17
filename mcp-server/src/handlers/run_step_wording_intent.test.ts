@@ -516,7 +516,8 @@ test("buildWordingChoiceFromTurn keeps Dream Builder statements canonical while 
   });
 
   assert.ok(result.wordingChoice);
-  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "true");
+  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "false");
+  assert.equal(String((result.specialist as Record<string, unknown>).__dream_builder_compare_pending || ""), "true");
   assert.deepEqual((result.specialist as Record<string, unknown>).statements, [
     "Over 5 tot 10 jaar zullen meer mensen streven naar werk dat een positieve impact heeft op het leven van anderen.",
   ]);
@@ -2278,9 +2279,9 @@ test("buildWordingChoiceFromTurn opens a merge choice for a near-duplicate Dream
   });
 
   assert.ok(result.wordingChoice);
-  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "true");
-  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_compare_mode || ""), "grouped_units");
-  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_variant || ""), "grouped_list_units");
+  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "false");
+  assert.equal(String((result.specialist as Record<string, unknown>).__dream_builder_compare_pending || ""), "true");
+  assert.equal(String((result.specialist as Record<string, unknown>).__dream_builder_compare_kind || ""), "batch_rewrite_compare");
   assert.deepEqual((result.specialist as Record<string, unknown>).statements, [
     "Over 5 tot 10 jaar zullen meer mensen streven naar werk dat een positieve impact heeft op het leven van anderen.",
     "Er zal meer behoefte zijn aan bedrijven en initiatieven die een blijvende waarde nalaten voor toekomstige generaties.",
@@ -2338,9 +2339,9 @@ test("buildWordingChoiceFromTurn opens a grouped compare for multiple Dream Buil
   });
 
   assert.ok(result.wordingChoice);
-  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "true");
-  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_compare_mode || ""), "grouped_units");
-  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_variant || ""), "grouped_list_units");
+  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "false");
+  assert.equal(String((result.specialist as Record<string, unknown>).__dream_builder_compare_pending || ""), "true");
+  assert.equal(String((result.specialist as Record<string, unknown>).__dream_builder_compare_kind || ""), "batch_rewrite_compare");
   assert.deepEqual((result.specialist as Record<string, unknown>).statements, []);
   assert.deepEqual((result.wordingChoice as Record<string, unknown>).user_items, [
     "I want my work to make a positive difference in people's lives.",
@@ -2396,8 +2397,8 @@ test("buildWordingChoiceFromTurn uses the real Dream Builder suggestion gate for
   });
 
   assert.ok(result.wordingChoice);
-  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "true");
-  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_compare_mode || ""), "grouped_units");
+  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "false");
+  assert.equal(String((result.specialist as Record<string, unknown>).__dream_builder_compare_pending || ""), "true");
   assert.deepEqual((result.wordingChoice as Record<string, unknown>).user_items, [
     "I want my work to make a positive difference in people's lives.",
     "I want to build something that lasts beyond me.",
@@ -2452,8 +2453,8 @@ test("buildWordingChoiceFromTurn keeps Dream Builder grouped compare active for 
   });
 
   assert.ok(result.wordingChoice);
-  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "true");
-  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_variant || ""), "grouped_list_units");
+  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "false");
+  assert.equal(String((result.specialist as Record<string, unknown>).__dream_builder_compare_pending || ""), "true");
   assert.match(
     String((result.wordingChoice as Record<string, unknown>).feedback_reason_text || ""),
     /broader change|bredere verandering/i
@@ -2629,6 +2630,10 @@ test("buildWordingChoiceFromTurn uses the merged Dream Builder rewrite instead o
       refined_formulation:
         "Ondernemingen zullen steeds vaker een weerspiegeling worden van de waarden en identiteit van hun oprichters, in plaats van alleen winst na te streven.",
       statements: previousStatements,
+      __dream_builder_overlap_existing_statement:
+        "Bedrijven zullen vaker een weerspiegeling zijn van persoonlijke waarden en identiteit, in plaats van alleen winstgedreven te zijn.",
+      __dream_builder_overlap_incoming_statement:
+        "Ondernemingen worden een weerspiegeling van eigen waarden en identiteit, in plaats van alleen de focus te leggen op winst.",
       suggest_dreambuilder: "true",
     } as Record<string, unknown>,
     userTextRaw:
@@ -2639,14 +2644,17 @@ test("buildWordingChoiceFromTurn uses the merged Dream Builder rewrite instead o
 
   assert.ok(result.wordingChoice);
   assert.deepEqual((result.wordingChoice as Record<string, unknown>).user_items, [
+    "Bedrijven zullen vaker een weerspiegeling zijn van persoonlijke waarden en identiteit, in plaats van alleen winstgedreven te zijn.",
     "Ondernemingen worden een weerspiegeling van eigen waarden en identiteit, in plaats van alleen de focus te leggen op winst.",
   ]);
   assert.deepEqual((result.wordingChoice as Record<string, unknown>).suggestion_items, [
     "Ondernemingen zullen steeds vaker een weerspiegeling worden van de waarden en identiteit van hun oprichters, in plaats van alleen winst na te streven.",
   ]);
+  assert.equal((result.wordingChoice as Record<string, unknown>).user_label, "Keep both statements:");
+  assert.equal((result.wordingChoice as Record<string, unknown>).suggestion_label, "Merge into one statement:");
   assert.match(
     String((result.wordingChoice as Record<string, unknown>).instruction || ""),
-    /Vrijheid in tijd en keuzes zal een centrale waarde worden/i
+    /keep both similar statements or merge them into one stronger statement/i
   );
 });
 
@@ -2664,50 +2672,25 @@ test("applyWordingPickSelection can keep both Dream Builder near-duplicate state
         "Er zal meer behoefte zijn aan bedrijven en initiatieven die een blijvende waarde nalaten voor toekomstige generaties.",
       ],
       last_specialist_result: {
-        wording_choice_pending: "true",
-        wording_choice_mode: "list",
-        wording_choice_target_field: "dream",
-        wording_choice_presentation: "picker",
-        wording_choice_variant: "grouped_list_units",
-        wording_choice_compare_mode: "grouped_units",
-        wording_choice_compare_cursor: "0",
-        wording_choice_compare_segments: [
+        __dream_builder_compare_pending: "true",
+        __dream_builder_compare_kind: "overlap_merge_compare",
+        __dream_builder_compare_segments: [
           { kind: "unit", unit_id: "unit_1" },
           {
             kind: "retained",
             items: ["Er zal meer behoefte zijn aan bedrijven en initiatieven die een blijvende waarde nalaten voor toekomstige generaties."],
           },
         ],
-        wording_choice_compare_units: [
-          {
-            id: "unit_1",
-            user_items: [
-              "Over 5 tot 10 jaar zullen meer mensen streven naar werk dat een positieve impact heeft op het leven van anderen.",
-              "Over 5 tot 10 jaar zal het belangrijker worden dat werk zichtbaar iets goeds doet in het leven van mensen.",
-            ],
-            suggestion_items: [
-              "Over 5 tot 10 jaar zal werk steeds vaker worden gezien als iets dat zichtbaar betekenis toevoegt aan het leven van anderen.",
-            ],
-            user_text:
-              "Over 5 tot 10 jaar zullen meer mensen streven naar werk dat een positieve impact heeft op het leven van anderen.\nOver 5 tot 10 jaar zal het belangrijker worden dat werk zichtbaar iets goeds doet in het leven van mensen.",
-            suggestion_text:
-              "Over 5 tot 10 jaar zal werk steeds vaker worden gezien als iets dat zichtbaar betekenis toevoegt aan het leven van anderen.",
-            feedback_reason_text:
-              "Deze twee statements gaan bijna over dezelfde maatschappelijke beweging, dus een samengevoegde formulering houdt je lijst scherper.",
-            resolution: "",
-            confidence: "fallback",
-          },
-        ],
-        wording_choice_user_items: [
+        __dream_builder_compare_current_items: [
           "Over 5 tot 10 jaar zullen meer mensen streven naar werk dat een positieve impact heeft op het leven van anderen.",
           "Over 5 tot 10 jaar zal het belangrijker worden dat werk zichtbaar iets goeds doet in het leven van mensen.",
         ],
-        wording_choice_suggestion_items: [
+        __dream_builder_compare_suggested_items: [
           "Over 5 tot 10 jaar zal werk steeds vaker worden gezien als iets dat zichtbaar betekenis toevoegt aan het leven van anderen.",
         ],
-        wording_choice_user_label: "Keep both statements:",
-        wording_choice_suggestion_label: "Merge into one statement:",
-        feedback_reason_text:
+        __dream_builder_compare_current_label: "Keep both statements:",
+        __dream_builder_compare_suggested_label: "Merge into one statement:",
+        __dream_builder_compare_rationale:
           "Deze twee statements gaan bijna over dezelfde maatschappelijke beweging, dus een samengevoegde formulering houdt je lijst scherper.",
       },
     } as any,
@@ -2735,50 +2718,25 @@ test("applyWordingPickSelection can merge a Dream Builder near-duplicate into on
         "Er zal meer behoefte zijn aan bedrijven en initiatieven die een blijvende waarde nalaten voor toekomstige generaties.",
       ],
       last_specialist_result: {
-        wording_choice_pending: "true",
-        wording_choice_mode: "list",
-        wording_choice_target_field: "dream",
-        wording_choice_presentation: "picker",
-        wording_choice_variant: "grouped_list_units",
-        wording_choice_compare_mode: "grouped_units",
-        wording_choice_compare_cursor: "0",
-        wording_choice_compare_segments: [
+        __dream_builder_compare_pending: "true",
+        __dream_builder_compare_kind: "overlap_merge_compare",
+        __dream_builder_compare_segments: [
           { kind: "unit", unit_id: "unit_1" },
           {
             kind: "retained",
             items: ["Er zal meer behoefte zijn aan bedrijven en initiatieven die een blijvende waarde nalaten voor toekomstige generaties."],
           },
         ],
-        wording_choice_compare_units: [
-          {
-            id: "unit_1",
-            user_items: [
-              "Over 5 tot 10 jaar zullen meer mensen streven naar werk dat een positieve impact heeft op het leven van anderen.",
-              "Over 5 tot 10 jaar zal het belangrijker worden dat werk zichtbaar iets goeds doet in het leven van mensen.",
-            ],
-            suggestion_items: [
-              "Over 5 tot 10 jaar zal werk steeds vaker worden gezien als iets dat zichtbaar betekenis toevoegt aan het leven van anderen.",
-            ],
-            user_text:
-              "Over 5 tot 10 jaar zullen meer mensen streven naar werk dat een positieve impact heeft op het leven van anderen.\nOver 5 tot 10 jaar zal het belangrijker worden dat werk zichtbaar iets goeds doet in het leven van mensen.",
-            suggestion_text:
-              "Over 5 tot 10 jaar zal werk steeds vaker worden gezien als iets dat zichtbaar betekenis toevoegt aan het leven van anderen.",
-            feedback_reason_text:
-              "Deze twee statements gaan bijna over dezelfde maatschappelijke beweging, dus een samengevoegde formulering houdt je lijst scherper.",
-            resolution: "",
-            confidence: "fallback",
-          },
-        ],
-        wording_choice_user_items: [
+        __dream_builder_compare_current_items: [
           "Over 5 tot 10 jaar zullen meer mensen streven naar werk dat een positieve impact heeft op het leven van anderen.",
           "Over 5 tot 10 jaar zal het belangrijker worden dat werk zichtbaar iets goeds doet in het leven van mensen.",
         ],
-        wording_choice_suggestion_items: [
+        __dream_builder_compare_suggested_items: [
           "Over 5 tot 10 jaar zal werk steeds vaker worden gezien als iets dat zichtbaar betekenis toevoegt aan het leven van anderen.",
         ],
-        wording_choice_user_label: "Keep both statements:",
-        wording_choice_suggestion_label: "Merge into one statement:",
-        feedback_reason_text:
+        __dream_builder_compare_current_label: "Keep both statements:",
+        __dream_builder_compare_suggested_label: "Merge into one statement:",
+        __dream_builder_compare_rationale:
           "Deze twee statements gaan bijna over dezelfde maatschappelijke beweging, dus een samengevoegde formulering houdt je lijst scherper.",
       },
     } as any,

@@ -213,14 +213,14 @@ test("readFeedbackContract normalizes grouped list compare contracts from the se
 test("readDreamBuilderContract normalizes explicit Dream Builder compare ownership contracts", () => {
   const contract = readDreamBuilderContract({
     dream_builder_contract: {
-      version: "2026-03-16.dream_builder_contract.v1",
+      version: "2026-03-17.dream_builder_contract.v2",
       phase: "compare",
       statements: ["Statement 1", "Statement 2"],
       statements_visible: true,
       body_mode: "support_only",
       question: "Welke formulering past het best?",
       compare: {
-        kind: "grouped_list_compare",
+        kind: "overlap_merge_compare",
         rationale: "Dream Builder zoekt naar bredere maatschappelijke verschuivingen.",
         current_label: "Keep both statements",
         suggested_label: "Merge into one statement",
@@ -238,7 +238,7 @@ test("readDreamBuilderContract normalizes explicit Dream Builder compare ownersh
     bodyMode: "support_only",
     question: "Welke formulering past het best?",
     compare: {
-      kind: "grouped_list_compare",
+      kind: "overlap_merge_compare",
       rationale: "Dream Builder zoekt naar bredere maatschappelijke verschuivingen.",
       currentLabel: "Keep both statements",
       suggestedLabel: "Merge into one statement",
@@ -250,6 +250,7 @@ test("readDreamBuilderContract normalizes explicit Dream Builder compare ownersh
       retainedItems: [],
       instruction: "Choose the version that fits best.",
     },
+    scoring: null,
   });
 });
 

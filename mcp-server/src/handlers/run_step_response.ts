@@ -146,11 +146,22 @@ function feedbackContractIsCompare(feedbackContract: Record<string, unknown>): b
   );
 }
 
+function dreamBuilderContractIsCompare(dreamBuilderContract: Record<string, unknown>): boolean {
+  if (trimmedString(dreamBuilderContract.phase).toLowerCase() !== "compare") return false;
+  const compare = asLogRecord(dreamBuilderContract.compare);
+  const kind = trimmedString(compare.kind).toLowerCase();
+  return kind === "batch_rewrite_compare" || kind === "overlap_merge_compare";
+}
+
 function wordingChoiceModeForLogs(
   uiWordingChoice: Record<string, unknown>,
   feedbackContract: Record<string, unknown>,
-  specialist: Record<string, unknown>
+  specialist: Record<string, unknown>,
+  dreamBuilderContract?: Record<string, unknown>
 ): string {
+  if (dreamBuilderContractIsCompare(asLogRecord(dreamBuilderContract))) {
+    return "list";
+  }
   return trimmedString(
     uiWordingChoice.mode || feedbackContract.mode || specialist.wording_choice_mode
   ).toLowerCase();
@@ -159,10 +170,14 @@ function wordingChoiceModeForLogs(
 function wordingChoiceVariantForLogs(
   uiWordingChoice: Record<string, unknown>,
   feedbackContract: Record<string, unknown>,
-  specialist: Record<string, unknown>
+  specialist: Record<string, unknown>,
+  dreamBuilderContract?: Record<string, unknown>
 ): string {
   const explicit = trimmedString(uiWordingChoice.variant || specialist.wording_choice_variant).toLowerCase();
   if (explicit) return explicit;
+  if (dreamBuilderContractIsCompare(asLogRecord(dreamBuilderContract))) {
+    return trimmedString(asLogRecord(asLogRecord(dreamBuilderContract).compare).kind).toLowerCase();
+  }
   const kind = trimmedString(feedbackContract.kind).toLowerCase();
   if (kind === "grouped_list_compare") return "grouped_list_units";
   return "";
@@ -181,6 +196,7 @@ function emitUsageAnalyticsEvents(
   const ui = asLogRecord(response.ui);
   const uiView = asLogRecord(ui.view);
   const uiWordingChoice = asLogRecord(ui.wording_choice);
+  const uiDreamBuilderContract = asLogRecord(ui.dream_builder_contract);
   const uiFeedbackContract = feedbackContractRecord(ui);
   const specialist =
     Object.keys(asLogRecord(state.last_specialist_result)).length > 0
@@ -192,10 +208,23 @@ function emitUsageAnalyticsEvents(
   const uiViewVariant = trimmedString(uiView.variant).toLowerCase();
   const wordingChoicePending = trimmedString(specialist.wording_choice_pending).toLowerCase() === "true";
   const wordingChoiceEnabled =
-    uiWordingChoice.enabled === true || feedbackContractIsCompare(uiFeedbackContract) || wordingChoicePending;
-  const wordingChoiceMode = wordingChoiceModeForLogs(uiWordingChoice, uiFeedbackContract, specialist);
+    uiWordingChoice.enabled === true ||
+    feedbackContractIsCompare(uiFeedbackContract) ||
+    dreamBuilderContractIsCompare(uiDreamBuilderContract) ||
+    wordingChoicePending;
+  const wordingChoiceMode = wordingChoiceModeForLogs(
+    uiWordingChoice,
+    uiFeedbackContract,
+    specialist,
+    uiDreamBuilderContract
+  );
   const wordingChoicePresentation = trimmedString(specialist.wording_choice_presentation).toLowerCase();
-  const wordingChoiceVariant = wordingChoiceVariantForLogs(uiWordingChoice, uiFeedbackContract, specialist);
+  const wordingChoiceVariant = wordingChoiceVariantForLogs(
+    uiWordingChoice,
+    uiFeedbackContract,
+    specialist,
+    uiDreamBuilderContract
+  );
   const wordingChoiceTargetField = trimmedString(specialist.wording_choice_target_field).toLowerCase();
   const wordingChoiceSelected = trimmedString(specialist.wording_choice_selected).toLowerCase();
   const analyticsBase = {

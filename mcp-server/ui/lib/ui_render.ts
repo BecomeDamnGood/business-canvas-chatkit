@@ -79,7 +79,7 @@ type NormalizedFeedbackContract = {
 type DreamBuilderContractPhase = "collect" | "compare" | "scoring" | "refine";
 
 type NormalizedDreamBuilderCompareContract = {
-  kind: "grouped_list_compare";
+  kind: "batch_rewrite_compare" | "overlap_merge_compare";
   rationale: string;
   currentLabel: string;
   suggestedLabel: string;
@@ -92,6 +92,13 @@ type NormalizedDreamBuilderCompareContract = {
   instruction: string;
 };
 
+type NormalizedDreamBuilderScoringContract = {
+  clusters: Array<{ theme: string; statementIndices: number[] }>;
+  scores: string[][];
+  submitEnabled: boolean;
+  submitAction: string;
+};
+
 type NormalizedDreamBuilderContract = {
   phase: DreamBuilderContractPhase;
   statements: string[];
@@ -99,6 +106,7 @@ type NormalizedDreamBuilderContract = {
   bodyMode: "" | "none" | "support_only" | "full_narrative";
   question: string;
   compare: NormalizedDreamBuilderCompareContract | null;
+  scoring: NormalizedDreamBuilderScoringContract | null;
 };
 
 function normalizeStringArray(raw: unknown): string[] {
@@ -175,9 +183,9 @@ export function readDreamBuilderContract(
   const compareRaw = toRecord(contract.compare);
   const compareKind = String(compareRaw.kind || "").trim();
   const compare =
-    compareKind === "grouped_list_compare"
+    compareKind === "batch_rewrite_compare" || compareKind === "overlap_merge_compare"
       ? {
-          kind: "grouped_list_compare" as const,
+          kind: compareKind as "batch_rewrite_compare" | "overlap_merge_compare",
           rationale: String(compareRaw.rationale || "").trim(),
           currentLabel: String(compareRaw.current_label || "").trim(),
           suggestedLabel: String(compareRaw.suggested_label || "").trim(),
@@ -190,6 +198,37 @@ export function readDreamBuilderContract(
           instruction: String(compareRaw.instruction || "").trim(),
         }
       : null;
+  const scoringRaw = toRecord(contract.scoring);
+  const scoringClusters = Array.isArray(scoringRaw.clusters)
+    ? (scoringRaw.clusters as unknown[])
+      .map((entry) => {
+        const record = toRecord(entry);
+        const statementIndices = normalizeStringArray(record.statement_indices)
+          .map((value) => Number(value))
+          .filter((value) => Number.isFinite(value) && value >= 0)
+          .map((value) => Math.trunc(value));
+        if (statementIndices.length === 0) return null;
+        return {
+          theme: String(record.theme || "").trim(),
+          statementIndices,
+        };
+      })
+      .filter((entry): entry is { theme: string; statementIndices: number[] } => Boolean(entry))
+    : [];
+  const scoringScores = Array.isArray(scoringRaw.scores)
+    ? (scoringRaw.scores as unknown[]).map((row) =>
+        Array.isArray(row) ? row.map((value) => String(value ?? "").trim()) : []
+      )
+    : [];
+  const scoring =
+    scoringClusters.length > 0
+      ? {
+          clusters: scoringClusters,
+          scores: scoringScores,
+          submitEnabled: scoringRaw.submit_enabled === true,
+          submitAction: String(scoringRaw.submit_action || "").trim(),
+        }
+      : null;
   return {
     phase,
     statements,
@@ -197,6 +236,7 @@ export function readDreamBuilderContract(
     bodyMode,
     question: String(contract.question || "").trim(),
     compare,
+    scoring,
   };
 }
 
@@ -1242,7 +1282,9 @@ function renderWordingChoicePanel(resultData: Record<string, unknown>, lang: str
     feedbackContract?.kind === "list_edit_compare" ||
     feedbackContract?.kind === "list_duplicate_merge_compare";
   const dreamBuilderCompareEnabled =
-    dreamBuilderContract?.phase === "compare" && dreamBuilderContract.compare?.kind === "grouped_list_compare";
+    dreamBuilderContract?.phase === "compare" &&
+    (dreamBuilderContract.compare?.kind === "batch_rewrite_compare" ||
+      dreamBuilderContract.compare?.kind === "overlap_merge_compare");
   const contractOwnedCompare = feedbackContractEnabled || dreamBuilderCompareEnabled;
   const enabled = contractOwnedCompare || requirePick || wording.enabled === true;
   if (!enabled) {
@@ -1862,20 +1904,13 @@ export function render(overrideToolOutput?: unknown): void {
 
   const isScoringView =
     current === "dream" &&
-    (
-      isViewModeDreamBuilderScoring ||
-      (
-        isDreamExplainerMode &&
-        String(specialist.scoring_phase || "") === "true" &&
-        Array.isArray(specialist.clusters) &&
-        (specialist.clusters as unknown[]).length > 0 &&
-        Array.isArray(statementsArray) &&
-        statementsArray.length >= 20
-      )
-    );
+    dreamBuilderContract?.phase === "scoring";
 
   if (isScoringView) {
-    const clusters = specialist.clusters as Array<{ statement_indices: number[]; theme?: string }>;
+    const clusters = (dreamBuilderContract?.scoring?.clusters || []).map((cluster) => ({
+      statement_indices: cluster.statementIndices,
+      theme: cluster.theme,
+    }));
     if (cardDescEl) cardDescEl.style.display = "none";
     if (statementsPanelEl) statementsPanelEl.style.display = "none";
     const choiceWrap = document.getElementById("choiceWrap");
@@ -1905,7 +1940,7 @@ export function render(overrideToolOutput?: unknown): void {
     const win = globalThis as unknown as { __dreamScoringScores?: unknown[][] };
     win.__dreamScoringScores = buildInitialDreamScoringScores({
       clientScores: win.__dreamScoringScores,
-      persistedScores: state.dream_scores,
+      persistedScores: dreamBuilderContract?.scoring?.scores || [],
       clusters,
     });
     const scoringScores = win.__dreamScoringScores;

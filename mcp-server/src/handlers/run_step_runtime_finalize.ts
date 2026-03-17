@@ -511,13 +511,31 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
     const { specialist } = params;
     const parts: string[] = [];
 
-    const wordingPending = String(specialist?.wording_choice_pending || "") === "true";
-    const wordingMode = String(specialist?.wording_choice_mode || "text") === "list" ? "list" : "text";
+    const contractId = String((specialist as Record<string, unknown>)?.ui_contract_id || "").trim();
+    const contractParts = contractId.split(":");
+    const contractStepId = contractParts[0] || "";
+    const dreamBuilderComparePending =
+      contractStepId === deps.dreamStepId &&
+      String(specialist?.__dream_builder_compare_pending || "").trim().toLowerCase() === "true";
+    const wordingPending =
+      String(specialist?.wording_choice_pending || "").trim().toLowerCase() === "true" ||
+      dreamBuilderComparePending;
+    const wordingMode = dreamBuilderComparePending
+      ? "list"
+      : (String(specialist?.wording_choice_mode || "text") === "list" ? "list" : "text");
     const wordingPresentation = String(specialist?.wording_choice_presentation || "").trim();
     const canonicalPendingTextSuggestion =
       wordingPending && wordingMode === "text" && wordingPresentation === "canonical";
     const wordingSuggestion = stripMarkupPreserveLines(
-      String(specialist?.wording_choice_agent_current || specialist?.refined_formulation || "")
+      dreamBuilderComparePending
+        ? String(
+            (
+              Array.isArray(specialist?.__dream_builder_compare_suggested_items)
+                ? (specialist.__dream_builder_compare_suggested_items as string[])
+                : []
+            ).join("\n") || specialist?.refined_formulation || ""
+          )
+        : String(specialist?.wording_choice_agent_current || specialist?.refined_formulation || "")
     );
     const normalizeLine = (value: string): string =>
       String(value || "")
@@ -526,9 +544,6 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
         .replace(/[.!?]+$/g, "")
         .trim();
     const suggestionNorm = normalizeLine(wordingSuggestion);
-    const contractId = String((specialist as Record<string, unknown>)?.ui_contract_id || "").trim();
-    const contractParts = contractId.split(":");
-    const contractStepId = contractParts[0] || "";
     const contractStatus = String(contractParts[1] || "").trim().toLowerCase();
     if (isSingleValueTextPickerState({ specialist, stepIdHint: contractStepId })) {
       return "";
@@ -681,12 +696,28 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
       msg = filtered.join("\n\n").trim();
     }
     if (wordingPending && wordingMode === "list" && msg) {
-      const userItems = Array.isArray(specialist?.wording_choice_user_items)
-        ? (specialist.wording_choice_user_items as string[]).map((line) => String(line || "").trim()).filter(Boolean)
-        : [];
-      const suggestionItems = Array.isArray(specialist?.wording_choice_suggestion_items)
-        ? (specialist.wording_choice_suggestion_items as string[]).map((line) => String(line || "").trim()).filter(Boolean)
-        : [];
+      const userItems = dreamBuilderComparePending
+        ? (
+            Array.isArray(specialist?.__dream_builder_compare_current_items)
+              ? (specialist.__dream_builder_compare_current_items as string[])
+              : []
+          )
+            .map((line) => String(line || "").trim())
+            .filter(Boolean)
+        : Array.isArray(specialist?.wording_choice_user_items)
+          ? (specialist.wording_choice_user_items as string[]).map((line) => String(line || "").trim()).filter(Boolean)
+          : [];
+      const suggestionItems = dreamBuilderComparePending
+        ? (
+            Array.isArray(specialist?.__dream_builder_compare_suggested_items)
+              ? (specialist.__dream_builder_compare_suggested_items as string[])
+              : []
+          )
+            .map((line) => String(line || "").trim())
+            .filter(Boolean)
+        : Array.isArray(specialist?.wording_choice_suggestion_items)
+          ? (specialist.wording_choice_suggestion_items as string[]).map((line) => String(line || "").trim()).filter(Boolean)
+          : [];
       const knownItems = deps.mergeListItems(userItems, suggestionItems);
       const fallbackItems = knownItems.length > 0 ? knownItems : deps.splitSentenceItems(wordingSuggestion);
       msg = deps.sanitizePendingListMessage(msg, fallbackItems, params.state || null, specialist);
@@ -1340,11 +1371,15 @@ export function createRunStepRuntimeFinalizeLayer<TPayload extends Record<string
         ? (stateRef.last_specialist_result as Record<string, unknown>)
         : {};
     const scoringPhase = String(lastSpecialist.scoring_phase || "").trim().toLowerCase() === "true";
-    const wordingPending = String(lastSpecialist.wording_choice_pending || "").trim().toLowerCase() === "true";
     const dreamRuntimeMode = String(response.getDreamRuntimeMode(targetState) || "").trim();
     const dreamStepId = response.getDreamStepId();
     const dreamExplainerSpecialist = response.getDreamExplainerSpecialist();
     const isDreamStep = currentStep === dreamStepId;
+    const dreamBuilderComparePending =
+      isDreamStep && String(lastSpecialist.__dream_builder_compare_pending || "").trim().toLowerCase() === "true";
+    const wordingPending =
+      String(lastSpecialist.wording_choice_pending || "").trim().toLowerCase() === "true" ||
+      dreamBuilderComparePending;
     const isDreamExplainer = activeSpecialist === dreamExplainerSpecialist;
     const isDreamSpecialist = isDreamStep && !isDreamExplainer;
     const dreamBuilderModeActive =

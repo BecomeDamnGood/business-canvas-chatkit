@@ -143,7 +143,10 @@ function stripLegacyUiWordingChoice(response: RunStepContractResponse): void {
   const feedbackKind = String(feedback.kind || "").trim();
   const dreamBuilderCompareActive =
     String(dreamBuilder.phase || "").trim() === "compare" &&
-    String(toRecord(dreamBuilder.compare).kind || "").trim() === "grouped_list_compare";
+    (
+      String(toRecord(dreamBuilder.compare).kind || "").trim() === "batch_rewrite_compare" ||
+      String(toRecord(dreamBuilder.compare).kind || "").trim() === "overlap_merge_compare"
+    );
   if (!UI_FEEDBACK_KINDS.has(feedbackKind as UiFeedbackKind) && !dreamBuilderCompareActive) return;
   delete ui.wording_choice;
   response.ui = ui;
@@ -532,6 +535,8 @@ function applyDeterministicUiActionRenderPolicy(response: RunStepContractRespons
     variant === "dream_builder_collect" ||
     variant === "dream_builder_refine" ||
     variant === "dream_builder_scoring";
+  const dreamBuilderCompareActive =
+    String(toRecord(ui.dream_builder_contract).phase || "").trim() === "compare";
   if (mode === "prestart") {
     allowedRoles.add("start");
   } else if (mode === "interactive") {
@@ -547,7 +552,7 @@ function applyDeterministicUiActionRenderPolicy(response: RunStepContractRespons
     }
     if (hasChoiceActions) {
       allowedRoles.add("choice");
-    } else if (variant === "wording_choice") {
+    } else if (variant === "wording_choice" || dreamBuilderCompareActive) {
       allowedRoles.add("wording_pick_user");
       allowedRoles.add("wording_pick_suggestion");
     } else {

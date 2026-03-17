@@ -180,11 +180,19 @@ test("attachRegistryPayload emits explicit Dream Builder compare ownership contr
     {
       ui_contract_id: "dream:incomplete_output:DREAM_EXPLAINER_MENU_SWITCH_SELF:v1",
       suggest_dreambuilder: "true",
-      wording_choice_pending: "true",
-      wording_choice_mode: "list",
-      wording_choice_presentation: "picker",
-      wording_choice_variant: "grouped_list_units",
-      wording_choice_target_field: "dream",
+      __dream_builder_compare_pending: "true",
+      __dream_builder_compare_kind: "overlap_merge_compare",
+      __dream_builder_compare_rationale: "Dream Builder zoekt naar bredere maatschappelijke verschuivingen.",
+      __dream_builder_compare_current_label: "Keep both statements",
+      __dream_builder_compare_suggested_label: "Merge into one statement",
+      __dream_builder_compare_current_items: [
+        "I want my work to make a positive difference in people's lives.",
+      ],
+      __dream_builder_compare_suggested_items: [
+        "Over 5 tot 10 jaar zal positieve impact op het leven van anderen belangrijker worden.",
+      ],
+      __dream_builder_compare_instruction: "Choose the version that fits best.",
+      __dream_builder_compare_segments: [{ kind: "unit", unit_id: "unit_1" }],
     },
     { require_wording_pick: true },
     [],
@@ -207,16 +215,18 @@ test("attachRegistryPayload emits explicit Dream Builder compare ownership contr
   );
 
   assert.deepEqual(payload.ui?.dream_builder_contract, {
-    version: "2026-03-16.dream_builder_contract.v1",
+    version: "2026-03-17.dream_builder_contract.v2",
     phase: "compare",
     statements: ["Statement 1", "Statement 2"],
     statements_visible: true,
     body_mode: "none",
     compare: {
-      kind: "grouped_list_compare",
+      kind: "overlap_merge_compare",
       rationale: "Dream Builder zoekt naar bredere maatschappelijke verschuivingen.",
       current_label: "Keep both statements",
       suggested_label: "Merge into one statement",
+      current_value: "I want my work to make a positive difference in people's lives.",
+      suggested_value: "Over 5 tot 10 jaar zal positieve impact op het leven van anderen belangrijker worden.",
       current_items: ["I want my work to make a positive difference in people's lives."],
       suggested_items: ["Over 5 tot 10 jaar zal positieve impact op het leven van anderen belangrijker worden."],
       instruction: "Choose the version that fits best.",
@@ -436,14 +446,23 @@ test("attachRegistryPayload preserves compare rationale and retained items from 
     },
     {
       ui_contract_id: "dream:incomplete_output:DREAM_EXPLAINER_MENU_SWITCH_SELF:v1",
-      wording_choice_pending: "true",
-      wording_choice_mode: "list",
-      wording_choice_variant: "grouped_list_units",
-      wording_choice_user_label: "Jouw compacte formulering",
-      wording_choice_suggestion_label: "Mijn suggestie",
-      wording_choice_user_items: ["I want to help people solve a problem they truly care about."],
-      wording_choice_suggestion_items: [
+      __dream_builder_compare_pending: "true",
+      __dream_builder_compare_kind: "batch_rewrite_compare",
+      __dream_builder_compare_rationale: "Dream Builder vraagt hier om een bredere maatschappelijke verschuiving.",
+      __dream_builder_compare_current_label: "Jouw compacte formulering",
+      __dream_builder_compare_suggested_label: "Mijn suggestie",
+      __dream_builder_compare_retained_heading: "Deze punten blijven al in de definitieve lijst:",
+      __dream_builder_compare_current_items: ["I want to help people solve a problem they truly care about."],
+      __dream_builder_compare_suggested_items: [
         "Over 5 tot 10 jaar zullen meer mensen hulp zoeken voor problemen die er echt toe doen.",
+      ],
+      __dream_builder_compare_instruction: "Kies de versie die het beste past bij het resterende verschil.",
+      __dream_builder_compare_segments: [
+        {
+          kind: "retained",
+          items: ["Eerder punt 1", "Eerder punt 2"],
+        },
+        { kind: "unit", unit_id: "unit_1" },
       ],
     },
     { require_wording_pick: true },
@@ -472,29 +491,15 @@ test("attachRegistryPayload preserves compare rationale and retained items from 
     } as any
   );
 
-  assert.deepEqual(payload.ui?.feedback_contract, {
-    version: "2026-03-16.feedback_contract.v1",
-    kind: "grouped_list_compare",
-    mode: "list",
-    rationale: "Dream Builder vraagt hier om een bredere maatschappelijke verschuiving.",
-    current_label: "Jouw compacte formulering",
-    suggested_label: "Mijn suggestie",
-    current_value: "I want to help people solve a problem they truly care about.",
-    suggested_value: "Over 5 tot 10 jaar zullen meer mensen hulp zoeken voor problemen die er echt toe doen.",
-    current_items: ["I want to help people solve a problem they truly care about."],
-    suggested_items: ["Over 5 tot 10 jaar zullen meer mensen hulp zoeken voor problemen die er echt toe doen."],
-    retained_heading: "Deze punten blijven al in de definitieve lijst:",
-    retained_items: ["Eerder punt 1", "Eerder punt 2"],
-    instruction: "Kies de versie die het beste past bij het resterende verschil.",
-  });
+  assert.equal(payload.ui?.feedback_contract, undefined);
   assert.deepEqual(payload.ui?.dream_builder_contract, {
-    version: "2026-03-16.dream_builder_contract.v1",
+    version: "2026-03-17.dream_builder_contract.v2",
     phase: "compare",
     statements: [],
     statements_visible: false,
     body_mode: "none",
     compare: {
-      kind: "grouped_list_compare",
+      kind: "batch_rewrite_compare",
       rationale: "Dream Builder vraagt hier om een bredere maatschappelijke verschuiving.",
       current_label: "Jouw compacte formulering",
       suggested_label: "Mijn suggestie",

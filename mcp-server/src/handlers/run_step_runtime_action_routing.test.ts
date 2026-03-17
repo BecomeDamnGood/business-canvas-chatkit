@@ -1197,38 +1197,16 @@ test("runStepRuntimeActionRoutingLayer treats new Dream Builder text as fresh in
     active_specialist: "DreamExplainer",
     __dream_runtime_mode: "builder_collect",
     last_specialist_result: {
-      wording_choice_pending: "true",
-      wording_choice_mode: "list",
-      wording_choice_presentation: "picker",
-      wording_choice_variant: "grouped_list_units",
-      wording_choice_compare_mode: "grouped_units",
-      wording_choice_target_field: "dream",
-      wording_choice_user_raw: "I want to help people solve a problem they truly care about.",
-      wording_choice_user_normalized: "I want to help people solve a problem they truly care about.",
-      wording_choice_agent_current:
-        "Over 5 tot 10 jaar zullen meer mensen vooral problemen willen oplossen die voor henzelf en hun omgeving echt betekenisvol zijn.",
-      wording_choice_user_items: ["I want to help people solve a problem they truly care about."],
-      wording_choice_suggestion_items: [
+      __dream_builder_compare_pending: "true",
+      __dream_builder_compare_kind: "batch_rewrite_compare",
+      __dream_builder_compare_current_items: [
+        "I want to help people solve a problem they truly care about.",
+      ],
+      __dream_builder_compare_suggested_items: [
         "Over 5 tot 10 jaar zullen meer mensen vooral problemen willen oplossen die voor henzelf en hun omgeving echt betekenisvol zijn.",
       ],
-      wording_choice_compare_units: [
-        {
-          id: "unit_1",
-          user_items: ["I want to help people solve a problem they truly care about."],
-          suggestion_items: [
-            "Over 5 tot 10 jaar zullen meer mensen vooral problemen willen oplossen die voor henzelf en hun omgeving echt betekenisvol zijn.",
-          ],
-          user_text: "I want to help people solve a problem they truly care about.",
-          suggestion_text:
-            "Over 5 tot 10 jaar zullen meer mensen vooral problemen willen oplossen die voor henzelf en hun omgeving echt betekenisvol zijn.",
-          feedback_reason_text:
-            "Dream Builder zoekt naar bredere maatschappelijke verschuivingen.",
-          resolution: "",
-          confidence: "fallback",
-        },
-      ],
-      wording_choice_compare_segments: [{ kind: "unit", unit_id: "unit_1" }],
-      wording_choice_compare_cursor: "0",
+      __dream_builder_compare_segments: [{ kind: "unit", unit_id: "unit_1" }],
+      __dream_builder_compare_rationale: "Dream Builder zoekt naar bredere maatschappelijke verschuivingen.",
       feedback_reason_text: "Dream Builder zoekt naar bredere maatschappelijke verschuivingen.",
     },
   };
@@ -1247,18 +1225,19 @@ test("runStepRuntimeActionRoutingLayer treats new Dream Builder text as fresh in
   params.wording.buildWordingChoiceFromTurn = () => ({
     specialist: {
       action: "ASK",
-      wording_choice_pending: "true",
-      wording_choice_mode: "list",
-      wording_choice_variant: "grouped_list_units",
-      wording_choice_compare_mode: "grouped_units",
-      wording_choice_user_items: [
+      wording_choice_pending: "false",
+      __dream_builder_compare_pending: "true",
+      __dream_builder_compare_kind: "batch_rewrite_compare",
+      __dream_builder_compare_current_items: [
         "I want to build a community around a shared belief or movement.",
         "I want to create opportunities for others.",
       ],
-      wording_choice_suggestion_items: [
+      __dream_builder_compare_suggested_items: [
         "Mensen zullen zich vaker verbinden rond gedeelde overtuigingen en bewegingen die groter zijn dan henzelf.",
         "Er zal meer waarde worden gehecht aan ondernemingen die kansen creëren voor anderen.",
       ],
+      __dream_builder_compare_segments: [{ kind: "unit", unit_id: "unit_1" }],
+      __dream_builder_compare_rationale: "Dream Builder zoekt naar bredere maatschappelijke verschuivingen.",
     },
     wordingChoice: {
       enabled: true,
@@ -1282,7 +1261,8 @@ test("runStepRuntimeActionRoutingLayer treats new Dream Builder text as fresh in
   assert.equal(resolveIntentCalls, 0);
   assert.equal(result.submittedTextIntent, "");
   const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
-  assert.equal(String(specialist.wording_choice_pending || ""), "false");
+  assert.notEqual(String(specialist.wording_choice_pending || ""), "true");
+  assert.equal(String(specialist.__dream_builder_compare_pending || ""), "true");
 });
 
 test("runStepRuntimeActionRoutingLayer lets refine-adjust action codes continue as specialist routes", async () => {
