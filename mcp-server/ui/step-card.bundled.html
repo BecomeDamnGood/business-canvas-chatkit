@@ -5095,8 +5095,8 @@
     const bodyMode = bodyModeRaw === "none" || bodyModeRaw === "support_only" || bodyModeRaw === "full_narrative" ? bodyModeRaw : "";
     const compareRaw = toRecord3(contract.compare);
     const compareKind = String(compareRaw.kind || "").trim();
-    const compare = compareKind === "grouped_list_compare" ? {
-      kind: "grouped_list_compare",
+    const compare = compareKind === "batch_rewrite_compare" || compareKind === "overlap_merge_compare" ? {
+      kind: compareKind,
       rationale: String(compareRaw.rationale || "").trim(),
       currentLabel: String(compareRaw.current_label || "").trim(),
       suggestedLabel: String(compareRaw.suggested_label || "").trim(),
@@ -5108,13 +5108,33 @@
       retainedItems: normalizeStringArray(compareRaw.retained_items),
       instruction: String(compareRaw.instruction || "").trim()
     } : null;
+    const scoringRaw = toRecord3(contract.scoring);
+    const scoringClusters = Array.isArray(scoringRaw.clusters) ? scoringRaw.clusters.map((entry) => {
+      const record = toRecord3(entry);
+      const statementIndices = normalizeStringArray(record.statement_indices).map((value) => Number(value)).filter((value) => Number.isFinite(value) && value >= 0).map((value) => Math.trunc(value));
+      if (statementIndices.length === 0) return null;
+      return {
+        theme: String(record.theme || "").trim(),
+        statementIndices
+      };
+    }).filter((entry) => Boolean(entry)) : [];
+    const scoringScores = Array.isArray(scoringRaw.scores) ? scoringRaw.scores.map(
+      (row) => Array.isArray(row) ? row.map((value) => String(value ?? "").trim()) : []
+    ) : [];
+    const scoring = scoringClusters.length > 0 ? {
+      clusters: scoringClusters,
+      scores: scoringScores,
+      submitEnabled: scoringRaw.submit_enabled === true,
+      submitAction: String(scoringRaw.submit_action || "").trim()
+    } : null;
     return {
       phase,
       statements,
       statementsVisible,
       bodyMode,
       question: String(contract.question || "").trim(),
-      compare
+      compare,
+      scoring
     };
   }
   function readSingleValueCardContent(uiPayload) {
@@ -5719,7 +5739,7 @@ ${String(item || "").trim()}`.trim())
     const wording = uiPayload && typeof uiPayload.wording_choice === "object" && uiPayload.wording_choice ? uiPayload.wording_choice : {};
     const requirePick = String(flags.require_wording_pick || "false") === "true";
     const feedbackContractEnabled = feedbackContract?.kind === "single_value_compare" || feedbackContract?.kind === "grouped_list_compare" || feedbackContract?.kind === "list_edit_compare" || feedbackContract?.kind === "list_duplicate_merge_compare";
-    const dreamBuilderCompareEnabled = dreamBuilderContract?.phase === "compare" && dreamBuilderContract.compare?.kind === "grouped_list_compare";
+    const dreamBuilderCompareEnabled = dreamBuilderContract?.phase === "compare" && (dreamBuilderContract.compare?.kind === "batch_rewrite_compare" || dreamBuilderContract.compare?.kind === "overlap_merge_compare");
     const contractOwnedCompare = feedbackContractEnabled || dreamBuilderCompareEnabled;
     const enabled = contractOwnedCompare || requirePick || wording.enabled === true;
     if (!enabled) {
@@ -6195,7 +6215,7 @@ ${String(item || "").trim()}`.trim())
         statementsArray = canonicalDreamStatements;
       }
     }
-    const isScoringView = current === "dream" && (isViewModeDreamBuilderScoring || isDreamExplainerMode && String(specialist.scoring_phase || "") === "true" && Array.isArray(specialist.clusters) && specialist.clusters.length > 0 && Array.isArray(statementsArray) && statementsArray.length >= 20);
+    const isScoringView = current === "dream" && dreamBuilderContract?.phase === "scoring";
     if (isScoringView) {
       let updateScoringClusterHeader2 = function(ci) {
         const clusterDiv = document.querySelector(
@@ -6239,7 +6259,10 @@ ${String(item || "").trim()}`.trim())
         });
       };
       var updateScoringClusterHeader = updateScoringClusterHeader2, allScoringFilled = allScoringFilled2, updateScoringDreamQuestionVisibility = updateScoringDreamQuestionVisibility2, syncScoringActionAvailability = syncScoringActionAvailability2;
-      const clusters = specialist.clusters;
+      const clusters = (dreamBuilderContract?.scoring?.clusters || []).map((cluster) => ({
+        statement_indices: cluster.statementIndices,
+        theme: cluster.theme
+      }));
       if (cardDescEl) cardDescEl.style.display = "none";
       if (statementsPanelEl) statementsPanelEl.style.display = "none";
       const choiceWrap = document.getElementById("choiceWrap");
@@ -6265,7 +6288,7 @@ ${String(item || "").trim()}`.trim())
       const win = globalThis;
       win.__dreamScoringScores = buildInitialDreamScoringScores({
         clientScores: win.__dreamScoringScores,
-        persistedScores: state.dream_scores,
+        persistedScores: dreamBuilderContract?.scoring?.scores || [],
         clusters
       });
       const scoringScores = win.__dreamScoringScores;
