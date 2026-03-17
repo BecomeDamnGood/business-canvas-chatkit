@@ -1464,6 +1464,8 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
     const currentSpecialistForWordingChoice = String(asStateRecord(nextState).active_specialist || "");
     const previousSpecialistForWordingChoice = asRecord(asStateRecord(state).last_specialist_result);
     const dreamRuntimeModeForWording = deps.getDreamRuntimeMode(nextState);
+    const dreamBuilderFlowActiveForWording =
+      currentStepForWordingChoice === deps.dreamStepId && dreamRuntimeModeForWording !== "self";
     const suppressWordingChoiceForAutoSuggest = autoSuggestApplied;
     const isCurrentTurnOfftopic = isTrueFlag(specialistResult?.is_offtopic);
     const eligibleForWordingChoiceTurn = deps.isWordingChoiceEligibleContext(
@@ -1491,6 +1493,7 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
       String((specialistResult as Record<string, unknown>).__business_list_turn_preclassified || "").trim() === "true";
     if (
       params.wordingChoiceEnabled &&
+      !dreamBuilderFlowActiveForWording &&
       !suppressWordingChoiceForAutoSuggest &&
       params.inputMode === "widget" &&
       wordingIntentEligible &&
@@ -1538,6 +1541,7 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
     asStateRecord(nextState).last_specialist_result = specialistResult;
     if (
       params.wordingChoiceEnabled &&
+      !dreamBuilderFlowActiveForWording &&
       params.inputMode === "widget" &&
       !suppressWordingChoiceForAutoSuggest &&
       wordingIntentEligible
@@ -1574,6 +1578,8 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
           specialistResult = clearPendingWordingChoiceFields(asRecord(specialistResult));
         }
       }
+    } else if (dreamBuilderFlowActiveForWording && isTrueFlag(specialistResult.wording_choice_pending)) {
+      specialistResult = clearPendingWordingChoiceFields(asRecord(specialistResult));
     } else if (isTrueFlag(specialistResult.wording_choice_pending)) {
       specialistResult = clearPendingWordingChoiceFields(asRecord(specialistResult));
     }
@@ -1585,9 +1591,13 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
       activeSpecialist: String(asStateRecord(nextState).active_specialist || ""),
       canonicalStatementCount: canonicalDreamBuilderStatementsCount,
       wordingChoicePending:
-        requireWordingPick ||
-        Boolean(wordingChoiceOverride?.enabled) ||
-        isTrueFlag((specialistResult as Record<string, unknown>).wording_choice_pending),
+        dreamBuilderFlowActiveForWording
+          ? String((specialistResult as Record<string, unknown>).__dream_builder_compare_pending || "").trim() === "true"
+          : (
+            requireWordingPick ||
+            Boolean(wordingChoiceOverride?.enabled) ||
+            isTrueFlag((specialistResult as Record<string, unknown>).wording_choice_pending)
+          ),
       state: nextState,
     });
     // Motivational quote injection feature removed.

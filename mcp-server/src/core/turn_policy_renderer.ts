@@ -248,8 +248,46 @@ function isConfirmActionCode(actionCode: string): boolean {
   return upper.includes("_CONFIRM") || upper.includes("FINAL_CONTINUE");
 }
 
-function shouldEnforceSingleValueConfirmVisibility(stepId: string): boolean {
-  return isSingleValueWordingStep(stepId) && String(stepId || "").trim() !== "dream";
+function shouldEnforceSingleValueConfirmVisibility(params: {
+  stepId: string;
+  state: CanvasState;
+  specialist: Record<string, unknown>;
+}): boolean {
+  const { stepId, state, specialist } = params;
+  if (!isSingleValueWordingStep(stepId)) return false;
+  if (String(stepId || "").trim() !== "dream") return true;
+  if (dreamRuntimeModeFromState(state) !== "self") return false;
+  const activeSpecialist = String((state as any).active_specialist || "").trim();
+  if (activeSpecialist === "DreamExplainer") return false;
+  if (String((specialist as any).suggest_dreambuilder || "").trim() === "true") return false;
+  const specialistMenuId = parseUiContractMenuForStep((specialist as any).ui_contract_id, stepId);
+  return !specialistMenuId.startsWith("DREAM_EXPLAINER_MENU_");
+}
+
+function shouldClearStaleDreamSelfWordingChoice(params: {
+  stepId: string;
+  state: CanvasState;
+  specialist: Record<string, unknown>;
+}): boolean {
+  const { stepId, state, specialist } = params;
+  if (stepId !== "dream") return false;
+  if (!shouldEnforceSingleValueConfirmVisibility({ stepId, state, specialist })) return false;
+  if (String((specialist as any).wording_choice_pending || "").trim().toLowerCase() !== "true") return false;
+  const targetField = String((specialist as any).wording_choice_target_field || "").trim();
+  if (targetField && targetField !== stepId) return true;
+  const presentation = String((specialist as any).wording_choice_presentation || "").trim().toLowerCase();
+  const mode = String((specialist as any).wording_choice_mode || "text").trim().toLowerCase() === "list" ? "list" : "text";
+  const suggestionText = String(
+    (specialist as any).wording_choice_agent_current || (specialist as any).refined_formulation || ""
+  ).trim();
+  if (presentation === "canonical") {
+    return !isRenderableAcceptedValue(stepId, suggestionText);
+  }
+  if (mode === "list") return true;
+  const userVariant = String(
+    (specialist as any).wording_choice_user_normalized || (specialist as any).wording_choice_user_raw || ""
+  ).trim();
+  return !(Boolean(userVariant) && isRenderableAcceptedValue(stepId, suggestionText));
 }
 
 function hasSingleValueStructuredContent(stepId: string): boolean {
@@ -1643,8 +1681,8 @@ function resolveMenuContract(params: {
     ? phaseMenu
     : defaultMenu;
   if (
-    status === "no_output" &&
-    shouldEnforceSingleValueConfirmVisibility(stepId) &&
+    (status === "no_output" || (stepId === "dream" && status === "incomplete_output")) &&
+    shouldEnforceSingleValueConfirmVisibility({ stepId, state, specialist }) &&
     menuRequiresKnownOutput(menuId)
   ) {
     menuId = menuIsValidForStep(defaultMenu) ? defaultMenu : "";
@@ -1711,6 +1749,22 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
   }
 
   const specialistForDisplay: Record<string, unknown> = { ...specialist };
+  if (shouldClearStaleDreamSelfWordingChoice({ stepId, state, specialist: specialistForDisplay })) {
+    Object.assign(specialistForDisplay, {
+      wording_choice_pending: "false",
+      wording_choice_selected: "",
+      wording_choice_mode: "",
+      wording_choice_target_field: "",
+      wording_choice_agent_current: "",
+      wording_choice_presentation: "",
+      wording_choice_variant: "",
+      wording_choice_compare_mode: "",
+      wording_choice_user_raw: "",
+      wording_choice_user_normalized: "",
+      wording_choice_user_items: [],
+      wording_choice_suggestion_items: [],
+    });
+  }
   const recapRequested = isRecapRequestedSpecialist(specialistForDisplay);
   const wordingPending = String((specialistForDisplay as any).wording_choice_pending || "").trim() === "true";
   if (isOfftopic && stepId !== "step_0") {
@@ -1929,12 +1983,16 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     specialist: specialistForMenu,
     prev: prevForMenu,
   });
-  const menuId = resolved.menuId;
+  let menuId = resolved.menuId;
   let safeActionCodes = resolved.actionCodes;
   let safeLabels = resolved.labels;
   let safeLabelKeys = resolved.labelKeys;
   const canonicalAcceptedValue = acceptedCanonicalValueForStep(stepId, state);
-  const shouldEnforceConfirmVisibility = shouldEnforceSingleValueConfirmVisibility(stepId);
+  const shouldEnforceConfirmVisibility = shouldEnforceSingleValueConfirmVisibility({
+    stepId,
+    state,
+    specialist: specialistForMenu,
+  });
   if (shouldEnforceConfirmVisibility && safeActionCodes.some((code) => isConfirmActionCode(code)) && !canonicalAcceptedValue) {
     const retainedIndices = safeActionCodes
       .map((code, idx) => (isConfirmActionCode(code) ? -1 : idx))
@@ -1992,12 +2050,13 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     !String(headline || "").trim()
       ? interactiveAskPromptFallback(state, stepId)
       : "";
-  const question =
+  let question =
     wordingPending && wordingPresentation === "picker"
       ? ""
       : stripStructuredChoiceLinesForPrompt(dreamExplainerPrompt || headline || fallbackPrompt, state);
-  const contractId = buildContractId(stepId, effectiveStatus, menuId);
-  const textKeys = buildContractTextKeys({ stepId, status: effectiveStatus, menuId });
+  let effectiveUiStatus: TurnOutputStatus = effectiveStatus;
+  let contractId = buildContractId(stepId, effectiveUiStatus, menuId);
+  let textKeys = buildContractTextKeys({ stepId, status: effectiveUiStatus, menuId });
   const pendingCanonicalValue =
     wordingPending && wordingPresentation === "canonical"
       ? String((specialistForDisplay as any).wording_choice_agent_current || specialistForDisplay.refined_formulation || "")
@@ -2153,6 +2212,51 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
         rawFeedbackReasonText: effectiveRawFeedbackReasonForDisplay,
       })
     : undefined;
+  const hasRenderableSingleValueContract =
+    Boolean(singleValueUiContent) || Boolean(singleValueUiFeedbackContract);
+  if (
+    stepId === "dream" &&
+    shouldEnforceConfirmVisibility &&
+    safeActionCodes.some((code) => isConfirmActionCode(code)) &&
+    !hasRenderableSingleValueContract
+  ) {
+    const normalizedStatus: TurnOutputStatus = effectiveStatus === "no_output" ? "no_output" : "incomplete_output";
+    const normalized = resolveMenuContract({
+      stepId,
+      status: normalizedStatus,
+      confirmEligible: false,
+      state,
+      specialist: specialistForDisplay,
+      prev,
+    });
+    menuId = normalized.menuId;
+    effectiveUiStatus = normalizedStatus;
+    effectiveConfirmEligible = false;
+    safeActionCodes = normalized.actionCodes;
+    safeLabels = normalized.labels;
+    safeLabelKeys = normalized.labelKeys;
+    contractId = buildContractId(stepId, effectiveUiStatus, menuId);
+    textKeys = buildContractTextKeys({ stepId, status: effectiveUiStatus, menuId });
+    const normalizedHeadline = contractHeadlineForState({
+      state,
+      stepId,
+      stepLabel,
+      companyName,
+      status: normalizedStatus,
+      hasOptions: safeActionCodes.length > 0,
+      strategyStatementCount: statementCount,
+    });
+    const normalizedFallbackPrompt =
+      isSemanticInvariantsV1Enabled() &&
+      (normalizedStatus === "no_output" || normalizedStatus === "incomplete_output") &&
+      !String(normalizedHeadline || "").trim()
+        ? interactiveAskPromptFallback(state, stepId)
+        : "";
+    question =
+      wordingPending && wordingPresentation === "picker"
+        ? ""
+        : stripStructuredChoiceLinesForPrompt(normalizedHeadline || normalizedFallbackPrompt, state);
+  }
   const structuredSuggestionsUiContent = buildStructuredSuggestionsUiContent({
     stepId,
     menuId,
@@ -2186,7 +2290,7 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
   };
 
   return {
-    status: effectiveStatus,
+    status: effectiveUiStatus,
     confirmEligible: effectiveConfirmEligible,
     specialist: nextSpecialist,
     uiActionCodes: safeActionCodes,

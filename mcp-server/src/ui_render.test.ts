@@ -69,6 +69,30 @@ test("shouldSuppressMainCardForWordingChoice suppresses the main card for explic
   );
 });
 
+test("shouldSuppressMainCardForWordingChoice ignores stale wording-choice payloads when Dream Builder owns the screen", () => {
+  assert.equal(
+    shouldSuppressMainCardForWordingChoice(
+      {
+        dream_builder_contract: {
+          version: "2026-03-17.dream_builder_contract.v2",
+          phase: "collect",
+          statements: ["One"],
+          statements_visible: true,
+          question: "Wat zie je nog meer veranderen?",
+        },
+        wording_choice: {
+          enabled: true,
+        },
+        flags: {
+          require_wording_pick: true,
+        },
+      },
+      "wording_choice"
+    ),
+    false
+  );
+});
+
 test("shouldSuppressMainCardForWordingChoice keeps the main card enabled for non-picker payloads", () => {
   assert.equal(
     shouldSuppressMainCardForWordingChoice(

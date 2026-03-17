@@ -331,7 +331,13 @@ export function createRunStepStateUpdateHelpers(deps: RunStepStateUpdateDeps) {
       Array.isArray(specialistResult?.statements)
     ) {
       const canonicalStatements = normalizeDreamBuilderStatements(specialistResult.statements);
-      (nextState as any).dream_builder_statements = canonicalStatements;
+      const previousCanonicalStatements = normalizeDreamBuilderStatements(
+        Array.isArray((prevState as any)?.dream_builder_statements)
+          ? ((prevState as any).dream_builder_statements as unknown[])
+          : []
+      );
+      (nextState as any).dream_builder_statements =
+        canonicalStatements.length > 0 ? canonicalStatements : previousCanonicalStatements;
     }
     if (
       decision.specialist_to_call === deps.dreamExplainerSpecialist &&

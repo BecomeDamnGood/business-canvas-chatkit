@@ -794,11 +794,7 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
   }): boolean {
     if (isBusinessListIntentScope(params.stepId)) return true;
     if (!params.dreamBuilderContext) return false;
-    return (
-      params.baseItems.length > 1 ||
-      params.userItems.length > 1 ||
-      params.suggestionItems.length > 1
-    );
+    return false;
   }
 
   function resolveBusinessListIntent(params: {
@@ -2604,37 +2600,9 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
         committedText,
         baseItems,
       });
-      const dreamBuilderWordingChoice: WordingChoiceUiPayload =
-        groupedCompareWordingChoicePayload({
-          stepId,
-          state,
-          units: comparePlan.units,
-          segments: comparePlan.segments,
-          cursor: 0,
-        }) || {
-          enabled: true,
-          mode,
-          variant: "grouped_list_units",
-          ...(String(comparePlan.initialUnit.feedback_reason_text || effectiveFeedbackReason || "").trim()
-            ? {
-                feedback_reason_text: formattedCompareFeedback(
-                  stepId,
-                  state,
-                  String(comparePlan.initialUnit.feedback_reason_text || effectiveFeedbackReason || "").trim()
-                ),
-              }
-            : {}),
-          ...(currentLabel ? { user_label: currentLabel } : {}),
-          ...(suggestedLabel ? { suggestion_label: suggestedLabel } : {}),
-          user_text: comparePlan.initialUnit.user_text,
-          suggestion_text: comparePlan.initialUnit.suggestion_text,
-          user_items: comparePlan.initialUnit.user_items,
-          suggestion_items: comparePlan.initialUnit.suggestion_items,
-          instruction,
-        };
       return {
         specialist: dreamBuilderSpecialist,
-        wordingChoice: dreamBuilderWordingChoice,
+        wordingChoice: null,
       };
     }
     const dreamBuilderSuggestedItems =
@@ -2683,19 +2651,7 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
       });
       return {
         specialist: dreamBuilderSpecialist,
-        wordingChoice: {
-          enabled: true,
-          mode,
-          variant: "grouped_list_units",
-          compare_feedback: { text: formattedCompareFeedback(stepId, state, effectiveFeedbackReason) },
-          ...(labels.userLabel ? { user_label: labels.userLabel } : {}),
-          ...(labels.suggestionLabel ? { suggestion_label: labels.suggestionLabel } : {}),
-          user_text: currentItems.join("\n"),
-          suggestion_text: suggestedItems.join("\n"),
-          user_items: currentItems,
-          suggestion_items: suggestedItems,
-          instruction,
-        },
+        wordingChoice: null,
       };
     }
     const wordingChoice: WordingChoiceUiPayload =
@@ -3131,62 +3087,9 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
       stepId === deps.dreamStepId &&
       String(specialist?.__dream_builder_compare_pending || "").trim().toLowerCase() === "true";
     const wordingChoicePending = String(specialist?.wording_choice_pending || "").trim().toLowerCase() === "true";
+    if (dreamBuilderComparePending) return null;
     if (!wordingChoicePending && !dreamBuilderComparePending) return null;
     if (!stepId) return null;
-    if (dreamBuilderComparePending) {
-      const currentItems = toTrimmedStringArray(specialist?.__dream_builder_compare_current_items).map((line) =>
-        stripMarkupPreserveLines(line)
-      );
-      const suggestedItems = toTrimmedStringArray(specialist?.__dream_builder_compare_suggested_items).map((line) =>
-        stripMarkupPreserveLines(line)
-      );
-      if (currentItems.length === 0 || suggestedItems.length === 0) return null;
-      const retainedItems = Array.isArray(specialist?.__dream_builder_compare_segments)
-        ? ((specialist.__dream_builder_compare_segments as unknown[]) as Array<Record<string, unknown>>).flatMap((segment) =>
-            String(segment?.kind || "").trim() === "retained" && Array.isArray(segment.items)
-              ? (segment.items as unknown[]).map((value) => String(value || "").trim()).filter(Boolean)
-              : []
-          )
-        : [];
-      const compareKind = String(specialist?.__dream_builder_compare_kind || "").trim();
-      const labels = wordingChoiceLabelsForStep({
-        stepId,
-        mode: "list",
-        state,
-        variant: "grouped_list_units",
-      });
-      const feedbackReasonText = String(specialist?.__dream_builder_compare_rationale || "").trim();
-      if (!feedbackReasonText) return null;
-      return {
-        enabled: true,
-        mode: "list",
-        variant: "grouped_list_units",
-        compare_feedback: { text: feedbackReasonText },
-        ...(String(specialist?.__dream_builder_compare_current_label || "").trim() || labels.userLabel
-          ? {
-              user_label:
-                String(specialist?.__dream_builder_compare_current_label || "").trim() || labels.userLabel || "",
-            }
-          : {}),
-        ...(String(specialist?.__dream_builder_compare_suggested_label || "").trim() || labels.suggestionLabel
-          ? {
-              suggestion_label:
-                String(specialist?.__dream_builder_compare_suggested_label || "").trim() ||
-                labels.suggestionLabel ||
-                "",
-            }
-          : {}),
-        user_text: currentItems.join("\n"),
-        suggestion_text: suggestedItems.join("\n"),
-        user_items: currentItems,
-        suggestion_items: suggestedItems,
-        instruction:
-          String(specialist?.__dream_builder_compare_instruction || "").trim() ||
-          (compareKind === "overlap_merge_compare"
-            ? dreamBuilderMergeInstructionForState(state)
-            : groupedListBaseInstructionForState(state)),
-      };
-    }
     if (!isWordingChoiceIntentEligibleSpecialist(specialist)) return null;
     if (
       !isWordingChoiceEligibleContext(

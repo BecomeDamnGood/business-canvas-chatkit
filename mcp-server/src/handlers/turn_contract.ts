@@ -141,13 +141,17 @@ function stripLegacyUiWordingChoice(response: RunStepContractResponse): void {
   const feedback = toRecord(ui.feedback_contract);
   const dreamBuilder = toRecord(ui.dream_builder_contract);
   const feedbackKind = String(feedback.kind || "").trim();
+  const currentStepId = String(response.current_step_id || toRecord(response.state).current_step || "").trim();
   const dreamBuilderCompareActive =
     String(dreamBuilder.phase || "").trim() === "compare" &&
     (
       String(toRecord(dreamBuilder.compare).kind || "").trim() === "batch_rewrite_compare" ||
       String(toRecord(dreamBuilder.compare).kind || "").trim() === "overlap_merge_compare"
     );
-  if (!UI_FEEDBACK_KINDS.has(feedbackKind as UiFeedbackKind) && !dreamBuilderCompareActive) return;
+  const dreamBuilderContractPresent = currentStepId === "dream" && Object.keys(dreamBuilder).length > 0;
+  if (!UI_FEEDBACK_KINDS.has(feedbackKind as UiFeedbackKind) && !dreamBuilderCompareActive && !dreamBuilderContractPresent) {
+    return;
+  }
   delete ui.wording_choice;
   response.ui = ui;
 }

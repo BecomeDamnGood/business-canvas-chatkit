@@ -462,9 +462,8 @@ function buildDreamBuilderContract(params: {
   feedbackContractPayload?: Record<string, unknown>;
 }): DreamBuilderContractPayload | undefined {
   if (params.stepId !== DREAM_STEP_ID) return undefined;
-  const compareFromFeedback =
-    normalizeDreamBuilderCompareContractFromSpecialist(params.specialist) ||
-    normalizeDreamBuilderCompareContractFromFeedback(params.feedbackContractPayload);
+  void params.feedbackContractPayload;
+  const compareFromFeedback = normalizeDreamBuilderCompareContractFromSpecialist(params.specialist);
   const scoringFromSpecialist = normalizeDreamBuilderScoringContract({
     specialist: params.specialist,
     state: params.state,
@@ -810,10 +809,14 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
       dreamBuilderFlowActive &&
       String((specialist as Record<string, unknown>).__dream_builder_compare_pending || "").trim() === "true";
     const rawFeedbackContractPayload =
-      normalizeUiFeedbackContract((specialist as Record<string, unknown>)?.ui_feedback_contract) ||
-      (dreamBuilderCompareActive
+      effectiveStepId === DREAM_STEP_ID && dreamBuilderFlowActive
         ? undefined
-        : synthesizeUiFeedbackContractFromWordingChoice(wordingChoiceOverride, flags));
+        : (
+          normalizeUiFeedbackContract((specialist as Record<string, unknown>)?.ui_feedback_contract) ||
+          (dreamBuilderCompareActive
+            ? undefined
+            : synthesizeUiFeedbackContractFromWordingChoice(wordingChoiceOverride, flags))
+        );
     let viewVariant: UiViewVariant = "default";
     if (
       effectiveStepId === DREAM_STEP_ID &&
@@ -827,7 +830,7 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
         forceDreamBuilderRefine || contractMenuId === "DREAM_EXPLAINER_MENU_REFINE"
           ? "dream_builder_refine"
           : "dream_builder_collect";
-    } else if (wordingPickPending) {
+    } else if (wordingPickPending && !(effectiveStepId === DREAM_STEP_ID && dreamBuilderFlowActive)) {
       viewVariant = "wording_choice";
     }
     const questionTextPayload =
@@ -845,8 +848,7 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
     const view = deps.deriveUiViewPayload(viewVariant);
     const dreamBuilderStatementsVisible =
       dreamBuilderFlowActive &&
-      canonicalStatementsCount > 0 &&
-      (viewVariant === "dream_builder_scoring" || canonicalStatementsCount < 20);
+      canonicalStatementsCount > 0;
     const dreamBuilderBodyMode =
       dreamBuilderFlowActive && viewVariant !== "dream_builder_scoring"
         ? inferDreamBuilderBodyMode(canonicalText)
@@ -889,6 +891,7 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
     });
     const shouldExposeLegacyWordingChoice =
       Boolean(wordingChoiceOverride) &&
+      !(effectiveStepId === DREAM_STEP_ID && dreamBuilderFlowActive) &&
       !rawFeedbackContractPayload &&
       !dreamBuilderCompareActive &&
       !(effectiveStepId === DREAM_STEP_ID && dreamBuilderContractPayload);

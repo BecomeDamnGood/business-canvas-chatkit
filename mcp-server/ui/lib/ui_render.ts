@@ -332,6 +332,8 @@ export function shouldSuppressMainCardForWordingChoice(
   const feedbackContract = readFeedbackContract(uiPayload);
   const dreamBuilderContract = readDreamBuilderContract(uiPayload);
   const uiViewVariant = String(uiViewVariantRaw || "").trim();
+  const dreamBuilderContractPresent = Boolean(dreamBuilderContract?.phase);
+  const dreamBuilderCompareActive = dreamBuilderContract?.phase === "compare";
   const wordingChoicePayload =
     uiPayload && typeof uiPayload.wording_choice === "object" && uiPayload.wording_choice
       ? (uiPayload.wording_choice as Record<string, unknown>)
@@ -342,10 +344,12 @@ export function shouldSuppressMainCardForWordingChoice(
     feedbackContract?.kind === "grouped_list_compare" ||
     feedbackContract?.kind === "list_edit_compare" ||
     feedbackContract?.kind === "list_duplicate_merge_compare" ||
-    dreamBuilderContract?.phase === "compare" ||
-    uiViewVariant === "wording_choice" ||
-    wordingChoicePayload.enabled === true ||
+    dreamBuilderCompareActive ||
+    (!dreamBuilderContractPresent && uiViewVariant === "wording_choice") ||
+    (!dreamBuilderContractPresent && wordingChoicePayload.enabled === true) ||
+    (!dreamBuilderContractPresent &&
     String(flags.require_wording_pick || "").trim() === "true"
+    )
   );
 }
 
@@ -1312,8 +1316,11 @@ function renderWordingChoicePanel(resultData: Record<string, unknown>, lang: str
     dreamBuilderContract?.phase === "compare" &&
     (dreamBuilderContract.compare?.kind === "batch_rewrite_compare" ||
       dreamBuilderContract.compare?.kind === "overlap_merge_compare");
+  const dreamBuilderContractPresent = Boolean(dreamBuilderContract?.phase);
   const contractOwnedCompare = feedbackContractEnabled || dreamBuilderCompareEnabled;
-  const enabled = contractOwnedCompare || requirePick || wording.enabled === true;
+  const enabled =
+    contractOwnedCompare ||
+    (!dreamBuilderContractPresent && (requirePick || wording.enabled === true));
   if (!enabled) {
     (wrap as HTMLElement).style.display = "none";
     return false;

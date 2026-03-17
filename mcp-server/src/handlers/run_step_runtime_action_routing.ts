@@ -873,6 +873,9 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
   let pendingBeforeTurn =
     ((state as Record<string, unknown>).last_specialist_result as Record<string, unknown>) || {};
   const currentStepId = String(state.current_step || "");
+  const dreamRuntimeModeBeforeTurn = action.getDreamRuntimeMode(state);
+  const dreamBuilderModeActive =
+    currentStepId === ids.dreamStepId && dreamRuntimeModeBeforeTurn !== "self";
   const isRulesProceedBlockTurn =
     currentStepId === ids.rulesofthegameStepId &&
     looksLikeProceedTextIntent(userMessage) &&
@@ -899,6 +902,32 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
       },
       stepIdHint: String(state.current_step || ""),
     });
+  const suspendPendingDreamBuilderCompareSpecialist = (
+    specialist: Record<string, unknown>
+  ): Record<string, unknown> => ({
+    ...normalizePendingPickerSpecialistContract({
+      specialist: {
+        ...specialist,
+        wording_choice_pending: "false",
+        wording_choice_selected: "",
+        pending_suggestion_intent: "",
+        pending_suggestion_anchor: "",
+        pending_suggestion_feedback_text: "",
+        pending_suggestion_presentation_mode: "",
+      },
+      stepIdHint: String(state.current_step || ""),
+    }),
+    __dream_builder_compare_pending: "false",
+    __dream_builder_compare_kind: "",
+    __dream_builder_compare_current_items: [],
+    __dream_builder_compare_suggested_items: [],
+    __dream_builder_compare_segments: [],
+    __dream_builder_compare_rationale: "",
+    __dream_builder_compare_current_label: "",
+    __dream_builder_compare_suggested_label: "",
+    __dream_builder_compare_retained_heading: "",
+    __dream_builder_compare_instruction: "",
+  });
   const buildWidgetResponse = async (params: {
     nextState: CanvasState;
     specialist: Record<string, unknown>;
@@ -1095,9 +1124,14 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
   if (deterministicIntroResponse) {
     return deterministicIntroResponse;
   }
+  const dreamBuilderComparePending =
+    runtime.inputMode === "widget" &&
+    dreamBuilderModeActive &&
+    String(pendingBeforeTurn.__dream_builder_compare_pending || "").trim() === "true";
   let hasPendingWordingChoice =
     runtime.wordingChoiceEnabled &&
     runtime.inputMode === "widget" &&
+    !dreamBuilderModeActive &&
     String(pendingBeforeTurn.wording_choice_pending || "") === "true" &&
     wording.isWordingChoiceEligibleContext(
       String(state.current_step || ""),
@@ -1113,22 +1147,15 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     pendingBeforeTurn = suspended;
     hasPendingWordingChoice = false;
   };
-  const dreamBuilderPendingCompare =
-    hasPendingWordingChoice &&
-    currentStepId === ids.dreamStepId &&
-    action.getDreamRuntimeMode(state) !== "self" &&
-    String(pendingBeforeTurn.wording_choice_mode || "").trim() === "list" &&
-    (
-      String(pendingBeforeTurn.wording_choice_compare_mode || "").trim() === "grouped_units" ||
-      String(pendingBeforeTurn.wording_choice_variant || "").trim() === "grouped_list_units"
-    );
   const shouldResolvePendingWordingFromTextIntent =
     hasPendingWordingChoice &&
     hasFreeTextWhilePending &&
     !isRulesProceedBlockTurn &&
-    !dreamBuilderPendingCompare;
-  if (dreamBuilderPendingCompare && hasFreeTextWhilePending) {
-    suspendPendingWordingChoice(pendingBeforeTurn);
+    !dreamBuilderComparePending;
+  if (dreamBuilderComparePending && hasFreeTextWhilePending) {
+    const suspended = suspendPendingDreamBuilderCompareSpecialist(pendingBeforeTurn);
+    (state as Record<string, unknown>).last_specialist_result = suspended;
+    pendingBeforeTurn = suspended;
   }
   if (shouldResolvePendingWordingFromTextIntent) {
     const pendingSuggestion = String(
@@ -1213,6 +1240,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     hasPendingWordingChoice =
       runtime.wordingChoiceEnabled &&
       runtime.inputMode === "widget" &&
+      !dreamBuilderModeActive &&
       String(pendingBeforeTurn.wording_choice_pending || "") === "true" &&
       wording.isWordingChoiceEligibleContext(
         String(state.current_step || ""),

@@ -163,6 +163,38 @@ test("attachRegistryPayload keeps accepted dream score submits in refine even wh
   assert.equal(payload.ui?.view?.variant, "dream_builder_refine");
 });
 
+test("attachRegistryPayload keeps Dream Builder statements visible at 20+ until scoring is actually active", () => {
+  const helpers = buildHelpers();
+  const statements = Array.from({ length: 20 }, (_, index) => `Statement ${index + 1}`);
+  const payload = helpers.attachRegistryPayload(
+    {
+      text: "Wat zie je nog meer veranderen?",
+      prompt: "",
+      current_step_id: "dream",
+      state: {
+        current_step: "dream",
+        active_specialist: "DreamExplainer",
+        __dream_runtime_mode: "builder_collect",
+        dream_builder_statements: statements,
+      } as any,
+    },
+    {
+      ui_contract_id: "dream:ASK:DREAM_EXPLAINER_MENU_SWITCH_SELF:v1",
+      suggest_dreambuilder: "true",
+      scoring_phase: "false",
+      statements: [],
+      clusters: [],
+      __canonical_text: "",
+      message: "Wat zie je nog meer veranderen?",
+    }
+  );
+
+  assert.equal(payload.ui?.view?.variant, "dream_builder_collect");
+  assert.equal(payload.ui?.view?.dream_builder_statements_visible, true);
+  assert.deepEqual(payload.ui?.dream_builder_contract?.statements, statements);
+  assert.equal(payload.ui?.dream_builder_contract?.statements_visible, true);
+});
+
 test("attachRegistryPayload emits explicit Dream Builder compare ownership contracts", () => {
   const helpers = buildHelpers();
   const payload = helpers.attachRegistryPayload(
@@ -266,6 +298,56 @@ test("attachRegistryPayload forwards structured single-value content into ui.con
     heading: "Wat denk je van de formulering",
     canonical_text: canonical,
   });
+});
+
+test("attachRegistryPayload never emits legacy wording-choice payloads for Dream Builder when the contract is present", () => {
+  const helpers = buildHelpers();
+  const payload = helpers.attachRegistryPayload(
+    {
+      text: "",
+      prompt: "Kies welke formulering past.",
+      current_step_id: "dream",
+      state: {
+        current_step: "dream",
+        active_specialist: "DreamExplainer",
+        __dream_runtime_mode: "builder_collect",
+        dream_builder_statements: ["Statement 1", "Statement 2"],
+      } as any,
+    },
+    {
+      ui_contract_id: "dream:incomplete_output:DREAM_EXPLAINER_MENU_SWITCH_SELF:v1",
+      suggest_dreambuilder: "true",
+      wording_choice_pending: "true",
+      wording_choice_mode: "list",
+      wording_choice_presentation: "picker",
+      wording_choice_variant: "grouped_list_units",
+      __dream_builder_compare_pending: "true",
+      __dream_builder_compare_kind: "batch_rewrite_compare",
+      __dream_builder_compare_rationale: "Dream Builder zoekt naar bredere maatschappelijke verschuivingen.",
+      __dream_builder_compare_current_items: ["I want to help people solve a problem they truly care about."],
+      __dream_builder_compare_suggested_items: ["Over 5 tot 10 jaar zoeken mensen steeds meer naar oplossingen die voor hen echt betekenisvol zijn."],
+      __dream_builder_compare_instruction: "Choose the version that fits best.",
+      __dream_builder_compare_segments: [{ kind: "retained", items: ["Statement 1", "Statement 2"] }],
+    },
+    { require_wording_pick: true },
+    [],
+    [],
+    {
+      enabled: true,
+      mode: "list",
+      variant: "grouped_list_units",
+      user_text: "legacy user",
+      suggestion_text: "legacy suggestion",
+      user_items: ["legacy user"],
+      suggestion_items: ["legacy suggestion"],
+      instruction: "legacy pick one",
+    }
+  );
+
+  assert.equal(payload.ui?.view?.variant, "dream_builder_collect");
+  assert.ok(payload.ui?.dream_builder_contract);
+  assert.equal("wording_choice" in (payload.ui || {}), false);
+  assert.equal(payload.ui?.flags?.require_wording_pick, true);
 });
 
 test("attachRegistryPayload does not publish Dream Builder contract in self mode just because resume statements exist", () => {

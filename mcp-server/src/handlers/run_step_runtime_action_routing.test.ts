@@ -231,6 +231,36 @@ test("runStepRuntimeActionRoutingLayer rebuilds active wording-choice as a third
   );
 });
 
+test("runStepRuntimeActionRoutingLayer keeps Dream Builder pending free text out of the legacy wording-choice runtime path", async () => {
+  const params = buildParams(false) as any;
+  params.runtime.state = {
+    current_step: "dream",
+    active_specialist: "DreamExplainer",
+    __dream_runtime_mode: "builder_collect",
+    last_specialist_result: {
+      wording_choice_pending: "true",
+      wording_choice_mode: "list",
+      wording_choice_compare_mode: "grouped_units",
+      wording_choice_variant: "grouped_list_units",
+      __dream_builder_compare_pending: "true",
+      __dream_builder_compare_kind: "overlap_merge_compare",
+      __dream_builder_compare_current_items: ["Existing statement", "User variant"],
+      __dream_builder_compare_suggested_items: ["Merged statement"],
+      __dream_builder_compare_segments: [{ kind: "retained", items: ["Another committed statement"] }],
+    },
+  };
+  params.runtime.userMessage = "Ik wil dit anders formuleren.";
+  params.action.getDreamRuntimeMode = () => "builder_collect" as const;
+  params.wording.buildWordingChoiceFromPendingSpecialist = () => {
+    throw new Error("legacy wording-choice pending path should be unreachable for Dream Builder");
+  };
+
+  const result = await runStepRuntimeActionRoutingLayer(params);
+  assert.ok(result);
+  const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
+  assert.equal(String(specialist.__dream_builder_compare_pending || ""), "false");
+});
+
 test("runStepRuntimeActionRoutingLayer accepts the pending suggestion explicitly without leaving residual picker state", async () => {
   const params = buildParams(false) as any;
   params.runtime.userMessage = "Ja, deze past goed.";
@@ -1262,7 +1292,7 @@ test("runStepRuntimeActionRoutingLayer treats new Dream Builder text as fresh in
   assert.equal(result.submittedTextIntent, "");
   const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
   assert.notEqual(String(specialist.wording_choice_pending || ""), "true");
-  assert.equal(String(specialist.__dream_builder_compare_pending || ""), "true");
+  assert.equal(String(specialist.__dream_builder_compare_pending || ""), "false");
 });
 
 test("runStepRuntimeActionRoutingLayer lets refine-adjust action codes continue as specialist routes", async () => {

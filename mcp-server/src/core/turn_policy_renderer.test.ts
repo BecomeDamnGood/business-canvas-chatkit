@@ -2151,6 +2151,50 @@ test("dream valid output keeps confirm available when staged canonical Dream sti
   assert.equal(rendered.uiActionCodes.includes("ACTION_DREAM_REFINE_CONFIRM"), true);
 });
 
+test("dream self drops stale refine confirm when no renderable dream content remains", () => {
+  const state = getDefaultState();
+  (state as any).current_step = "dream";
+  (state as any).active_specialist = "Dream";
+  (state as any).business_name = "Mindd";
+  (state as any).__ui_phase_by_step = {
+    dream: "dream:valid_output:DREAM_MENU_REFINE",
+  };
+  (state as any).provisional_by_step = {
+    dream: "Dit gaat over dat mensen het beu zijn om verkeerd voorgelicht te worden",
+  };
+  (state as any).provisional_source_by_step = {
+    dream: "user_input",
+  };
+
+  const rendered = renderFreeTextTurnPolicy({
+    stepId: "dream",
+    state,
+    specialist: {
+      action: "ASK",
+      message: "",
+      question: "",
+      wording_choice_pending: "true",
+      wording_choice_mode: "text",
+      wording_choice_target_field: "dream",
+      wording_choice_presentation: "canonical",
+      refined_formulation: "",
+      dream: "",
+      is_offtopic: false,
+    },
+    previousSpecialist: {
+      ui_contract_id: "dream:valid_output:DREAM_MENU_REFINE:v1",
+    },
+  });
+
+  assert.equal(rendered.status, "incomplete_output");
+  assert.equal(rendered.confirmEligible, false);
+  assert.equal(rendered.contractId, "dream:incomplete_output:DREAM_MENU_INTRO");
+  assert.equal(rendered.uiActionCodes.includes("ACTION_DREAM_REFINE_CONFIRM"), false);
+  assert.equal(String((rendered.specialist as any).wording_choice_pending || ""), "false");
+  assert.equal(String((rendered.specialist as any).ui_content || ""), "");
+  assert.equal(String((rendered.specialist as any).ui_feedback_contract || ""), "");
+});
+
 test("dream render ignores malformed accepted builder summaries as current dream", () => {
   const state = getDefaultState();
   const malformedSummary = [

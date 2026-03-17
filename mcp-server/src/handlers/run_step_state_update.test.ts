@@ -400,3 +400,27 @@ test("applyPostSpecialistStateMutations dedupes DreamExplainer statements canoni
     "Nieuwe mismatches ontstaan waar mens en model elkaar uitdagen.",
   ]);
 });
+
+test("applyPostSpecialistStateMutations preserves Dream Builder statements when DreamExplainer returns an empty statements array", () => {
+  const helpers = buildHelpers();
+  const existingStatements = [
+    "Mensen zoeken steeds meer naar oplossingen voor problemen die hen echt aan het hart gaan.",
+    "Gemeenschappen zullen zich vaker vormen rond gedeelde overtuigingen of bewegingen.",
+  ];
+  const next = helpers.applyPostSpecialistStateMutations({
+    prevState: {
+      current_step: "dream",
+      dream_builder_statements: existingStatements,
+      dream_scoring_statements: [],
+    } as any,
+    decision: { current_step: "dream", specialist_to_call: "DreamExplainer" } as any,
+    specialistResult: {
+      action: "REFINE",
+      statements: [],
+      refined_formulation: "Meer mensen zullen hun vertrouwen terug willen winnen in hoe informatie wordt gedeeld.",
+    } as any,
+    showSessionIntroUsed: "false",
+  });
+
+  assert.deepEqual((next as any).dream_builder_statements, existingStatements);
+});
