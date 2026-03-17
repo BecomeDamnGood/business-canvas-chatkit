@@ -129,6 +129,72 @@ function renderStructuredSuggestionsTranscript(content: {
   return parts.filter(Boolean).join("\n\n").trim();
 }
 
+function canonicalizeDreamBuilderOverlapText(input: string): string {
+  return String(input || "")
+    .toLowerCase()
+    .replace(/[’']/g, "'")
+    .replace(/[^a-z0-9\s]/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function tokenizeDreamBuilderOverlapText(input: string): string[] {
+  const comparable = canonicalizeDreamBuilderOverlapText(input);
+  return comparable ? comparable.split(" ").filter(Boolean) : [];
+}
+
+function dreamBuilderTokenJaccard(left: string, right: string): number {
+  const leftSet = new Set(tokenizeDreamBuilderOverlapText(left));
+  const rightSet = new Set(tokenizeDreamBuilderOverlapText(right));
+  if (leftSet.size === 0 || rightSet.size === 0) return 0;
+  let overlap = 0;
+  for (const token of leftSet) {
+    if (rightSet.has(token)) overlap += 1;
+  }
+  const union = leftSet.size + rightSet.size - overlap;
+  return union > 0 ? overlap / union : 0;
+}
+
+function findDreamBuilderOverlapRepairPair(params: {
+  previousStatements: string[];
+  nextStatements: string[];
+}): { existing: string; incoming: string } | null {
+  const previousStatements = readStringArray(params.previousStatements);
+  const nextStatements = readStringArray(params.nextStatements);
+  if (previousStatements.length === 0 || nextStatements.length === 0) return null;
+  const previousKeys = new Set(
+    previousStatements
+      .map((line) => canonicalizeDreamBuilderOverlapText(line))
+      .filter(Boolean)
+  );
+  const deltaStatements = nextStatements.filter((line) => {
+    const key = canonicalizeDreamBuilderOverlapText(line);
+    return Boolean(key) && !previousKeys.has(key);
+  });
+  if (deltaStatements.length !== 1) return null;
+  const incoming = deltaStatements[0];
+  const incomingComparable = canonicalizeDreamBuilderOverlapText(incoming);
+  if (!incomingComparable) return null;
+  let bestExisting = "";
+  let bestScore = 0;
+  for (const existing of previousStatements) {
+    const existingComparable = canonicalizeDreamBuilderOverlapText(existing);
+    if (!existingComparable) continue;
+    const tokenScore = dreamBuilderTokenJaccard(existing, incoming);
+    const containsScore =
+      existingComparable.includes(incomingComparable) || incomingComparable.includes(existingComparable)
+        ? 1
+        : 0;
+    const score = Math.max(tokenScore, containsScore);
+    if (score > bestScore) {
+      bestScore = score;
+      bestExisting = existing;
+    }
+  }
+  if (!bestExisting) return null;
+  return bestScore >= 0.72 ? { existing: bestExisting, incoming } : null;
+}
+
 export function shouldForcePendingWordingChoiceFromIntent(params: {
   submittedTextIntent: string;
   submittedTextAnchor: string;
@@ -821,6 +887,44 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
         };
       }
     }
+
+    if (
+      decision1.specialist_to_call === deps.dreamExplainerSpecialist &&
+      String(decision1.current_step || "") === deps.dreamStepId &&
+      !isTrueFlag(specialistResult.is_offtopic) &&
+      !isTrueFlag(specialistResult.wording_choice_pending) &&
+      String(specialistResult.action || "").trim() === "ASK" &&
+      !String(specialistResult.refined_formulation || "").trim()
+    ) {
+      const previousStatements = (() => {
+        const canonical = readStringArray(stateRecord.dream_builder_statements);
+        if (canonical.length > 0) return canonical;
+        const previousSpecialist = asRecord(stateRecord.last_specialist_result);
+        return readStringArray(previousSpecialist.statements);
+      })();
+      const overlapRepairPair = findDreamBuilderOverlapRepairPair({
+        previousStatements,
+        nextStatements: readStringArray(specialistResult.statements),
+      });
+      if (overlapRepairPair) {
+        const repairInput = [
+          deps.dreamExplainerOverlapRepairRoutePrefix,
+          `EXISTING_STATEMENT: ${overlapRepairPair.existing}`,
+          `NEW_STATEMENT: ${overlapRepairPair.incoming}`,
+        ].join("\n");
+        const overlapRepairCall = await deps.callSpecialistStrictSafe(
+          { model: params.model, state, decision: decision1, userMessage: repairInput },
+          deps.buildRoutingContext(repairInput),
+          state
+        );
+        if (overlapRepairCall.ok) {
+          params.rememberLlmCall(overlapRepairCall.value);
+          attempts = Math.max(attempts, overlapRepairCall.value.attempts);
+          specialistResult = asRecord(overlapRepairCall.value.specialistResult);
+        }
+      }
+    }
+
     if (
       String(decision1.current_step || "") === deps.dreamStepId &&
       String(decision1.specialist_to_call || "") === deps.dreamSpecialist
@@ -935,7 +1039,9 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
           structuredSuggestionRouteSpec.routeToken,
           "STRUCTURED_SUGGESTIONS_CONTRACT",
           "- return action=\"ASK\"",
+          "- keep suggestion_intro non-empty and route-standard",
           "- return exactly 3 suggestions in suggestion_items",
+          "- keep suggestion_outro non-empty",
           "- keep refined_formulation=\"\"",
           `- keep ${structuredSuggestionRouteSpec.fieldName}=\"\"`,
           "- keep feedback_reason_text=\"\"",

@@ -24,10 +24,10 @@ export type UiSingleValueContent = z.infer<typeof UiSingleValueContentZod>;
 
 export const UiStructuredSuggestionsContentZod = z.object({
   kind: z.literal("structured_suggestions"),
-  heading: z.string().optional(),
-  items: z.array(z.string()).optional(),
-  outro: z.string().optional(),
-  item_style: z.enum(["bullets", "blocks"]).optional(),
+  heading: z.string().min(1),
+  items: z.array(z.string().min(1)).length(3),
+  outro: z.string().min(1),
+  item_style: z.enum(["bullets", "blocks"]),
 });
 
 export type UiStructuredSuggestionsContent = z.infer<typeof UiStructuredSuggestionsContentZod>;

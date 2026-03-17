@@ -1507,6 +1507,47 @@ test("choose-for-me suggestion menus require explicit specialist suggestion fiel
   assert.equal(Object.prototype.hasOwnProperty.call((rendered.specialist as any) || {}, "ui_content"), false);
 });
 
+test("choose-for-me suggestion menus require a non-empty heading even when items are present", () => {
+  const state = getDefaultState();
+  (state as any).current_step = "purpose";
+  (state as any).active_specialist = "Purpose";
+  (state as any).business_name = "Mindd";
+  (state as any).ui_strings = {
+    "structuredSuggestions.outro.template": "Ik hoop dat deze suggesties je inspireren om je eigen {0} te schrijven.",
+    "offtopic.step.purpose": "bestaansreden",
+  };
+
+  const rendered = renderFreeTextTurnPolicy({
+    stepId: "purpose",
+    state,
+    specialist: {
+      action: "ASK",
+      ui_contract_id: buildUiContractId("purpose", "no_output", "PURPOSE_MENU_EXAMPLES"),
+      message: [
+        "- Wij bestaan om merken en mensen op een authentieke manier met elkaar te verbinden, zodat communicatie bijdraagt aan echte, duurzame relaties.",
+        "- Mindd wil een katalysator zijn voor oprechte interactie tussen merken en hun publiek, gedreven door de overtuiging dat echte verbinding leidt tot meer vertrouwen en betrokkenheid.",
+        "- Onze bestaansreden is het creeeren van communicatie die mensen raakt en verbindt, zodat merken een positieve en blijvende impact maken op het leven van hun doelgroep.",
+        "",
+        "Ik hoop dat deze suggesties je inspireren om je eigen bestaansreden te schrijven.",
+      ].join("\n"),
+      suggestion_intro: "",
+      suggestion_items: [
+        "Wij bestaan om merken en mensen op een authentieke manier met elkaar te verbinden, zodat communicatie bijdraagt aan echte, duurzame relaties.",
+        "Mindd wil een katalysator zijn voor oprechte interactie tussen merken en hun publiek, gedreven door de overtuiging dat echte verbinding leidt tot meer vertrouwen en betrokkenheid.",
+        "Onze bestaansreden is het creeeren van communicatie die mensen raakt en verbindt, zodat merken een positieve en blijvende impact maken op het leven van hun doelgroep.",
+      ],
+      suggestion_outro: "Ik hoop dat deze suggesties je inspireren om je eigen bestaansreden te schrijven.",
+      suggestion_item_style: "bullets",
+      question: "",
+      refined_formulation: "",
+      is_offtopic: false,
+    },
+    previousSpecialist: {},
+  });
+
+  assert.equal(Object.prototype.hasOwnProperty.call((rendered.specialist as any) || {}, "ui_content"), false);
+});
+
 test("choose-for-me suggestion menus prefer explicit specialist suggestion fields over malformed message text", () => {
   const state = getDefaultState();
   (state as any).current_step = "entity";

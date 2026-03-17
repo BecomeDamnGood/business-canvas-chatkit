@@ -61,6 +61,8 @@ export const BIGWHY_CHOOSE_FOR_ME_ROUTE_TOKEN = getChooseForMeRouteTokenForStep(
 export const ROLE_CHOOSE_FOR_ME_ROUTE_TOKEN = getChooseForMeRouteTokenForStep("role");
 export const ENTITY_CHOOSE_FOR_ME_ROUTE_TOKEN = getChooseForMeRouteTokenForStep("entity");
 export const DREAM_FORCE_REFINE_ROUTE_PREFIX = "__ROUTE__DREAM_FORCE_REFINE__";
+export const DREAM_EXPLAINER_OVERLAP_REPAIR_ROUTE_PREFIX =
+  "__ROUTE__DREAM_EXPLAINER_OVERLAP_REPAIR__";
 export const STRATEGY_CHOOSE_FOR_ME_ROUTE_TOKEN = getChooseForMeRouteTokenForStep("strategy");
 export const STRATEGY_CONSOLIDATE_ROUTE_TOKEN = "__ROUTE__STRATEGY_CONSOLIDATE__";
 export const PRESENTATION_MAKE_ROUTE_TOKEN = "__ROUTE__PRESENTATION_MAKE__";

@@ -190,6 +190,7 @@ function buildStrategyPipelineHarness(params: {
     },
     policy: {
       dreamForceRefineRoutePrefix: "__DREAM_FORCE_REFINE__",
+      dreamExplainerOverlapRepairRoutePrefix: "__ROUTE__DREAM_EXPLAINER_OVERLAP_REPAIR__",
       strategyConsolidateRouteToken: "__ROUTE__STRATEGY_CONSOLIDATE__",
       bigwhyMaxWords: 50,
       uiContractVersion: "test",
@@ -379,6 +380,7 @@ function buildRefineAdjustPipelineHarness(params: {
     },
     policy: {
       dreamForceRefineRoutePrefix: "__DREAM_FORCE_REFINE__",
+      dreamExplainerOverlapRepairRoutePrefix: "__ROUTE__DREAM_EXPLAINER_OVERLAP_REPAIR__",
       strategyConsolidateRouteToken: "__ROUTE__STRATEGY_CONSOLIDATE__",
       bigwhyMaxWords: 50,
       uiContractVersion: "test",
@@ -1109,7 +1111,7 @@ test("runPostSpecialistPipeline recovers Dream Builder compare when a material r
   assert.deepEqual((payload.state as Record<string, unknown>).dream_builder_statements, existingStatements);
   assert.ok(payload.wordingChoiceOverride);
   assert.match(
-    String(payload.wordingChoiceOverride?.compare_feedback?.text || ""),
+    String((payload.specialist as Record<string, unknown>).feedback_reason_text || ""),
     /broader change in the world/i
   );
 });
@@ -1213,6 +1215,128 @@ test("runPostSpecialistPipeline keeps Dream Builder compare active even when a c
   assert.deepEqual((payload.specialist as Record<string, unknown>).statements, existingStatements);
   assert.deepEqual((payload.state as Record<string, unknown>).dream_builder_statements, existingStatements);
   assert.ok(payload.wordingChoiceOverride);
+});
+
+test("runPostSpecialistPipeline repairs a near-duplicate Dream Builder append into a merge compare before state is updated", async () => {
+  const existingStatements = [
+    "Over 5 tot 10 jaar zal het voor mensen belangrijker zijn dat hun werk een positieve impact heeft op het leven van anderen.",
+    "Mensen zullen meer waarde hechten aan het creëren van iets dat generaties overstijgt.",
+    "Vrijheid in tijd en keuzes zal voor steeds meer mensen een centrale rol spelen in hun leven en werk.",
+    "Trots op wat je doet en deelt zal een grotere rol spelen in hoe mensen hun werk en ondernemerschap beleven.",
+    "Bedrijven zullen steeds vaker een afspiegeling zijn van de waarden en identiteit van hun oprichters.",
+  ];
+  const specialistCalls: string[] = [];
+  const helpers = buildStrategyPipelineHarness({
+    dreamRuntimeMode: "builder_collect",
+    specialistResults: [
+      {
+        action: "ASK",
+        message: "Statement 6 noted.",
+        question:
+          "Wat zie je nog meer veranderen in de toekomst, positief of negatief? Laat je verbeelding de vrije loop en formuleer dit als duidelijke uitspraken.",
+        feedback_reason_text: "",
+        refined_formulation: "",
+        dream: "",
+        statements: [
+          ...existingStatements,
+          "Bedrijven zullen een afspiegeling worden van de waarden en identiteit van hun oprichters.",
+        ],
+        suggest_dreambuilder: "true",
+        scoring_phase: "false",
+        clusters: [],
+        user_state: "ok",
+        wants_recap: false,
+        is_offtopic: false,
+        user_intent: "STEP_INPUT",
+        meta_topic: "NONE",
+      },
+      {
+        action: "REFINE",
+        message: "Ik heb de overlap samengebracht in een scherpere maatschappelijke formulering.",
+        question: "Past deze samengevoegde formulering beter, of wil je hem aanpassen?",
+        feedback_reason_text:
+          "Deze nieuwe zin overlapt sterk met een bestaande statement, dus een samengevoegde formulering houdt je lijst scherper.",
+        refined_formulation:
+          "Bedrijven zullen steeds vaker bewust functioneren als een weerspiegeling van de waarden en identiteit van hun oprichters.",
+        dream: "",
+        statements: existingStatements,
+        suggest_dreambuilder: "true",
+        scoring_phase: "false",
+        clusters: [],
+        user_state: "ok",
+        wants_recap: false,
+        is_offtopic: false,
+        user_intent: "STEP_INPUT",
+        meta_topic: "NONE",
+      },
+    ],
+    onSpecialistCall: (userMessage) => {
+      specialistCalls.push(userMessage);
+    },
+  });
+
+  const payload = await helpers.runPostSpecialistPipeline({
+    routing: {
+      userMessage: "Bedrijven zullen een afspiegeling worden van de waarden en identiteit van hun oprichters.",
+      actionCodeRaw: "",
+      responseUiFlags: null,
+      inputMode: "widget",
+      wordingChoiceEnabled: true,
+      languageResolvedThisTurn: false,
+      isBootstrapPollCall: false,
+      motivationQuotesEnabled: false,
+    },
+    rendering: {
+      uiI18nTelemetry: null,
+      lang: "nl",
+      ensureUiStrings: async (state) => state,
+    },
+    state: {
+      state: {
+        current_step: "dream",
+        active_specialist: "DreamExplainer",
+        __dream_runtime_mode: "builder_collect",
+        dream_builder_statements: existingStatements,
+        provisional_by_step: {},
+        last_specialist_result: {
+          statements: existingStatements,
+          dream: "",
+          refined_formulation: "",
+        },
+      } as any,
+      transientPendingScores: null,
+      submittedUserText: "Bedrijven zullen een afspiegeling worden van de waarden en identiteit van hun oprichters.",
+      submittedTextIntent: "content_input",
+      submittedTextAnchor: "user_input",
+      rawNormalized: "Bedrijven zullen een afspiegeling worden van de waarden en identiteit van hun oprichters.",
+      pristineAtEntry: true,
+    },
+    specialist: {
+      model: "gpt-5-mini",
+      decideOrchestration: () =>
+        ({
+          current_step: "dream",
+          specialist_to_call: "DreamExplainer",
+          show_session_intro: "false",
+          show_step_intro: "false",
+        }) as any,
+      rememberLlmCall: () => {},
+    },
+  } as any);
+
+  assert.equal(specialistCalls.length, 2);
+  assert.equal(
+    specialistCalls[1]?.startsWith("__ROUTE__DREAM_EXPLAINER_OVERLAP_REPAIR__"),
+    true
+  );
+  assert.equal(String((payload.specialist as Record<string, unknown>).wording_choice_pending || ""), "true");
+  assert.deepEqual((payload.specialist as Record<string, unknown>).statements, existingStatements);
+  assert.deepEqual((payload.state as Record<string, unknown>).dream_builder_statements, existingStatements);
+  assert.ok(payload.wordingChoiceOverride);
+  assert.match(
+    String((payload.specialist as Record<string, unknown>).feedback_reason_text || ""),
+    /samengevoegde formulering|lijst scherper/i
+  );
 });
 
 test("runPostSpecialistPipeline keeps overlapping strategy merge proposals in a grouped compare picker", async () => {
@@ -1542,6 +1666,164 @@ test("runPostSpecialistPipeline repairs Big Why suggestion routes into explicit 
   );
   assert.equal(
     specialistCalls.some((message) => String(message || "").includes("STRUCTURED_SUGGESTIONS_CONTRACT")),
+    true
+  );
+});
+
+test("runPostSpecialistPipeline repairs Purpose suggestion routes when the specialist leaves the heading blank", async () => {
+  const specialistCalls: string[] = [];
+  const helpers = buildStrategyPipelineHarness({
+    specialistResult: {
+      action: "ASK",
+      message: "",
+      question: "",
+      refined_formulation: "",
+      purpose: "",
+      suggestion_intro: "",
+      suggestion_items: [],
+      suggestion_outro: "",
+      suggestion_item_style: "bullets",
+      feedback_reason_text: "",
+      feedback_mode: "none",
+      step_support_state: "ok",
+      wants_recap: false,
+      is_offtopic: false,
+      user_intent: "STEP_INPUT",
+      meta_topic: "NONE",
+    },
+    specialistResults: [
+      {
+        action: "ASK",
+        message: [
+          "- Wij bestaan om merken en mensen op een authentieke manier met elkaar te verbinden, zodat communicatie bijdraagt aan echte, duurzame relaties.",
+          "- Mindd wil een katalysator zijn voor oprechte interactie tussen merken en hun publiek, gedreven door de overtuiging dat echte verbinding leidt tot meer vertrouwen en betrokkenheid.",
+          "- Onze bestaansreden is het creeeren van communicatie die mensen raakt en verbindt, zodat merken een positieve en blijvende impact maken op het leven van hun doelgroep.",
+          "",
+          "Ik hoop dat deze suggesties je inspireren om je eigen bestaansreden te schrijven.",
+        ].join("\n"),
+        question: "",
+        refined_formulation: "",
+        purpose: "",
+        suggestion_intro: "",
+        suggestion_items: [
+          "Wij bestaan om merken en mensen op een authentieke manier met elkaar te verbinden, zodat communicatie bijdraagt aan echte, duurzame relaties.",
+          "Mindd wil een katalysator zijn voor oprechte interactie tussen merken en hun publiek, gedreven door de overtuiging dat echte verbinding leidt tot meer vertrouwen en betrokkenheid.",
+          "Onze bestaansreden is het creeeren van communicatie die mensen raakt en verbindt, zodat merken een positieve en blijvende impact maken op het leven van hun doelgroep.",
+        ],
+        suggestion_outro: "Ik hoop dat deze suggesties je inspireren om je eigen bestaansreden te schrijven.",
+        suggestion_item_style: "bullets",
+        feedback_reason_text: "",
+        feedback_mode: "none",
+        step_support_state: "ok",
+        wants_recap: false,
+        is_offtopic: false,
+        user_intent: "STEP_INPUT",
+        meta_topic: "NONE",
+      },
+      {
+        action: "ASK",
+        message: [
+          "HIER ZIJN DRIE MOGELIJKE FORMULERINGEN VOOR DE BESTAANSREDEN VAN MINDD",
+          "- Wij bestaan om merken en mensen op een authentieke manier met elkaar te verbinden, zodat communicatie bijdraagt aan echte, duurzame relaties.",
+          "- Mindd wil een katalysator zijn voor oprechte interactie tussen merken en hun publiek, gedreven door de overtuiging dat echte verbinding leidt tot meer vertrouwen en betrokkenheid.",
+          "- Onze bestaansreden is het creeeren van communicatie die mensen raakt en verbindt, zodat merken een positieve en blijvende impact maken op het leven van hun doelgroep.",
+          "",
+          "Ik hoop dat deze suggesties je inspireren om je eigen bestaansreden te schrijven.",
+        ].join("\n"),
+        question: "",
+        refined_formulation: "",
+        purpose: "",
+        suggestion_intro: "HIER ZIJN DRIE MOGELIJKE FORMULERINGEN VOOR DE BESTAANSREDEN VAN MINDD",
+        suggestion_items: [
+          "Wij bestaan om merken en mensen op een authentieke manier met elkaar te verbinden, zodat communicatie bijdraagt aan echte, duurzame relaties.",
+          "Mindd wil een katalysator zijn voor oprechte interactie tussen merken en hun publiek, gedreven door de overtuiging dat echte verbinding leidt tot meer vertrouwen en betrokkenheid.",
+          "Onze bestaansreden is het creeeren van communicatie die mensen raakt en verbindt, zodat merken een positieve en blijvende impact maken op het leven van hun doelgroep.",
+        ],
+        suggestion_outro: "Ik hoop dat deze suggesties je inspireren om je eigen bestaansreden te schrijven.",
+        suggestion_item_style: "bullets",
+        feedback_reason_text: "",
+        feedback_mode: "none",
+        step_support_state: "ok",
+        wants_recap: false,
+        is_offtopic: false,
+        user_intent: "STEP_INPUT",
+        meta_topic: "NONE",
+      },
+    ],
+    onSpecialistCall: (userMessage) => {
+      specialistCalls.push(userMessage);
+    },
+  });
+
+  const payload = await helpers.runPostSpecialistPipeline({
+    routing: {
+      userMessage: "__ROUTE__PURPOSE_GIVE_EXAMPLES__",
+      actionCodeRaw: "",
+      responseUiFlags: null,
+      inputMode: "widget",
+      wordingChoiceEnabled: true,
+      languageResolvedThisTurn: false,
+      isBootstrapPollCall: false,
+      motivationQuotesEnabled: false,
+    },
+    rendering: {
+      uiI18nTelemetry: null,
+      lang: "nl",
+      ensureUiStrings: async (state) => ({
+        ...state,
+        ui_strings: {
+          "structuredSuggestions.outro.template": "Ik hoop dat deze suggesties je inspireren om je eigen {0} te schrijven.",
+          "offtopic.step.purpose": "bestaansreden",
+        },
+      }),
+    },
+    state: {
+      state: {
+        current_step: "purpose",
+        active_specialist: "Purpose",
+        business_name: "Mindd",
+        provisional_by_step: {},
+        last_specialist_result: {},
+      } as any,
+      transientPendingScores: null,
+      submittedUserText: "",
+      submittedTextIntent: "",
+      submittedTextAnchor: "",
+      rawNormalized: "__ROUTE__PURPOSE_GIVE_EXAMPLES__",
+      pristineAtEntry: false,
+    },
+    specialist: {
+      model: "gpt-5-mini",
+      decideOrchestration: () =>
+        ({
+          current_step: "purpose",
+          specialist_to_call: "Purpose",
+          show_session_intro: "false",
+          show_step_intro: "false",
+        }) as any,
+      rememberLlmCall: () => {},
+    },
+  } as any);
+
+  assert.equal(
+    String((payload.specialist as Record<string, unknown>).suggestion_intro || ""),
+    "HIER ZIJN DRIE MOGELIJKE FORMULERINGEN VOOR DE BESTAANSREDEN VAN MINDD:"
+  );
+  assert.deepEqual((payload.specialist as Record<string, unknown>).suggestion_items, [
+    "Wij bestaan om merken en mensen op een authentieke manier met elkaar te verbinden, zodat communicatie bijdraagt aan echte, duurzame relaties.",
+    "Mindd wil een katalysator zijn voor oprechte interactie tussen merken en hun publiek, gedreven door de overtuiging dat echte verbinding leidt tot meer vertrouwen en betrokkenheid.",
+    "Onze bestaansreden is het creeeren van communicatie die mensen raakt en verbindt, zodat merken een positieve en blijvende impact maken op het leven van hun doelgroep.",
+  ]);
+  assert.equal(
+    String((payload.specialist as Record<string, unknown>).suggestion_outro || ""),
+    "Ik hoop dat deze suggesties je inspireren om je eigen bestaansreden te schrijven."
+  );
+  assert.equal(
+    specialistCalls.some((message) => String(message || "").includes("STRUCTURED_SUGGESTIONS_CONTRACT")),
+    true
+  );
+  assert.equal(
+    specialistCalls.some((message) => String(message || "").includes("suggestion_intro non-empty")),
     true
   );
 });

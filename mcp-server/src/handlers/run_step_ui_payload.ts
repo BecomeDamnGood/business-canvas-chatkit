@@ -4,6 +4,7 @@ import { MENU_LABEL_DEFAULTS, labelKeyForMenuAction } from "../core/menu_contrac
 import { NEXT_MENU_BY_ACTIONCODE, UI_CONTRACT_VERSION } from "../core/ui_contract_matrix.js";
 import { parseUiContractMenuForStep, parseUiContractStatusForStep } from "../core/ui_contract_id.js";
 import { currentTurnSupportMode } from "../core/stuck_support.js";
+import { synthesizeUiFeedbackContractFromWordingChoice } from "../core/ui_feedback_contract.js";
 import { DREAM_STEP_ID } from "../steps/dream.js";
 import type { RenderedAction, UiContentPayload } from "../contracts/ui_actions.js";
 import type { TurnOutputStatus } from "../core/turn_policy_renderer.js";
@@ -213,12 +214,12 @@ function normalizeUiContentPayload(raw: unknown): UiContentPayload | undefined {
       : [];
     const outro = String(record.outro || "").trim();
     const itemStyle = String(record.item_style || "").trim() === "blocks" ? "blocks" : "bullets";
-    if (!heading && items.length === 0 && !outro) return undefined;
+    if (!heading || items.length !== 3 || !outro) return undefined;
     return {
       kind: "structured_suggestions",
-      ...(heading ? { heading } : {}),
-      ...(items.length > 0 ? { items } : {}),
-      ...(outro ? { outro } : {}),
+      heading,
+      items,
+      outro,
       item_style: itemStyle,
     };
   }
@@ -292,55 +293,6 @@ function normalizeUiFeedbackContract(raw: unknown): Record<string, unknown> | un
   };
 }
 
-function buildFeedbackContractFromWordingChoice(
-  wordingChoice: WordingChoiceUiPayload | null | undefined
-): Record<string, unknown> | undefined {
-  if (!wordingChoice || wordingChoice.enabled !== true) return undefined;
-  const mode = String(wordingChoice.mode || "text").trim().toLowerCase() === "list" ? "list" : "text";
-  const variant = String(wordingChoice.variant || "").trim().toLowerCase();
-  const rationale = String(wordingChoice.compare_feedback?.text || "").trim();
-  const currentLabel = String(wordingChoice.user_label || "").trim();
-  const suggestedLabel = String(wordingChoice.suggestion_label || "").trim();
-  const currentValue = String(wordingChoice.user_text || "").trim();
-  const suggestedValue = String(wordingChoice.suggestion_text || "").trim();
-  const instruction = String(wordingChoice.instruction || "").trim();
-  const currentItems = Array.isArray(wordingChoice.user_items)
-    ? wordingChoice.user_items.map((value) => String(value || "").trim()).filter(Boolean)
-    : [];
-  const suggestedItems = Array.isArray(wordingChoice.suggestion_items)
-    ? wordingChoice.suggestion_items.map((value) => String(value || "").trim()).filter(Boolean)
-    : [];
-  if (
-    !rationale &&
-    !currentLabel &&
-    !suggestedLabel &&
-    !currentValue &&
-    !suggestedValue &&
-    !instruction &&
-    currentItems.length === 0 &&
-    suggestedItems.length === 0
-  ) {
-    return undefined;
-  }
-  const kind =
-    mode === "list"
-      ? (variant === "grouped_list_units" ? "grouped_list_compare" : "list_edit_compare")
-      : "single_value_compare";
-  return {
-    version: "2026-03-16.feedback_contract.v1",
-    kind,
-    mode,
-    ...(rationale ? { rationale } : {}),
-    ...(currentLabel ? { current_label: currentLabel } : {}),
-    ...(suggestedLabel ? { suggested_label: suggestedLabel } : {}),
-    ...(currentValue ? { current_value: currentValue } : {}),
-    ...(suggestedValue ? { suggested_value: suggestedValue } : {}),
-    ...(currentItems.length > 0 ? { current_items: currentItems } : {}),
-    ...(suggestedItems.length > 0 ? { suggested_items: suggestedItems } : {}),
-    ...(instruction ? { instruction } : {}),
-  };
-}
-
 function normalizeDreamBuilderCompareContract(raw: unknown): DreamBuilderCompareContractPayload | undefined {
   const feedback = normalizeUiFeedbackContract(raw);
   if (!feedback) return undefined;
@@ -390,16 +342,16 @@ function buildDreamBuilderContract(params: {
   feedbackContractPayload?: Record<string, unknown>;
 }): DreamBuilderContractPayload | undefined {
   if (params.stepId !== DREAM_STEP_ID) return undefined;
+  const compareFromFeedback = normalizeDreamBuilderCompareContract(params.feedbackContractPayload);
   const hasDreamBuilderContext =
     params.dreamBuilderFlowActive ||
     params.viewVariant === "dream_builder_collect" ||
     params.viewVariant === "dream_builder_refine" ||
     params.viewVariant === "dream_builder_scoring" ||
-    params.statements.length > 0;
+    Boolean(compareFromFeedback);
   if (!hasDreamBuilderContext) return undefined;
 
   let phase: DreamBuilderContractPhase = "collect";
-  const compareFromFeedback = normalizeDreamBuilderCompareContract(params.feedbackContractPayload);
   if (params.viewVariant === "dream_builder_scoring") {
     phase = "scoring";
   } else if (compareFromFeedback) {
@@ -746,7 +698,7 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
     const rawContentPayload = normalizeUiContentPayload((specialist as Record<string, unknown>)?.ui_content);
     const rawFeedbackContractPayload =
       normalizeUiFeedbackContract((specialist as Record<string, unknown>)?.ui_feedback_contract) ||
-      buildFeedbackContractFromWordingChoice(wordingChoiceOverride);
+      synthesizeUiFeedbackContractFromWordingChoice(wordingChoiceOverride, flags);
     const shouldSuppressSingleValueContent =
       Boolean(rawContentPayload) &&
       isSingleValueTextPickerState({

@@ -256,6 +256,41 @@ test("attachRegistryPayload forwards structured single-value content into ui.con
   });
 });
 
+test("attachRegistryPayload does not publish Dream Builder contract in self mode just because resume statements exist", () => {
+  const helpers = buildHelpers();
+  const payload = helpers.attachRegistryPayload(
+    {
+      text: [
+        "Ga verder met de Droom-oefening.",
+        "Dat is een sterke manier om te beginnen.",
+      ].join("\n\n"),
+      prompt: "Definieer je droom voor Mindd of kies een optie.",
+      current_step_id: "dream",
+      state: {
+        current_step: "dream",
+        active_specialist: "Dream",
+        __dream_runtime_mode: "self",
+        dream_builder_statements: ["Statement 1", "Statement 2"],
+      } as any,
+    },
+    {
+      ui_contract_id: "dream:no_output:DREAM_MENU_INTRO:v1",
+      suggest_dreambuilder: "false",
+      message: [
+        "Ga verder met de Droom-oefening.",
+        "Dat is een sterke manier om te beginnen.",
+      ].join("\n\n"),
+      question: "",
+      refined_formulation: "",
+      dream: "",
+    }
+  );
+
+  assert.equal(payload.ui?.view?.variant, undefined);
+  assert.equal(payload.ui?.view?.dream_builder_statements_visible, undefined);
+  assert.equal(payload.ui?.dream_builder_contract, undefined);
+});
+
 test("attachRegistryPayload forwards structured suggestion content into ui.content", () => {
   const helpers = buildHelpers();
   const payload = helpers.attachRegistryPayload(
@@ -381,6 +416,94 @@ test("attachRegistryPayload synthesizes compare feedback contracts from wording-
     current_items: ["Punt 1", "Punt 2"],
     suggested_items: ["Voorstel A"],
     instruction: "Kies de versie die het beste past.",
+  });
+  assert.equal("wording_choice" in (payload.ui || {}), false);
+});
+
+test("attachRegistryPayload preserves compare rationale and retained items from feedback_reason_text-driven wording-choice payloads", () => {
+  const helpers = buildHelpers();
+  const payload = helpers.attachRegistryPayload(
+    {
+      text: "",
+      prompt: "",
+      current_step_id: "dream",
+      state: {
+        current_step: "dream",
+        active_specialist: "DreamExplainer",
+      } as any,
+    },
+    {
+      ui_contract_id: "dream:incomplete_output:DREAM_EXPLAINER_MENU_SWITCH_SELF:v1",
+      wording_choice_pending: "true",
+      wording_choice_mode: "list",
+      wording_choice_variant: "grouped_list_units",
+      wording_choice_user_label: "Jouw compacte formulering",
+      wording_choice_suggestion_label: "Mijn suggestie",
+      wording_choice_user_items: ["I want to help people solve a problem they truly care about."],
+      wording_choice_suggestion_items: [
+        "Over 5 tot 10 jaar zullen meer mensen hulp zoeken voor problemen die er echt toe doen.",
+      ],
+    },
+    { require_wording_pick: true },
+    [],
+    [],
+    {
+      enabled: true,
+      mode: "list",
+      variant: "grouped_list_units",
+      user_text: "I want to help people solve a problem they truly care about.",
+      suggestion_text: "Over 5 tot 10 jaar zullen meer mensen hulp zoeken voor problemen die er echt toe doen.",
+      feedback_reason_text: "Dream Builder vraagt hier om een bredere maatschappelijke verschuiving.",
+      user_label: "Jouw compacte formulering",
+      suggestion_label: "Mijn suggestie",
+      user_items: ["I want to help people solve a problem they truly care about."],
+      suggestion_items: [
+        "Over 5 tot 10 jaar zullen meer mensen hulp zoeken voor problemen die er echt toe doen.",
+      ],
+      instruction: [
+        "Deze punten blijven al in de definitieve lijst:",
+        "• Eerder punt 1",
+        "• Eerder punt 2",
+        "",
+        "Kies de versie die het beste past bij het resterende verschil.",
+      ].join("\n"),
+    } as any
+  );
+
+  assert.deepEqual(payload.ui?.feedback_contract, {
+    version: "2026-03-16.feedback_contract.v1",
+    kind: "grouped_list_compare",
+    mode: "list",
+    rationale: "Dream Builder vraagt hier om een bredere maatschappelijke verschuiving.",
+    current_label: "Jouw compacte formulering",
+    suggested_label: "Mijn suggestie",
+    current_value: "I want to help people solve a problem they truly care about.",
+    suggested_value: "Over 5 tot 10 jaar zullen meer mensen hulp zoeken voor problemen die er echt toe doen.",
+    current_items: ["I want to help people solve a problem they truly care about."],
+    suggested_items: ["Over 5 tot 10 jaar zullen meer mensen hulp zoeken voor problemen die er echt toe doen."],
+    retained_heading: "Deze punten blijven al in de definitieve lijst:",
+    retained_items: ["Eerder punt 1", "Eerder punt 2"],
+    instruction: "Kies de versie die het beste past bij het resterende verschil.",
+  });
+  assert.deepEqual(payload.ui?.dream_builder_contract, {
+    version: "2026-03-16.dream_builder_contract.v1",
+    phase: "compare",
+    statements: [],
+    statements_visible: false,
+    body_mode: "none",
+    compare: {
+      kind: "grouped_list_compare",
+      rationale: "Dream Builder vraagt hier om een bredere maatschappelijke verschuiving.",
+      current_label: "Jouw compacte formulering",
+      suggested_label: "Mijn suggestie",
+      current_value: "I want to help people solve a problem they truly care about.",
+      suggested_value: "Over 5 tot 10 jaar zullen meer mensen hulp zoeken voor problemen die er echt toe doen.",
+      current_items: ["I want to help people solve a problem they truly care about."],
+      suggested_items: ["Over 5 tot 10 jaar zullen meer mensen hulp zoeken voor problemen die er echt toe doen."],
+      retained_heading: "Deze punten blijven al in de definitieve lijst:",
+      retained_items: ["Eerder punt 1", "Eerder punt 2"],
+      instruction: "Kies de versie die het beste past bij het resterende verschil.",
+    },
   });
   assert.equal("wording_choice" in (payload.ui || {}), false);
 });

@@ -238,6 +238,14 @@ If USER_MESSAGE is exactly one of these tokens, follow the specified route:
 - "__ROUTE__DREAM_EXPLAINER_FINISH_LATER__" → Follow route: finish the Dream exercise for now with a gentle closing response and suggest_dreambuilder="false".
 - "__ROUTE__DREAM_EXPLAINER_REFINE__" → Follow route: refine the current Dream candidate before continuing.
 - "__ROUTE__DREAM_EXPLAINER_CONTINUE_TO_PURPOSE__" → Follow route: confirm the current Dream and exit the Dream exercise to continue to Purpose with suggest_dreambuilder="false".
+- "__ROUTE__DREAM_EXPLAINER_OVERLAP_REPAIR__" → Internal route: compare EXISTING_STATEMENT and NEW_STATEMENT when they strongly overlap.
+  Required behavior:
+  - If they are materially the same movement/change, output action="REFINE".
+  - refined_formulation MUST be one merged stronger statement.
+  - statements MUST stay equal to PREVIOUS_STATEMENTS unchanged.
+  - feedback_reason_text must be one short localized sentence explaining that the new line overlaps with an existing statement and that a merge keeps the list sharper.
+  - question must invite the user to choose or adjust the merged wording before anything is added.
+  - If they are clearly different, output action="ASK", feedback_reason_text="", and append NEW_STATEMENT to statements.
 
 (Output in the target language only.)
 
@@ -350,6 +358,13 @@ Required behavior (hard):
   - feedback_reason_text must be one short localized sentence explaining the strongest reason the broader external phrasing is needed.
   - message must stay compact and coaching-oriented. Do not claim the rewrite was already added. Do not print a bulleted or numbered list of statements in message.
   - question must invite the user to choose or adjust the wording before it is added.
+
+Near-duplicate statements against PREVIOUS_STATEMENTS
+- Before appending a new Dream Builder statement, check whether it strongly overlaps with an existing statement in PREVIOUS_STATEMENTS.
+- If the new line is mainly a paraphrase, tense variant, or lightly reworded version of an existing statement, do NOT append it directly.
+- Instead, output action="REFINE" with one merged stronger statement in refined_formulation.
+- In that overlap case, statements MUST stay equal to PREVIOUS_STATEMENTS unchanged until the user confirms or picks the merged wording.
+- Only use direct add (ASK) when the new statement is meaningfully distinct from existing statements.
 
 Multiple personal wishes in one message
 - If the user gives multiple personal wishes in one message (multiple "I want…"-style sentences), rewrite each into one societal sentence.

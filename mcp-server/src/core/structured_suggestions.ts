@@ -8,9 +8,9 @@ export type StructuredSuggestionsItemStyle = "bullets" | "blocks";
 
 export type StructuredSuggestionsContent = {
   kind: "structured_suggestions";
-  heading?: string;
+  heading: string;
   items: string[];
-  outro?: string;
+  outro: string;
   item_style: StructuredSuggestionsItemStyle;
 };
 
@@ -58,6 +58,20 @@ function structuredSuggestionOutro(stepId: string, uiStrings: Record<string, unk
   return template.replace(/\{0\}/g, stepLabel).trim();
 }
 
+function hasCompleteStructuredSuggestionsContract(params: {
+  heading: string;
+  items: string[];
+  outro: string;
+}): boolean {
+  return Boolean(
+    String(params.heading || "").trim() &&
+      Array.isArray(params.items) &&
+      params.items.length === 3 &&
+      params.items.every((item) => String(item || "").trim()) &&
+      String(params.outro || "").trim()
+  );
+}
+
 function extractExplicitItems(
   specialist: Record<string, unknown> | null | undefined,
   itemKind: StepRegistryChooseForMeItemKind
@@ -102,14 +116,27 @@ export function deriveStructuredSuggestionsContent(params: {
   const explicitItems = extractExplicitItems(params.specialist || null, itemKind);
   if (explicitItems.length !== 3) return null;
 
-  const rawHeading = String((params.specialist as Record<string, unknown> | null)?.suggestion_intro || "").trim();
+  const rawHeading = ensureHeading(
+    String((params.specialist as Record<string, unknown> | null)?.suggestion_intro || "").trim()
+  );
   const rawOutro = String((params.specialist as Record<string, unknown> | null)?.suggestion_outro || "").trim();
+  const resolvedOutro = rawOutro || expectedOutro;
+
+  if (
+    !hasCompleteStructuredSuggestionsContract({
+      heading: rawHeading,
+      items: explicitItems,
+      outro: resolvedOutro,
+    })
+  ) {
+    return null;
+  }
 
   return {
     kind: "structured_suggestions",
-    ...(rawHeading ? { heading: ensureHeading(rawHeading) } : {}),
+    heading: rawHeading,
     items: explicitItems,
-    ...(rawOutro || expectedOutro ? { outro: rawOutro || expectedOutro } : {}),
+    outro: resolvedOutro,
     item_style: itemStyle,
   };
 }

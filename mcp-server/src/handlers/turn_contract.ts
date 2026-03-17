@@ -1,6 +1,7 @@
 import { ACTIONCODE_REGISTRY } from "../core/actioncode_registry.js";
 import { VIEW_CONTRACT_VERSION as LOCALE_START_VIEW_CONTRACT_VERSION } from "../core/bootstrap_runtime.js";
 import type { CanvasState } from "../core/state.js";
+import { normalizeStringArray, synthesizeUiFeedbackContractFromWordingChoice } from "../core/ui_feedback_contract.js";
 import { labelKeyForMenuAction } from "../core/menu_contract.js";
 import { UI_STRINGS_DEFAULT, UI_STRINGS_WITH_MENU_KEYS } from "../i18n/ui_strings_defaults.js";
 import { resolveUiStringForState } from "../i18n/ui_strings_lookup.js";
@@ -112,55 +113,6 @@ const UI_FEEDBACK_KINDS = new Set<UiFeedbackKind>([
   "list_duplicate_merge_compare",
 ]);
 
-function normalizeStringArray(raw: unknown): string[] {
-  if (!Array.isArray(raw)) return [];
-  return raw
-    .map((value) => String(value || "").trim())
-    .filter(Boolean);
-}
-
-function parseRetainedInstruction(rawInstruction: unknown): {
-  retainedHeading: string;
-  retainedItems: string[];
-  instructionText: string;
-} {
-  const instruction = String(rawInstruction || "").replace(/\r/g, "\n").trim();
-  if (!instruction) {
-    return { retainedHeading: "", retainedItems: [], instructionText: "" };
-  }
-  const lines = instruction
-    .split("\n")
-    .map((line) => String(line || "").trim());
-  const firstBulletIndex = lines.findIndex((line) => /^(?:[-*•·]|\d+[\).])\s+/.test(line));
-  if (firstBulletIndex < 0) {
-    return { retainedHeading: "", retainedItems: [], instructionText: instruction };
-  }
-
-  let bulletEndIndex = firstBulletIndex;
-  while (bulletEndIndex < lines.length && /^(?:[-*•·]|\d+[\).])\s+/.test(lines[bulletEndIndex])) {
-    bulletEndIndex += 1;
-  }
-
-  const retainedHeading = lines
-    .slice(0, firstBulletIndex)
-    .filter(Boolean)
-    .join("\n")
-    .trim();
-  const retainedItems = lines
-    .slice(firstBulletIndex, bulletEndIndex)
-    .map((line) => line.replace(/^\s*(?:[-*•·]|\d+[\).])\s+/, "").trim())
-    .filter(Boolean);
-  const instructionText = lines
-    .slice(bulletEndIndex)
-    .filter(Boolean)
-    .join("\n")
-    .trim();
-  if (!retainedHeading || retainedItems.length === 0) {
-    return { retainedHeading: "", retainedItems: [], instructionText: instruction };
-  }
-  return { retainedHeading, retainedItems, instructionText: instructionText || instruction };
-}
-
 function ensureUnifiedUiFeedbackContract(response: RunStepContractResponse): void {
   const ui = toRecord(response.ui);
   const existing = toRecord(ui.feedback_contract);
@@ -170,73 +122,12 @@ function ensureUnifiedUiFeedbackContract(response: RunStepContractResponse): voi
   }
 
   const uiContent = toRecord(ui.content);
-  const wordingChoice = toRecord(ui.wording_choice);
-  const uiFlags = toRecord(ui.flags);
-  const wordingEnabled =
-    wordingChoice.enabled === true ||
-    String(uiFlags.require_wording_pick || "").trim().toLowerCase() === "true";
-  const feedbackReasonText = String(
-    wordingChoice.feedback_reason_text ||
-      toRecord(wordingChoice.compare_feedback).text ||
-      ""
-  ).trim();
-  const userLabel = String(wordingChoice.user_label || "").trim();
-  const suggestionLabel = String(wordingChoice.suggestion_label || "").trim();
-  const userText = String(wordingChoice.user_text || "").trim();
-  const suggestionText = String(wordingChoice.suggestion_text || "").trim();
-  const userItems = normalizeStringArray(wordingChoice.user_items);
-  const suggestionItems = normalizeStringArray(wordingChoice.suggestion_items);
-  const wordingInstruction = String(wordingChoice.instruction || "").trim();
-  const parsedInstruction = parseRetainedInstruction(wordingInstruction);
-  const wordingMode = String(wordingChoice.mode || "text").trim().toLowerCase() === "list" ? "list" : "text";
-  const wordingVariant = String(wordingChoice.variant || "").trim().toLowerCase();
-
-  if (
-    wordingEnabled &&
-    wordingMode === "text" &&
-    (feedbackReasonText || userText || suggestionText || userLabel || suggestionLabel)
-  ) {
-    ui.feedback_contract = {
-      version: "2026-03-16.feedback_contract.v1",
-      kind: "single_value_compare",
-      mode: "text",
-      ...(feedbackReasonText ? { rationale: feedbackReasonText } : {}),
-      ...(userLabel ? { current_label: userLabel } : {}),
-      ...(suggestionLabel ? { suggested_label: suggestionLabel } : {}),
-      ...(userText ? { current_value: userText } : {}),
-      ...(suggestionText ? { suggested_value: suggestionText } : {}),
-      ...(parsedInstruction.retainedHeading ? { retained_heading: parsedInstruction.retainedHeading } : {}),
-      ...(parsedInstruction.retainedItems.length > 0 ? { retained_items: parsedInstruction.retainedItems } : {}),
-      ...(parsedInstruction.instructionText ? { instruction: parsedInstruction.instructionText } : {}),
-    };
-    response.ui = ui;
-    return;
-  }
-
-  if (
-    wordingEnabled &&
-    wordingMode === "list" &&
-    (feedbackReasonText || userItems.length > 0 || suggestionItems.length > 0)
-  ) {
-    const feedbackKind: UiFeedbackKind =
-      wordingVariant === "grouped_list_units"
-        ? "grouped_list_compare"
-        : "list_edit_compare";
-    ui.feedback_contract = {
-      version: "2026-03-16.feedback_contract.v1",
-      kind: feedbackKind,
-      mode: "list",
-      ...(feedbackReasonText ? { rationale: feedbackReasonText } : {}),
-      ...(userLabel ? { current_label: userLabel } : {}),
-      ...(suggestionLabel ? { suggested_label: suggestionLabel } : {}),
-      ...(userText ? { current_value: userText } : {}),
-      ...(suggestionText ? { suggested_value: suggestionText } : {}),
-      ...(userItems.length > 0 ? { current_items: userItems } : {}),
-      ...(suggestionItems.length > 0 ? { suggested_items: suggestionItems } : {}),
-      ...(parsedInstruction.retainedHeading ? { retained_heading: parsedInstruction.retainedHeading } : {}),
-      ...(parsedInstruction.retainedItems.length > 0 ? { retained_items: parsedInstruction.retainedItems } : {}),
-      ...(parsedInstruction.instructionText ? { instruction: parsedInstruction.instructionText } : {}),
-    };
+  const synthesizedFromWordingChoice = synthesizeUiFeedbackContractFromWordingChoice(
+    ui.wording_choice,
+    ui.flags
+  );
+  if (synthesizedFromWordingChoice) {
+    ui.feedback_contract = synthesizedFromWordingChoice;
     response.ui = ui;
     return;
   }
