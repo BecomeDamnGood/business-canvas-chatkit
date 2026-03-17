@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   actionRoleForStateKey,
   buildInitialDreamScoringScores,
+  collectPendingScoresForContractAction,
   decorateStructuredSuggestionItemsForStep,
   dreamExerciseButtonLabelKeyForState,
   parseWordingChoiceInstruction,
@@ -516,6 +517,37 @@ test("buildInitialDreamScoringScores keeps client-entered values during a scorin
   });
 
   assert.deepEqual(scores, [["9", "8"], ["7", "7"]]);
+});
+
+test("collectPendingScoresForContractAction returns null until all Dream Builder scores are complete", () => {
+  (globalThis as { __dreamScoringScores?: unknown[][] }).__dreamScoringScores = [["9", ""], ["7"]];
+  assert.equal(collectPendingScoresForContractAction(), null);
+
+  (globalThis as { __dreamScoringScores?: unknown[][] }).__dreamScoringScores = [["9", "8"], ["7"]];
+  assert.deepEqual(collectPendingScoresForContractAction(), [[9, 8], [7]]);
+});
+
+test("readDreamBuilderContract exposes scoring submit action from the Dream Builder contract", () => {
+  const contract = readDreamBuilderContract({
+    dream_builder_contract: {
+      version: "2026-03-17.dream_builder_contract.v2",
+      phase: "scoring",
+      statements: ["Statement 1", "Statement 2", "Statement 3"],
+      statements_visible: true,
+      scoring: {
+        clusters: [
+          { theme: "Trust", statement_indices: [0, 1] },
+          { theme: "Care", statement_indices: [2] },
+        ],
+        submit_enabled: false,
+        submit_action: "ACTION_DREAM_EXPLAINER_SUBMIT_SCORES",
+      },
+    },
+  });
+
+  assert.equal(contract?.phase, "scoring");
+  assert.equal(contract?.scoring?.submitAction, "ACTION_DREAM_EXPLAINER_SUBMIT_SCORES");
+  assert.equal(contract?.scoring?.submitEnabled, false);
 });
 
 test("dreamExerciseButtonLabelKeyForState keeps start copy for first-time Dream Builder entry", () => {

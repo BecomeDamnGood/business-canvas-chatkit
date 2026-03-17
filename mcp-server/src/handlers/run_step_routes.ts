@@ -122,6 +122,20 @@ function parseSubmitScoresPayload(
   return null;
 }
 
+function areScoresCompleteForClusters(
+  scores: number[][],
+  clusters: Array<{ statement_indices: number[] }>
+): boolean {
+  if (!Array.isArray(scores) || scores.length !== clusters.length) return false;
+  return clusters.every((cluster, clusterIndex) => {
+    const row = Array.isArray(scores[clusterIndex]) ? scores[clusterIndex] : [];
+    return (
+      row.length === cluster.statement_indices.length &&
+      row.every((value) => Number.isFinite(value) && value >= 1 && value <= 10)
+    );
+  });
+}
+
 function clearDreamStateForSwitchToSelf(state: CanvasState, dreamStepId: string): CanvasState {
   const next: CanvasState = { ...state };
   const finalField = getFinalFieldForStepId(dreamStepId);
@@ -733,6 +747,18 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
                 : [];
 
         if (clusters.length !== parsedScores.length || statements.length === 0) return null;
+        if (!areScoresCompleteForClusters(parsedScores, clusters as Array<{ statement_indices: number[] }>)) {
+          return finalizeRouteTurnIntent(context, {
+            state: context.state,
+            specialist: lastResult,
+            previousSpecialist: lastResult,
+            responseUiFlags: context.responseUiFlags,
+            debug: {
+              submit_scores_rejected: true,
+              reason: "incomplete_or_invalid_scores",
+            },
+          });
+        }
 
         type ClusterInfo = { theme: string; statement_indices: number[] };
         const clusterAverages = (clusters as ClusterInfo[]).map((cluster, clusterIndex) => {
@@ -750,6 +776,30 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
 
         const maxAverage = Math.max(...clusterAverages.map((entry) => entry.average), 0);
         const topClusters = clusterAverages.filter((entry) => entry.average === maxAverage && entry.average > 0);
+        const topClusterDetails = (clusters as ClusterInfo[])
+          .map((cluster, clusterIndex) => {
+            const row = parsedScores[clusterIndex] || [];
+            const maxScore = Math.max(...row, 0);
+            const topStatementIndices = cluster.statement_indices.filter((_, statementIndex) => row[statementIndex] === maxScore);
+            if (maxScore <= 0 || topStatementIndices.length === 0) return null;
+            return {
+              theme: String((cluster as Record<string, unknown>).theme ?? "").trim() || `Category ${clusterIndex + 1}`,
+              average: clusterAverages[clusterIndex]?.average || 0,
+              top_statement_indices: topStatementIndices,
+              top_statements: topStatementIndices
+                .map((statementIndex) => String(statements[statementIndex] || "").trim())
+                .filter(Boolean),
+            };
+          })
+          .filter(
+            (entry): entry is {
+              theme: string;
+              average: number;
+              top_statement_indices: number[];
+              top_statements: string[];
+            } => Boolean(entry)
+          )
+          .filter((entry) => topClusters.some((cluster) => cluster.theme === entry.theme));
 
         const nextStateScores: CanvasState = {
           ...context.state,
@@ -776,6 +826,7 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
         (nextStateScores as Record<string, unknown>).dream_scoring_statements = statements;
         (nextStateScores as Record<string, unknown>).dream_scores = parsedScores;
         (nextStateScores as Record<string, unknown>).dream_top_clusters = topClusters;
+        (nextStateScores as Record<string, unknown>).dream_top_cluster_details = topClusterDetails;
         (nextStateScores as Record<string, unknown>).dream_awaiting_direction = "true";
 
         const forcedDecision = {
@@ -881,6 +932,7 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
         let nextState: CanvasState = {
           ...switchBaseState,
           active_specialist: deps.dreamSpecialist,
+          intro_shown_for_step: deps.dreamStepId,
           last_specialist_result: specialist,
         };
 

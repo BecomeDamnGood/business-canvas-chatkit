@@ -418,22 +418,26 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     return groupedListSuggestionLabelForState(state);
   }
 
+  function groupedListBaseInstructionForState(state: CanvasState | null | undefined): string {
+    return (
+      uiStringLocaleFirst(state, "wordingChoiceGroupedCompareInstruction").trim() ||
+      wordingInstructionForState(state)
+    );
+  }
+
   function dreamBuilderMergeInstructionForState(
-    state: CanvasState | null | undefined,
-    retainedItems: string[]
+    state: CanvasState | null | undefined
   ): string {
     const localized = uiStringLocaleFirst(state, "wordingChoiceDreamBuilderMergeInstruction").trim();
     if (localized) return localized;
-    return groupedListInstructionForState(state, retainedItems);
+    return groupedListBaseInstructionForState(state);
   }
 
   function groupedListInstructionForState(
     state: CanvasState | null | undefined,
     retainedItems: string[]
   ): string {
-    const baseInstruction =
-      uiStringLocaleFirst(state, "wordingChoiceGroupedCompareInstruction").trim() ||
-      wordingInstructionForState(state);
+    const baseInstruction = groupedListBaseInstructionForState(state);
     const retained = retainedItems.map((line) => String(line || "").trim()).filter(Boolean);
     if (retained.length === 0) return baseInstruction;
     const retainedHeading = uiStringLocaleFirst(state, "wordingChoiceGroupedCompareRetainedHeading").trim();
@@ -2015,8 +2019,9 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     if (nextIndex < 0) return null;
     const currentUnit = params.units[nextIndex];
     const retainedItems = visibleRetainedItemsForGroupedCompare(params.segments, params.units);
+    const isDreamBuilderCompare = params.stepId === deps.dreamStepId;
     const isDreamBuilderMergeChoice =
-      params.stepId === deps.dreamStepId &&
+      isDreamBuilderCompare &&
       currentUnit.user_items.length > 1 &&
       currentUnit.suggestion_items.length === 1;
     const labels = isDreamBuilderMergeChoice
@@ -2053,8 +2058,10 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
       suggestion_text: currentUnit.suggestion_text,
       user_items: currentUnit.user_items,
       suggestion_items: currentUnit.suggestion_items,
-      instruction: isDreamBuilderMergeChoice
-        ? dreamBuilderMergeInstructionForState(params.state, retainedItems)
+      instruction: isDreamBuilderCompare
+        ? (isDreamBuilderMergeChoice
+            ? dreamBuilderMergeInstructionForState(params.state)
+            : groupedListBaseInstructionForState(params.state))
         : groupedListInstructionForState(params.state, retainedItems),
     };
   }
@@ -2581,8 +2588,8 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
         ? uiStringLocaleFirst(state, "wordingChoiceGroupedCompareRetainedHeading").trim()
         : "";
       const instruction = dreamBuilderOverlapComparePlan
-        ? dreamBuilderMergeInstructionForState(state, retainedItems)
-        : groupedListInstructionForState(state, retainedItems);
+        ? dreamBuilderMergeInstructionForState(state)
+        : groupedListBaseInstructionForState(state);
       const dreamBuilderSpecialist = buildDreamBuilderPendingCompareSpecialist({
         specialistResult: enriched,
         comparePlan,
@@ -2656,8 +2663,8 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
         ? uiStringLocaleFirst(state, "wordingChoiceGroupedCompareRetainedHeading").trim()
         : "";
       const instruction = compareKind === "overlap_merge_compare"
-        ? dreamBuilderMergeInstructionForState(state, retainedItems)
-        : groupedListInstructionForState(state, retainedItems);
+        ? dreamBuilderMergeInstructionForState(state)
+        : groupedListBaseInstructionForState(state);
       const dreamBuilderSpecialist = buildDreamBuilderPendingSimpleCompareSpecialist({
         specialistResult: enriched,
         compareKind,
@@ -3176,8 +3183,8 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
         instruction:
           String(specialist?.__dream_builder_compare_instruction || "").trim() ||
           (compareKind === "overlap_merge_compare"
-            ? dreamBuilderMergeInstructionForState(state, retainedItems)
-            : groupedListInstructionForState(state, retainedItems)),
+            ? dreamBuilderMergeInstructionForState(state)
+            : groupedListBaseInstructionForState(state)),
       };
     }
     if (!isWordingChoiceIntentEligibleSpecialist(specialist)) return null;

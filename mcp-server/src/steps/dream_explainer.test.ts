@@ -33,12 +33,21 @@ test("buildDreamExplainerSpecialistInput suppresses next-step scoring fallback a
     "nl",
     Array.from({ length: 20 }, (_, index) => `Statement ${index + 1}`),
     [{ theme: "Vertrouwen", average: 8.5 }],
+    [
+      {
+        theme: "Vertrouwen",
+        average: 8.5,
+        top_statement_indices: [0, 1],
+        top_statements: ["Statement 1", "Statement 2"],
+      },
+    ],
     { business_name: "Mindd" },
     "builder_scoring"
   );
 
   assert.ok(input.includes("POST_SCORE_DREAM_FORMULATION: true"));
   assert.ok(input.includes("TOP_CLUSTERS:"));
+  assert.ok(input.includes("TOP_CLUSTER_DETAILS:"));
   assert.ok(input.includes("USER_DREAM_DIRECTION: (user chose to continue without text)"));
   assert.ok(!input.includes("USER_REQUESTED_NEXT_STEP: true"));
 });
@@ -50,6 +59,7 @@ test("buildDreamExplainerSpecialistInput still requests scoring fallback before 
     "dream",
     "nl",
     Array.from({ length: 20 }, (_, index) => `Statement ${index + 1}`),
+    undefined,
     undefined,
     undefined,
     "builder_scoring"

@@ -1388,11 +1388,12 @@ export function createRunStepRuntimeFinalizeLayer<TPayload extends Record<string
       dreamRuntimeMode === "builder_refine";
     const suggestDreamBuilder = String(lastSpecialist.suggest_dreambuilder || "").trim().toLowerCase() === "true";
     const interactiveSession = started;
-    const scoreSubmitAvailable =
+    const dreamBuilderScoringActive =
       interactiveSession &&
       isDreamStep &&
       isDreamExplainer &&
       (dreamRuntimeMode === "builder_scoring" || scoringPhase);
+    const scoreSubmitAvailable = false;
     const setStateAction = (key: string, value: string): void => {
       if (value) {
         stateRef[key] = value;
@@ -1433,7 +1434,7 @@ export function createRunStepRuntimeFinalizeLayer<TPayload extends Record<string
       "ui_action_dream_start_exercise",
       interactiveSession &&
         isDreamStep &&
-        !scoreSubmitAvailable &&
+        !dreamBuilderScoringActive &&
         (isDreamSpecialist || suggestDreamBuilder)
         ? "ACTION_DREAM_INTRO_START_EXERCISE"
         : ""

@@ -43,6 +43,7 @@ import {
   DreamExplainerJsonSchema,
   DreamExplainerZodSchema,
   buildDreamExplainerSpecialistInput,
+  type TopClusterDetailInfo,
   type DreamExplainerOutput,
 } from "../steps/dream_explainer.js";
 import { resolveUiStringForState } from "../i18n/ui_strings_lookup.js";
@@ -469,6 +470,9 @@ export async function callSpecialistStrict(
     const topClusters = dreamAwaitingDirection && Array.isArray((state as any).dream_top_clusters)
       ? ((state as any).dream_top_clusters as { theme: string; average: number }[])
       : undefined;
+    const topClusterDetails = dreamAwaitingDirection && Array.isArray((state as any).dream_top_cluster_details)
+      ? ((state as any).dream_top_cluster_details as TopClusterDetailInfo[])
+      : undefined;
     const businessContext = dreamAwaitingDirection && topClusters
       ? {
           step_0_final: String((state as any).step_0_final ?? "").trim(),
@@ -484,6 +488,7 @@ export async function callSpecialistStrict(
       langExplicitExplainer ? lang : "",
       previousStatements,
       topClusters,
+      topClusterDetails,
       businessContext,
       plannerDreamRuntimeMode
     );

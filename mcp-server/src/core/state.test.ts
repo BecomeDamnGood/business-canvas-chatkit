@@ -66,6 +66,14 @@ test("normalizeState: bewaart Dream Builder hervatcontext", () => {
     dream_scoring_statements: ["Meer vertrouwen in media", "Betere mentale gezondheid"],
     dream_scores: [[8, 9], [7, 8]],
     dream_top_clusters: [{ theme: "Vertrouwen", average: 8.5 }],
+    dream_top_cluster_details: [
+      {
+        theme: "Vertrouwen",
+        average: 8.5,
+        top_statement_indices: [0],
+        top_statements: ["Meer vertrouwen in media"],
+      },
+    ],
     dream_awaiting_direction: "true",
   });
 
@@ -79,6 +87,14 @@ test("normalizeState: bewaart Dream Builder hervatcontext", () => {
   ]);
   assert.deepEqual(normalized.dream_scores, [[8, 9], [7, 8]]);
   assert.deepEqual(normalized.dream_top_clusters, [{ theme: "Vertrouwen", average: 8.5 }]);
+  assert.deepEqual(normalized.dream_top_cluster_details, [
+    {
+      theme: "Vertrouwen",
+      average: 8.5,
+      top_statement_indices: [0],
+      top_statements: ["Meer vertrouwen in media"],
+    },
+  ]);
   assert.equal(normalized.dream_awaiting_direction, "true");
 });
 
@@ -175,14 +191,14 @@ test("migrateState: v6 language_source maps legacy transport source to locale_hi
 
 test("state version support: only known versions are accepted for migration", () => {
   assert.equal(isSupportedStateVersion(CURRENT_STATE_VERSION), true);
-  assert.equal(isSupportedStateVersion("14"), false);
+  assert.equal(isSupportedStateVersion("15"), false);
 });
 
 test("migrateState: unknown future version fails closed", () => {
   assert.throws(
     () => migrateState({
       ...getDefaultState(),
-      state_version: "14",
+      state_version: "15",
     }),
     /Unsupported state_version/
   );

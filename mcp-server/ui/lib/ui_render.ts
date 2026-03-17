@@ -583,16 +583,22 @@ function choiceActionsForResult(resultData: Record<string, unknown>): Renderable
   return surfaceActionsForResult(resultData, "choice");
 }
 
-function collectPendingScoresForContractAction(): number[][] {
+export function collectPendingScoresForContractAction(): number[][] | null {
   const scoringScores =
     (globalThis as unknown as { __dreamScoringScores?: unknown[][] }).__dreamScoringScores || [];
+  if (!Array.isArray(scoringScores) || scoringScores.length === 0) return null;
   const payload: number[][] = [];
   for (let ci = 0; ci < scoringScores.length; ci += 1) {
     const row = Array.isArray(scoringScores[ci]) ? scoringScores[ci] : [];
     const normalizedRow: number[] = [];
+    if (row.length === 0) return null;
     for (let si = 0; si < row.length; si += 1) {
-      const value = Number(row[si]);
-      normalizedRow.push(isNaN(value) ? 0 : Math.max(1, Math.min(10, value)));
+      const raw = row[si];
+      const value = Number(raw);
+      if (raw === "" || raw === undefined || Number.isNaN(value) || value < 1 || value > 10) {
+        return null;
+      }
+      normalizedRow.push(Math.round(value));
     }
     payload.push(normalizedRow);
   }
@@ -608,10 +614,31 @@ function dispatchContractAction(action: RenderableContractAction): void {
     return;
   }
   if (action.role === "score_submit") {
-    callRunStep(action.actionCode, { __pending_scores: collectPendingScoresForContractAction() });
+    const pendingScores = collectPendingScoresForContractAction();
+    if (!pendingScores) return;
+    callRunStep(action.actionCode, { __pending_scores: pendingScores });
     return;
   }
   callRunStep(action.actionCode);
+}
+
+function dreamBuilderScoreSubmitActionForContract(
+  contract: NormalizedDreamBuilderContract | null,
+  lang: string
+): RenderableContractAction[] {
+  const actionCode = String(contract?.scoring?.submitAction || "").trim();
+  if (!actionCode) return [];
+  return [
+    {
+      actionCode,
+      label: String(t(lang, "btnScoringContinue") || "").trim(),
+      labelKey: "btnScoringContinue",
+      payloadMode: "scores",
+      role: "score_submit",
+      surface: "primary",
+      primary: true,
+    },
+  ].filter((action) => action.label);
 }
 
 function renderActionSurfaceButtons(params: {
@@ -2057,15 +2084,22 @@ export function render(overrideToolOutput?: unknown): void {
     function syncScoringActionAvailability(): void {
       const scoreSubmitEnabled = allScoringFilled();
       document.querySelectorAll('[data-bsc-action-role="score_submit"]').forEach((button) => {
-        (button as HTMLButtonElement).disabled = getIsLoading() || !scoreSubmitEnabled;
+        const submitButton = button as HTMLButtonElement;
+        submitButton.disabled = getIsLoading() || !scoreSubmitEnabled;
+        submitButton.style.display = scoreSubmitEnabled ? "" : "none";
       });
+      const primaryActionWrap = document.getElementById("primaryActionWrap");
+      if (primaryActionWrap) {
+        const hasVisibleButtons = Array.from(primaryActionWrap.querySelectorAll("button")).some(
+          (button) => (button as HTMLButtonElement).style.display !== "none"
+        );
+        (primaryActionWrap as HTMLElement).style.display = hasVisibleButtons ? "flex" : "none";
+      }
     }
 
     renderActionSurfaceButtons({
       containerId: "primaryActionWrap",
-      actions: surfaceActionsForResult(result, "primary", lang).filter(
-        (action) => action.role === "score_submit"
-      ),
+      actions: dreamBuilderScoreSubmitActionForContract(dreamBuilderContract, lang),
       className: "btn primary",
     });
     renderActionSurfaceButtons({

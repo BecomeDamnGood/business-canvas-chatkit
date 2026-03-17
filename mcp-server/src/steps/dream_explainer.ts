@@ -102,6 +102,12 @@ export const DreamExplainerJsonSchema = {
  * Output language is controlled by LANGUAGE (or mirrors USER_MESSAGE if LANGUAGE is missing).
  */
 export type TopClusterInfo = { theme: string; average: number };
+export type TopClusterDetailInfo = {
+  theme: string;
+  average: number;
+  top_statement_indices: number[];
+  top_statements: string[];
+};
 
 export type BusinessContext = { step_0_final?: string; business_name?: string };
 
@@ -112,6 +118,7 @@ export function buildDreamExplainerSpecialistInput(
   language: string = "",
   previousStatements: string[] = [],
   topClusters?: TopClusterInfo[],
+  topClusterDetails?: TopClusterDetailInfo[],
   businessContext?: BusinessContext,
   dreamRuntimeMode: "self" | "builder_collect" | "builder_scoring" | "builder_refine" = "self"
 ): string {
@@ -123,6 +130,7 @@ export function buildDreamExplainerSpecialistInput(
   const userSaidNextStep =
     /next\s*step|(?:ready\s*to\s*)?(?:go\s*to\s*)?(?:the\s*)?next\s*step|done|enough|ready\s*to\s*continue|finish|i'?\s*m\s*done/i.test(userMsgTrim);
   const hasTopClusters = Array.isArray(topClusters) && topClusters.length > 0;
+  const hasTopClusterDetails = Array.isArray(topClusterDetails) && topClusterDetails.length > 0;
   const isPostScoreDreamFormulation = hasTopClusters;
   // In builder_refine mode, and always after valid scoring, we are formulating/refining a Dream candidate.
   const forceScoringView =
@@ -143,6 +151,7 @@ USER_REQUESTED_NEXT_STEP: true`;
   }
   if (hasTopClusters) {
     const topClustersJson = JSON.stringify(topClusters);
+    const topClusterDetailsJson = hasTopClusterDetails ? JSON.stringify(topClusterDetails) : "[]";
     const userDreamDirection =
       typeof userMessage === "string" && userMessage.trim()
         ? userMessage.trim()
@@ -151,6 +160,7 @@ USER_REQUESTED_NEXT_STEP: true`;
 
 POST_SCORE_DREAM_FORMULATION: true
 TOP_CLUSTERS: ${topClustersJson}
+TOP_CLUSTER_DETAILS: ${topClusterDetailsJson}
 USER_DREAM_DIRECTION: ${userDreamDirection}`;
     if (businessContext && (businessContext.step_0_final?.trim() || businessContext.business_name?.trim())) {
       const ctx = [
@@ -190,6 +200,7 @@ Inputs
 - Optional post-score signals:
   - POST_SCORE_DREAM_FORMULATION: true
   - TOP_CLUSTERS: <JSON array of { theme, average }>
+  - TOP_CLUSTER_DETAILS: <JSON array of { theme, average, top_statement_indices, top_statements }>
   - USER_DREAM_DIRECTION: <user text or "(user chose to continue without text)">
   - BUSINESS_CONTEXT: <venture/context and/or business name>
 
@@ -467,6 +478,11 @@ Receiving scores (when user submits the scoring form):
 D) DREAM DIRECTION → ASK (when TOP_CLUSTERS and USER_DREAM_DIRECTION are present in the input)
 This step runs after the user has seen the Dream-direction question and either typed their own direction or clicked Continue (e.g. "Go to next step"). The input will contain TOP_CLUSTERS (JSON array of { theme, average }) and USER_DREAM_DIRECTION (user's text or "(user chose to continue without text)"). Optionally BUSINESS_CONTEXT (Venture/context and Business name) is present.
 When TOP_CLUSTERS is present, this post-score route takes precedence over any 20+ statement scoring fallback. Never output scoring_phase="true" here and never recluster.
+- When TOP_CLUSTER_DETAILS is present, use it as the primary source for what matters most:
+  - focus first on the cluster(s) with the highest average
+  - within those clusters, weigh the statement(s) listed in top_statements most strongly
+  - do not invent new categories or new clustering labels
+  - formulate the Dream from those highest-scoring themes and statements plus USER_DREAM_DIRECTION
 You MUST output exactly one response: action="ASK" with a generated Dream suggestion. Do not ask further questions; do not output ASK or REFINE.
 
 - Generate the Dream formulation based on what the user finds most important = the themes in TOP_CLUSTERS (highest-scoring cluster(s)). The Dream MUST describe a broader positive change in the world or society 5-10 years ahead (opportunity or threat), not what the specific business will do or contribute. The Dream MUST ALWAYS start with one of these patterns (localized to the user's language):

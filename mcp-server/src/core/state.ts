@@ -43,6 +43,12 @@ const DreamTopClusterZod = z.object({
   theme: z.string(),
   average: z.number().finite(),
 });
+const DreamTopClusterDetailZod = z.object({
+  theme: z.string(),
+  average: z.number().finite(),
+  top_statement_indices: z.array(z.number().int().nonnegative()),
+  top_statements: z.array(z.string()),
+});
 export const PROVISIONAL_SOURCES = [
   "user_input",
   "wording_pick",
@@ -342,6 +348,7 @@ export const CanvasStateZod = z.object({
   dream_scoring_statements: z.array(z.string()),
   dream_scores: z.array(z.array(z.number().finite())),
   dream_top_clusters: z.array(DreamTopClusterZod),
+  dream_top_cluster_details: z.array(DreamTopClusterDetailZod),
   dream_awaiting_direction: BoolStringZod,
 
   // shared convenience fields
@@ -360,7 +367,7 @@ export type CanvasState = z.infer<typeof CanvasStateZod>;
  * Current state schema version
  * Bump when you change defaults/fields in a way that needs migration.
  */
-export const CURRENT_STATE_VERSION = "13";
+export const CURRENT_STATE_VERSION = "14";
 export const DEFAULT_VIEW_CONTRACT_VERSION = "v3_ssot_rigid";
 const SUPPORTED_STATE_VERSION_MAX = Number.parseInt(CURRENT_STATE_VERSION, 10);
 export const SUPPORTED_STATE_VERSIONS = Array.from(
@@ -443,6 +450,7 @@ export function getDefaultState(): CanvasState {
     dream_scoring_statements: [],
     dream_scores: [],
     dream_top_clusters: [],
+    dream_top_cluster_details: [],
     dream_awaiting_direction: "false",
 
     business_name: "TBD",
@@ -719,6 +727,37 @@ export function normalizeState(raw: unknown): CanvasState {
       return { theme, average };
     })
     .filter((entry): entry is { theme: string; average: number } => Boolean(entry));
+  const dreamTopClusterDetailsRaw = Array.isArray((r as any).dream_top_cluster_details)
+    ? ((r as any).dream_top_cluster_details as unknown[])
+    : [];
+  const dream_top_cluster_details = dreamTopClusterDetailsRaw
+    .map((entry) => {
+      const record = typeof entry === "object" && entry !== null ? (entry as Record<string, unknown>) : {};
+      const theme = String(record.theme || "").trim();
+      const average = typeof record.average === "number" && Number.isFinite(record.average) ? record.average : null;
+      const topStatementIndices = Array.isArray(record.top_statement_indices)
+        ? (record.top_statement_indices as unknown[])
+          .map((value) => Number(value))
+          .filter((value) => Number.isFinite(value) && value >= 0)
+          .map((value) => Math.trunc(value))
+        : [];
+      const topStatements = Array.isArray(record.top_statements)
+        ? (record.top_statements as unknown[]).map((value) => String(value || "").trim()).filter(Boolean)
+        : [];
+      if (!theme || average === null || topStatementIndices.length === 0 || topStatements.length === 0) return null;
+      return {
+        theme,
+        average,
+        top_statement_indices: topStatementIndices,
+        top_statements: topStatements,
+      };
+    })
+    .filter((entry): entry is {
+      theme: string;
+      average: number;
+      top_statement_indices: number[];
+      top_statements: string[];
+    } => Boolean(entry));
   const dream_awaiting_direction =
     String((r as any).dream_awaiting_direction ?? d.dream_awaiting_direction).trim() === "true" ? "true" : "false";
 
@@ -803,6 +842,7 @@ export function normalizeState(raw: unknown): CanvasState {
     dream_scoring_statements,
     dream_scores,
     dream_top_clusters,
+    dream_top_cluster_details,
     dream_awaiting_direction,
 
     business_name,
@@ -830,6 +870,18 @@ export function migrateState(raw: unknown): CanvasState {
     throw new Error(`Unsupported state_version: ${String(s.state_version || "")}`);
   }
 
+  // v13 -> v14: persist Dream Builder top-cluster statement detail across requests.
+  if (s.state_version === "13") {
+    s = {
+      ...s,
+      state_version: "14",
+      dream_top_cluster_details: Array.isArray((s as any).dream_top_cluster_details)
+        ? (s as any).dream_top_cluster_details
+        : [],
+    };
+    return CanvasStateZod.parse(s);
+  }
+
   // v12 -> v13: persist Dream Builder resume context across requests.
   if (s.state_version === "12") {
     s = {
@@ -843,7 +895,7 @@ export function migrateState(raw: unknown): CanvasState {
       dream_awaiting_direction:
         String((s as any).dream_awaiting_direction ?? "false").trim() === "true" ? "true" : "false",
     };
-    return CanvasStateZod.parse(s);
+    return migrateState(s);
   }
 
   // v11 -> v12: add canonical locale field (BCP47-like) while keeping language as base code.

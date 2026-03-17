@@ -102,7 +102,6 @@ test("dream builder scoring keeps separate text and score submit actions", () =>
         __dream_runtime_mode: "builder_scoring",
         ui_action_text_submit: "ACTION_TEXT_SUBMIT",
         ui_action_text_submit_payload_mode: "text",
-        ui_action_score_submit: "ACTION_DREAM_EXPLAINER_SUBMIT_SCORES",
         last_specialist_result: {
           scoring_phase: "true",
           suggest_dreambuilder: "true",
@@ -131,7 +130,7 @@ test("dream builder scoring keeps separate text and score submit actions", () =>
 
   assert.equal(String(state.ui_action_text_submit || ""), "ACTION_TEXT_SUBMIT");
   assert.equal(String(state.ui_action_text_submit_payload_mode || ""), "text");
-  assert.equal(String((state as any).ui_action_score_submit || ""), "ACTION_DREAM_EXPLAINER_SUBMIT_SCORES");
+  assert.equal(String((state as any).ui_action_score_submit || ""), "");
   assert.ok(
     actions.some(
       (action) =>
@@ -140,13 +139,7 @@ test("dream builder scoring keeps separate text and score submit actions", () =>
         String(action.payload_mode || "") === "text"
     )
   );
-  assert.ok(
-    actions.some(
-      (action) =>
-        String(action.role || "") === "score_submit" &&
-        String(action.action_code || "") === "ACTION_DREAM_EXPLAINER_SUBMIT_SCORES"
-    )
-  );
+  assert.ok(!actions.some((action) => String(action.role || "") === "score_submit"));
 });
 
 test("dream intro contract keeps the original menu copy and choice layout for exercise entry", () => {

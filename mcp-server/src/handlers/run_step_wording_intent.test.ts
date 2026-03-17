@@ -2292,9 +2292,9 @@ test("buildWordingChoiceFromTurn opens a merge choice for a near-duplicate Dream
   assert.deepEqual((result.wordingChoice as Record<string, unknown>).suggestion_items, [
     "Over 5 tot 10 jaar zal werk steeds vaker worden gezien als iets dat zichtbaar betekenis toevoegt aan het leven van anderen.",
   ]);
-  assert.match(
+  assert.equal(
     String((result.wordingChoice as Record<string, unknown>).instruction || ""),
-    /Er zal meer behoefte zijn aan bedrijven en initiatieven/i
+    "Choose the version that fits best for the remaining difference."
   );
   assert.ok(String((result.wordingChoice as Record<string, unknown>).user_label || "").trim().length > 0);
   assert.ok(String((result.wordingChoice as Record<string, unknown>).suggestion_label || "").trim().length > 0);
@@ -2522,10 +2522,7 @@ test("buildWordingChoiceFromTurn keeps existing Dream Builder statements retaine
     "Persoonlijke groei en zelfontwikkeling zullen vaker een drijvende kracht worden achter ondernemerschap en werk.",
   ]);
   const instruction = String((result.wordingChoice as Record<string, unknown>).instruction || "");
-  assert.match(instruction, /These points already stay in the final list/i);
-  for (const statement of previousStatements) {
-    assert.match(instruction, new RegExp(statement.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
-  }
+  assert.equal(instruction, "Choose the version that fits best for the remaining difference.");
 });
 
 test("buildWordingChoiceFromTurn keeps a full 14-line Dream Builder rewrite in one compare contract", () => {
@@ -2597,10 +2594,7 @@ test("buildWordingChoiceFromTurn keeps a full 14-line Dream Builder rewrite in o
   assert.deepEqual((result.wordingChoice as Record<string, unknown>).user_items, userWishBatch);
   assert.deepEqual((result.wordingChoice as Record<string, unknown>).suggestion_items, rewrittenBatch);
   const instruction = String((result.wordingChoice as Record<string, unknown>).instruction || "");
-  assert.match(instruction, /These points already stay in the final list/i);
-  for (const statement of previousStatements) {
-    assert.match(instruction, new RegExp(statement.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
-  }
+  assert.equal(instruction, "Choose the version that fits best for the remaining difference.");
 });
 
 test("buildWordingChoiceFromTurn uses the merged Dream Builder rewrite instead of unchanged statements when overlap requires REFINE", () => {
