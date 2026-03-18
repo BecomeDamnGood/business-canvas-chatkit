@@ -20,6 +20,7 @@ echo "Running contract smoke gate..."
   cd mcp-server
   node scripts/build-ui.mjs --check
   node scripts/verify-ui-runtime-artifacts.mjs
+  npm run test:compare-proof
   node --loader ts-node/esm scripts/contract-smoke.mjs
 )
 

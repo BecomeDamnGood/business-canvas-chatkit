@@ -12,7 +12,7 @@ import {
 import { DREAM_STEP_ID } from "../steps/dream.js";
 import type { RenderedAction, UiContentPayload } from "../contracts/ui_actions.js";
 import type { TurnOutputStatus } from "../core/turn_policy_renderer.js";
-import { isSingleValueTextPickerState } from "./run_step_wording_picker_contract.js";
+import { isPickerPresentation, isSingleValueTextPickerState } from "./run_step_wording_picker_contract.js";
 
 type WordingChoiceMode = "text" | "list";
 type WordingChoiceVariant = "default" | "clarify_dual" | "grouped_list_units";
@@ -769,30 +769,18 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
       (specialist as Record<string, unknown>)?.ui_feedback_contract,
       specialist as Record<string, unknown>
     );
-    const dreamSingleValuePickerActive =
-      effectiveStepId === DREAM_STEP_ID &&
+    const comparePickerActive =
+      wordingPickPending &&
       !dreamBuilderFlowActive &&
-      isSingleValueTextPickerState({
-        specialist: specialist as Record<string, unknown>,
-        stepIdHint: effectiveStepId,
-      });
+      isPickerPresentation((specialist as Record<string, unknown>)?.wording_choice_presentation);
     const rawFeedbackContractPayload =
-      effectiveStepId === DREAM_STEP_ID
-        ? (
-          dreamBuilderFlowActive
-            ? undefined
-            : (
-              explicitFeedbackContractPayload ||
-              (dreamSingleValuePickerActive
-                ? synthesizeUiFeedbackContractFromWordingChoice(resolvedWordingChoiceForFeedbackContract, flags)
-                : undefined)
-            )
-        )
+      dreamBuilderFlowActive
+        ? undefined
         : (
           explicitFeedbackContractPayload ||
-          (dreamBuilderCompareActive
-            ? undefined
-            : synthesizeUiFeedbackContractFromWordingChoice(resolvedWordingChoiceForFeedbackContract, flags))
+          (comparePickerActive
+            ? synthesizeUiFeedbackContractFromWordingChoice(resolvedWordingChoiceForFeedbackContract, flags)
+            : undefined)
         );
     let viewVariant: UiViewVariant = "default";
     if (
@@ -807,7 +795,7 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
         forceDreamBuilderRefine || contractMenuId === "DREAM_EXPLAINER_MENU_REFINE"
           ? "dream_builder_refine"
           : "dream_builder_collect";
-    } else if (wordingPickPending && (effectiveStepId !== DREAM_STEP_ID || dreamSingleValuePickerActive)) {
+    } else if (comparePickerActive) {
       viewVariant = "wording_choice";
     }
     const questionTextPayload =

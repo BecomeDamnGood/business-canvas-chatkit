@@ -144,6 +144,18 @@ const UI_FEEDBACK_KINDS = new Set<UiFeedbackKind>([
   "list_duplicate_merge_compare",
 ]);
 
+const UI_COMPARE_FEEDBACK_KINDS = new Set<UiFeedbackKind>([
+  "single_value_compare",
+  "grouped_list_compare",
+  "list_edit_compare",
+  "list_duplicate_merge_compare",
+]);
+
+function isCompareFeedbackKind(kindRaw: unknown): boolean {
+  const kind = String(kindRaw || "").trim();
+  return UI_COMPARE_FEEDBACK_KINDS.has(kind as UiFeedbackKind);
+}
+
 function ensureUnifiedUiFeedbackContract(response: RunStepContractResponse): void {
   const ui = toRecord(response.ui);
   const normalizedExisting = normalizeUiFeedbackContractSource(ui.feedback_contract, response.specialist);
@@ -251,12 +263,7 @@ function buildPendingInteractionRenderModel(
   const dreamBuilderCompare = toRecord(dreamBuilder.compare);
   const defaultUserLabel = uiLabelForKey(state, "wordingChoiceHeading");
   const defaultSuggestionLabel = uiLabelForKey(state, "wordingChoiceSuggestionLabel");
-  if (
-    feedbackKind === "single_value_compare" ||
-    feedbackKind === "grouped_list_compare" ||
-    feedbackKind === "list_edit_compare" ||
-    feedbackKind === "list_duplicate_merge_compare"
-  ) {
+  if (isCompareFeedbackKind(feedbackKind)) {
     const mode = String(feedback.mode || "").trim().toLowerCase() === "list" ? "list" : "text";
     return {
       mode,
@@ -375,6 +382,132 @@ function ensurePendingInteractionContract(response: RunStepContractResponse): vo
   }
   response.ui = ui;
   response.state = state as CanvasState;
+}
+
+function hasDreamBuilderCompareSource(ui: Record<string, unknown>): boolean {
+  const dreamBuilder = toRecord(ui.dream_builder_contract);
+  const dreamBuilderCompare = toRecord(dreamBuilder.compare);
+  return (
+    String(dreamBuilder.phase || "").trim() === "compare" &&
+    (
+      String(dreamBuilderCompare.kind || "").trim() === "batch_rewrite_compare" ||
+      String(dreamBuilderCompare.kind || "").trim() === "overlap_merge_compare"
+    )
+  );
+}
+
+function hasLegacyCompareCompatSource(response: RunStepContractResponse): boolean {
+  const ui = toRecord(response.ui);
+  const synthesized = synthesizeUiFeedbackContractFromWordingChoice(ui.wording_choice, ui.flags, response.specialist);
+  return isCompareFeedbackKind(toRecord(synthesized).kind);
+}
+
+function hasActiveCompareSource(response: RunStepContractResponse): boolean {
+  const ui = toRecord(response.ui);
+  return (
+    isCompareFeedbackKind(toRecord(ui.feedback_contract).kind) ||
+    hasDreamBuilderCompareSource(ui) ||
+    hasLegacyCompareCompatSource(response)
+  );
+}
+
+function validatePendingInteractionCompareInvariant(response: RunStepContractResponse): string | null {
+  if (!hasActiveCompareSource(response)) return null;
+
+  const ui = toRecord(response.ui);
+  const state = toRecord(response.state);
+  const pending = toRecord(ui.pending_interaction);
+  if (Object.keys(pending).length === 0) {
+    return "ui_pending_interaction_missing_for_compare";
+  }
+
+  if (
+    String(pending.kind || "").trim() !== "wording_choice" ||
+    String(pending.status || "").trim() !== "pending"
+  ) {
+    return "ui_pending_interaction_malformed_for_compare";
+  }
+
+  const allowedActions = Array.isArray(pending.allowed_actions)
+    ? (pending.allowed_actions as Array<Record<string, unknown>>)
+    : [];
+  const userPickAction = normalizePendingInteractionAllowedAction(
+    allowedActions.find((action) => normalizeUiActionRole(action.role, "choice") === "wording_pick_user"),
+    "pick_user"
+  );
+  const suggestionPickAction = normalizePendingInteractionAllowedAction(
+    allowedActions.find((action) => normalizeUiActionRole(action.role, "choice") === "wording_pick_suggestion"),
+    "pick_suggestion"
+  );
+  const expectedRenderModel = buildPendingInteractionRenderModel(response);
+  const actualRenderModel = toRecord(pending.render_model);
+  if (!userPickAction || !suggestionPickAction || !expectedRenderModel) {
+    return "ui_pending_interaction_malformed_for_compare";
+  }
+
+  const actualUserLabel = String(actualRenderModel.user_label || "").trim();
+  const actualSuggestionLabel = String(actualRenderModel.suggestion_label || "").trim();
+  if (!actualUserLabel || !actualSuggestionLabel) {
+    return "ui_pending_interaction_malformed_for_compare";
+  }
+
+  const actualMode = String(actualRenderModel.mode || "").trim().toLowerCase() === "list" ? "list" : "text";
+  const actualUserItems = normalizeStringArray(actualRenderModel.user_items);
+  const actualSuggestionItems = normalizeStringArray(actualRenderModel.suggestion_items);
+  const actualUserText = String(actualRenderModel.user_text || "").trim();
+  const actualSuggestionText = String(actualRenderModel.suggestion_text || "").trim();
+  const hasComparableValues =
+    actualMode === "list"
+      ? actualUserItems.length > 0 || actualSuggestionItems.length > 0 || Boolean(actualUserText) || Boolean(actualSuggestionText)
+      : Boolean(actualUserText) || Boolean(actualSuggestionText);
+  if (!hasComparableValues) {
+    return "ui_pending_interaction_malformed_for_compare";
+  }
+
+  if (
+    actualUserLabel !== expectedRenderModel.user_label ||
+    actualSuggestionLabel !== expectedRenderModel.suggestion_label
+  ) {
+    return "ui_pending_interaction_malformed_for_compare";
+  }
+
+  const stateUserAction = String(state.ui_action_wording_pick_user || "").trim();
+  const stateSuggestionAction = String(state.ui_action_wording_pick_suggestion || "").trim();
+  if (
+    (stateUserAction && stateUserAction !== userPickAction.action_code) ||
+    (stateSuggestionAction && stateSuggestionAction !== suggestionPickAction.action_code)
+  ) {
+    return "ui_pending_interaction_action_mismatch";
+  }
+
+  const actionContract = toRecord(ui.action_contract);
+  const actionContractActions = Array.isArray(actionContract.actions)
+    ? (actionContract.actions as Array<Record<string, unknown>>)
+    : [];
+  const contractUserAction = String(
+    toRecord(actionContractActions.find((action) => normalizeUiActionRole(action.role, "choice") === "wording_pick_user"))
+      .action_code || ""
+  ).trim();
+  const contractSuggestionAction = String(
+    toRecord(actionContractActions.find((action) => normalizeUiActionRole(action.role, "choice") === "wording_pick_suggestion"))
+      .action_code || ""
+  ).trim();
+  if (
+    (contractUserAction && contractUserAction !== userPickAction.action_code) ||
+    (contractSuggestionAction && contractSuggestionAction !== suggestionPickAction.action_code)
+  ) {
+    return "ui_pending_interaction_action_mismatch";
+  }
+
+  const stepId = String(response.current_step_id || state.current_step || "").trim();
+  if (stepId === "dream") {
+    const content = toRecord(ui.content);
+    if (Object.keys(content).length > 0 || String(toRecord(ui.feedback_contract).kind || "").trim() === "single_value_canonical_suggestion") {
+      return "dream_compare_generic_card_content_present";
+    }
+  }
+
+  return null;
 }
 
 function hasRenderableResponseContent(response: RunStepContractResponse): boolean {
@@ -741,11 +874,7 @@ function applyDeterministicUiActionRenderPolicy(response: RunStepContractRespons
   const dreamBuilderCompareActive =
     String(toRecord(ui.dream_builder_contract).phase || "").trim() === "compare";
   const feedbackKind = String(toRecord(ui.feedback_contract).kind || "").trim();
-  const feedbackCompareActive =
-    feedbackKind === "single_value_compare" ||
-    feedbackKind === "grouped_list_compare" ||
-    feedbackKind === "list_edit_compare" ||
-    feedbackKind === "list_duplicate_merge_compare";
+  const feedbackCompareActive = isCompareFeedbackKind(feedbackKind);
   const wordingChoiceSurfaceActive =
     variant === "wording_choice" || dreamBuilderCompareActive || feedbackCompareActive;
   if (mode === "prestart") {
@@ -1121,6 +1250,11 @@ export function finalizeResponseContractInternals<T extends RunStepContractRespo
           ) as T;
         }
       }
+    }
+    const pendingInteractionViolation = validatePendingInteractionCompareInvariant(finalResponse);
+    if (pendingInteractionViolation) {
+      options.onUiParityError();
+      return buildContractFailurePayload(finalResponse, pendingInteractionViolation) as T;
     }
   }
   (finalResponse as Record<string, unknown>).__canonical_view_decision = canonicalViewDecision;

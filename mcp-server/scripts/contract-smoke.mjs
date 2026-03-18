@@ -5,6 +5,7 @@ import { CURRENT_STATE_VERSION, getDefaultState } from "../src/core/state.ts";
 import { RunStepToolStructuredContentOutputSchema } from "../src/contracts/mcp_tool_contract.ts";
 import { runStepHandler } from "../src/server/run_step_transport.ts";
 import { __setTestClient } from "../src/core/llm.ts";
+import { finalizeResponseContractInternals } from "../src/handlers/turn_contract.ts";
 
 process.env.TS_NODE_TRANSPILE_ONLY = process.env.TS_NODE_TRANSPILE_ONLY || "true";
 process.env.UI_LOCALE_READY_GATE_V1 = process.env.UI_LOCALE_READY_GATE_V1 || "1";
@@ -427,6 +428,90 @@ async function main() {
   for (const [label, result] of cases) {
     assertContractInvariants(String(label), result);
   }
+
+  const compareOk = finalizeResponseContractInternals(
+    {
+      ok: true,
+      current_step_id: "dream",
+      text: "",
+      prompt: "",
+      specialist: {},
+      state: {
+        ...getDefaultState(),
+        started: "true",
+        current_step: "dream",
+        ui_action_wording_pick_user: "ACTION_WORDING_PICK_USER",
+        ui_action_wording_pick_suggestion: "ACTION_WORDING_PICK_SUGGESTION",
+      },
+      ui: {
+        contract_id: "dream:interactive:refine",
+        view: {
+          mode: "interactive",
+        },
+        feedback_contract: {
+          kind: "single_value_compare",
+          mode: "text",
+          current_value: "Wij willen bedrijven helpen groeien.",
+          suggested_value: "Mindd droomt van bedrijven die vanuit betekenis echte verandering brengen.",
+          instruction: "Choose the version that fits best.",
+        },
+      },
+    },
+    {
+      applyUiClientActionContract: () => {},
+      parseMenuFromContractIdForStep: () => "",
+      labelKeysForMenuActionCodes: () => [],
+      onUiParityError: () => {},
+      attachRegistryPayload: (payload) => payload,
+    }
+  );
+  assert.equal(compareOk.ok, true, "compare_smoke_ok: compare payload should finalize successfully");
+  assert.equal(
+    String(compareOk?.ui?.pending_interaction?.kind || ""),
+    "wording_choice",
+    "compare_smoke_ok: pending_interaction must own compare visibility"
+  );
+
+  const compareFailClosed = finalizeResponseContractInternals(
+    {
+      ok: true,
+      current_step_id: "dream",
+      text: "",
+      prompt: "",
+      specialist: {},
+      state: {
+        ...getDefaultState(),
+        started: "true",
+        current_step: "dream",
+      },
+      ui: {
+        contract_id: "dream:interactive:refine",
+        view: {
+          mode: "interactive",
+        },
+        feedback_contract: {
+          kind: "single_value_compare",
+          mode: "text",
+          current_value: "Wij willen bedrijven helpen groeien.",
+          suggested_value: "Mindd droomt van bedrijven die vanuit betekenis echte verandering brengen.",
+          instruction: "Choose the version that fits best.",
+        },
+      },
+    },
+    {
+      applyUiClientActionContract: () => {},
+      parseMenuFromContractIdForStep: () => "",
+      labelKeysForMenuActionCodes: () => [],
+      onUiParityError: () => {},
+      attachRegistryPayload: (payload) => payload,
+    }
+  );
+  assert.equal(compareFailClosed.ok, false, "compare_smoke_fail_closed: malformed compare must fail closed");
+  assert.equal(
+    String(compareFailClosed?.state?.reason_code || ""),
+    "ui_pending_interaction_missing_for_compare",
+    "compare_smoke_fail_closed: missing pending_interaction must be explicit"
+  );
 
   console.log("[contract_smoke] PASS", {
     cases: cases.length,

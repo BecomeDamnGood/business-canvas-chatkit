@@ -5274,6 +5274,18 @@ ${String(item || "").trim()}`.trim())
       };
     }).filter((entry) => Boolean(entry)) : [];
     if (allowedActions.length === 0) return null;
+    const hasUserPickAction = allowedActions.some((action) => action.role === "wording_pick_user");
+    const hasSuggestionPickAction = allowedActions.some((action) => action.role === "wording_pick_suggestion");
+    if (!hasUserPickAction || !hasSuggestionPickAction) return null;
+    const userLabel = String(renderModelRaw.user_label || "").trim();
+    const suggestionLabel = String(renderModelRaw.suggestion_label || "").trim();
+    if (!userLabel || !suggestionLabel) return null;
+    const userItems = normalizeStringArray(renderModelRaw.user_items);
+    const suggestionItems = normalizeStringArray(renderModelRaw.suggestion_items);
+    const userText = String(renderModelRaw.user_text || "").trim();
+    const suggestionText = String(renderModelRaw.suggestion_text || "").trim();
+    const hasComparableValues = mode === "list" ? userItems.length > 0 || suggestionItems.length > 0 || Boolean(userText) || Boolean(suggestionText) : Boolean(userText) || Boolean(suggestionText);
+    if (!hasComparableValues) return null;
     return {
       id: String(pending.id || "").trim(),
       kind: "wording_choice",
@@ -5284,16 +5296,37 @@ ${String(item || "").trim()}`.trim())
         variant,
         instruction: String(renderModelRaw.instruction || "").trim(),
         feedbackReasonText: String(renderModelRaw.feedback_reason_text || "").trim(),
-        userLabel: String(renderModelRaw.user_label || "").trim(),
-        suggestionLabel: String(renderModelRaw.suggestion_label || "").trim(),
-        userText: String(renderModelRaw.user_text || "").trim(),
-        suggestionText: String(renderModelRaw.suggestion_text || "").trim(),
-        userItems: normalizeStringArray(renderModelRaw.user_items),
-        suggestionItems: normalizeStringArray(renderModelRaw.suggestion_items),
+        userLabel,
+        suggestionLabel,
+        userText,
+        suggestionText,
+        userItems,
+        suggestionItems,
         retainedHeading: String(renderModelRaw.retained_heading || "").trim(),
         retainedItems: normalizeStringArray(renderModelRaw.retained_items)
       }
     };
+  }
+  function hasLegacyCompareCompatSource(uiPayload) {
+    const wordingChoice = toRecord3(uiPayload.wording_choice);
+    if (Object.keys(wordingChoice).length === 0) return false;
+    const flags = toRecord3(uiPayload.flags);
+    const wordingEnabled = wordingChoice.enabled === true || String(flags.require_wording_pick || "").trim().toLowerCase() === "true";
+    if (!wordingEnabled) return false;
+    if (String(wordingChoice.presentation || "").trim() === "canonical") return false;
+    return String(wordingChoice.user_text || "").trim().length > 0 || String(wordingChoice.suggestion_text || "").trim().length > 0 || normalizeStringArray(wordingChoice.user_items).length > 0 || normalizeStringArray(wordingChoice.suggestion_items).length > 0;
+  }
+  function readCompareContractFailureReason(uiPayloadRaw) {
+    const uiPayload = toRecord3(uiPayloadRaw);
+    const feedbackContract = readFeedbackContract(uiPayload);
+    const dreamBuilderContract = readDreamBuilderContract(uiPayload);
+    const compareSourceActive = feedbackContract?.kind === "single_value_compare" || feedbackContract?.kind === "grouped_list_compare" || feedbackContract?.kind === "list_edit_compare" || feedbackContract?.kind === "list_duplicate_merge_compare" || dreamBuilderContract?.phase === "compare" && Boolean(dreamBuilderContract.compare) || hasLegacyCompareCompatSource(uiPayload);
+    if (!compareSourceActive) return null;
+    const pendingInteractionRaw = toRecord3(uiPayload.pending_interaction);
+    if (Object.keys(pendingInteractionRaw).length === 0) {
+      return "ui_pending_interaction_missing_for_compare";
+    }
+    return readPendingInteraction(uiPayload) ? null : "ui_pending_interaction_malformed_for_compare";
   }
   function actionDescriptorForRole(resultData, role) {
     const roleNorm = String(role || "").trim().toLowerCase();
@@ -5683,6 +5716,24 @@ ${String(item || "").trim()}`.trim())
     metaRow.appendChild(metaTime);
     cardDesc.appendChild(metaRow);
   }
+  function blockedMessageForReason(lang, reason, fallbackMessage) {
+    if (reason === "session_upgrade_required") {
+      return {
+        title: uiText2(lang, "error.session_upgrade.title", ""),
+        body: uiText2(lang, "error.session_upgrade.body", "") || fallbackMessage || ""
+      };
+    }
+    if (reason === "contract_violation") {
+      return {
+        title: uiText2(lang, "error.contract.title", ""),
+        body: uiText2(lang, "error.contract.body", "") || fallbackMessage || ""
+      };
+    }
+    return {
+      title: uiText2(lang, "error.generic.title", ""),
+      body: uiText2(lang, "error.generic.body", "") || fallbackMessage || ""
+    };
+  }
   function readActionLiveness(result, state) {
     const stateLiveness = toRecord3(state.ui_action_liveness);
     const ackStatus = String(result.ack_status || state.ack_status || stateLiveness.ack_status || "").trim().toLowerCase();
@@ -5698,6 +5749,17 @@ ${String(item || "").trim()}`.trim())
         result.client_action_id_echo || state.client_action_id_echo || stateLiveness.client_action_id_echo || ""
       ).trim()
     };
+  }
+  function renderContractFailureState(cardDesc, lang, reasonCode, fallbackMessage) {
+    const blocked = blockedMessageForReason(lang, "contract_violation", fallbackMessage);
+    clearElement(cardDesc);
+    const shell = appendTextNode("div", "bootstrap-wait-shell", "");
+    shell.style.display = "grid";
+    shell.style.gap = "12px";
+    shell.appendChild(appendTextNode("div", "bootstrap-blocked-title", blocked.title));
+    shell.appendChild(appendTextNode("div", "bootstrap-blocked-copy", blocked.body));
+    shell.appendChild(appendTextNode("div", "bootstrap-blocked-copy", `Reason code: ${reasonCode || "contract_violation"}`));
+    cardDesc.appendChild(shell);
   }
   function warnWidgetRootVisibilityIssue(reason) {
     const root = globalThis;
@@ -5987,6 +6049,42 @@ ${String(item || "").trim()}`.trim())
     const stepTitle = serverExplicitWaiting ? "" : stepperLabelForLang(current, lang) || extractStepTitle(current, lang);
     buildStepper(idx, stepTitle, lang);
     if (badge) badge.textContent = String(idx + 1).padStart(2, "0");
+    const compareContractFailureReason = readCompareContractFailureReason(uiPayload);
+    const contractFailureReason = errorObj?.type === "contract_warning" ? String(errorObj.reason || state.reason_code || "contract_violation").trim().toLowerCase() : compareContractFailureReason;
+    if (contractFailureReason) {
+      inputWrap.style.display = "none";
+      const choiceWrap = document.getElementById("choiceWrap");
+      if (choiceWrap) choiceWrap.style.display = "none";
+      const wordingChoiceWrap = document.getElementById("wordingChoiceWrap");
+      if (wordingChoiceWrap) wordingChoiceWrap.style.display = "none";
+      const cardDesc = document.getElementById("cardDesc");
+      const prompt = document.getElementById("prompt");
+      const uiSubtitle = document.getElementById("uiSubtitle");
+      if (prompt) prompt.textContent = "";
+      if (uiSubtitle) {
+        uiSubtitle.textContent = "";
+        uiSubtitle.style.display = "none";
+      }
+      startHint.textContent = "";
+      startHint.style.display = "none";
+      btnStart2.style.display = "none";
+      if (primaryActionWrap) primaryActionWrap.style.display = "none";
+      if (auxiliaryActionWrap) auxiliaryActionWrap.style.display = "none";
+      if (cardDesc) {
+        const blockedEl = cardDesc;
+        blockedEl.classList.remove("has-grid");
+        blockedEl.classList.remove("is-step0-ask-layout");
+        renderContractFailureState(
+          blockedEl,
+          lang,
+          contractFailureReason,
+          String(errorObj?.user_message || "")
+        );
+      }
+      setInlineNotice(uiText2(lang, "error.contract.body", ""));
+      if (isLoading) setLoading(false);
+      return;
+    }
     if (serverExplicitWaiting || serverExplicitRecovery || serverExplicitBlocked || serverExplicitFailed) {
       inputWrap.style.display = "none";
       const choiceWrap = document.getElementById("choiceWrap");

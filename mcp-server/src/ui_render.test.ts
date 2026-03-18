@@ -8,6 +8,7 @@ import {
   decorateStructuredSuggestionItemsForStep,
   dreamExerciseButtonLabelKeyForState,
   parseWordingChoiceInstruction,
+  readCompareContractFailureReason,
   readFeedbackContract,
   readDreamBuilderContract,
   readStructuredSuggestionsCardContent,
@@ -238,6 +239,69 @@ test("shouldSuppressMainCardForWordingChoice follows the feedback contract for c
       "default"
     ),
     false
+  );
+});
+
+test("readCompareContractFailureReason fail-closes compare payloads that are missing pending_interaction", () => {
+  assert.equal(
+    readCompareContractFailureReason({
+      feedback_contract: {
+        kind: "single_value_compare",
+        mode: "text",
+        current_value: "Mijn versie",
+        suggested_value: "De suggestie",
+      },
+    }),
+    "ui_pending_interaction_missing_for_compare"
+  );
+  assert.equal(
+    shouldSuppressMainCardForWordingChoice(
+      {
+        feedback_contract: {
+          kind: "single_value_compare",
+          mode: "text",
+          current_value: "Mijn versie",
+          suggested_value: "De suggestie",
+        },
+      },
+      "default"
+    ),
+    false
+  );
+});
+
+test("readCompareContractFailureReason rejects malformed pending_interaction payloads", () => {
+  assert.equal(
+    readCompareContractFailureReason({
+      feedback_contract: {
+        kind: "single_value_compare",
+        mode: "text",
+        current_value: "Mijn versie",
+        suggested_value: "De suggestie",
+      },
+      pending_interaction: {
+        kind: "wording_choice",
+        status: "pending",
+        allowed_actions: [
+          {
+            id: "pick_user",
+            action_code: "ACTION_WORDING_PICK_USER",
+            label: "Choose",
+            label_key: "wordingChoice.chooseVersion",
+            role: "wording_pick_user",
+            surface: "wording_choice",
+          },
+        ],
+        render_model: {
+          mode: "text",
+          user_label: "",
+          suggestion_label: "Mijn suggestie",
+          user_text: "Mijn versie",
+          suggestion_text: "De suggestie",
+        },
+      },
+    }),
+    "ui_pending_interaction_malformed_for_compare"
   );
 });
 

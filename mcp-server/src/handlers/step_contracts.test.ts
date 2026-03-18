@@ -542,6 +542,8 @@ test("feedback contract derives the single-value compare family from wording-cho
       state: {
         started: "true",
         current_step: "bigwhy",
+        ui_action_wording_pick_user: "ACTION_WORDING_PICK_USER",
+        ui_action_wording_pick_suggestion: "ACTION_WORDING_PICK_SUGGESTION",
       } as any,
       ui: {
         view: {
@@ -599,6 +601,8 @@ test("final response feedback contract backfills current_value from specialist w
       state: {
         started: "true",
         current_step: "dream",
+        ui_action_wording_pick_user: "ACTION_WORDING_PICK_USER",
+        ui_action_wording_pick_suggestion: "ACTION_WORDING_PICK_SUGGESTION",
       } as any,
       ui: {
         view: {
@@ -651,6 +655,8 @@ test("final response repairs explicit single-value compare contracts that are mi
       state: {
         started: "true",
         current_step: "dream",
+        ui_action_wording_pick_user: "ACTION_WORDING_PICK_USER",
+        ui_action_wording_pick_suggestion: "ACTION_WORDING_PICK_SUGGESTION",
       } as any,
       ui: {
         view: {
@@ -744,6 +750,8 @@ test("feedback contract derives the list edit family from wording-choice list fe
       state: {
         started: "true",
         current_step: "productsservices",
+        ui_action_wording_pick_user: "ACTION_WORDING_PICK_USER",
+        ui_action_wording_pick_suggestion: "ACTION_WORDING_PICK_SUGGESTION",
       } as any,
       ui: {
         view: {
@@ -793,6 +801,8 @@ test("feedback contract derives the grouped list compare family from grouped lis
       state: {
         started: "true",
         current_step: "dream",
+        ui_action_wording_pick_user: "ACTION_WORDING_PICK_USER",
+        ui_action_wording_pick_suggestion: "ACTION_WORDING_PICK_SUGGESTION",
       } as any,
       ui: {
         view: {
@@ -856,6 +866,95 @@ test("feedback contract derives the grouped list compare family from grouped lis
     String(feedbackContract.instruction || ""),
     "Choose the version that fits best for the remaining difference."
   );
+});
+
+test("compare contracts fail closed when pending interaction actions are missing", () => {
+  const response = finalizeResponseContractInternals(
+    {
+      ok: true,
+      current_step_id: "purpose",
+      text: "",
+      prompt: "",
+      specialist: {},
+      state: {
+        started: "true",
+        current_step: "purpose",
+      } as any,
+      ui: {
+        contract_id: "purpose:interactive:refine",
+        view: {
+          mode: "interactive",
+          variant: "wording_choice",
+        },
+        feedback_contract: {
+          kind: "single_value_compare",
+          mode: "text",
+          current_value: "We want to do something good.",
+          suggested_value: "We exist to make complex choices understandable.",
+          instruction: "Choose the wording that fits best.",
+        },
+      },
+    } as any,
+    {
+      applyUiClientActionContract: () => {},
+      parseMenuFromContractIdForStep: () => "",
+      labelKeysForMenuActionCodes: () => [],
+      onUiParityError: () => {},
+      attachRegistryPayload: (payload) => payload,
+    }
+  );
+
+  assert.equal(response.ok, false);
+  assert.equal(String((response.error as Record<string, unknown> | undefined)?.type || ""), "contract_warning");
+  assert.equal(String(((response.state as any) || {}).reason_code || ""), "ui_pending_interaction_missing_for_compare");
+});
+
+test("dream compare contracts fail closed when generic card content is still present", () => {
+  const response = finalizeResponseContractInternals(
+    {
+      ok: true,
+      current_step_id: "dream",
+      text: "",
+      prompt: "",
+      specialist: {},
+      state: {
+        started: "true",
+        current_step: "dream",
+        ui_action_wording_pick_user: "ACTION_WORDING_PICK_USER",
+        ui_action_wording_pick_suggestion: "ACTION_WORDING_PICK_SUGGESTION",
+      } as any,
+      ui: {
+        contract_id: "dream:interactive:refine",
+        view: {
+          mode: "interactive",
+          variant: "wording_choice",
+        },
+        content: {
+          kind: "single_value",
+          heading: "JE HUIDIGE DROOM VOOR MINDD IS",
+          canonical_text: "Mindd droomt van een wereld waarin mensen zich verbonden voelen.",
+        },
+        feedback_contract: {
+          kind: "single_value_compare",
+          mode: "text",
+          current_value: "Wij willen bedrijven helpen groeien.",
+          suggested_value: "Mindd droomt van een wereld waarin mensen zich verbonden voelen.",
+          instruction: "Choose the wording that fits best.",
+        },
+      },
+    } as any,
+    {
+      applyUiClientActionContract: () => {},
+      parseMenuFromContractIdForStep: () => "",
+      labelKeysForMenuActionCodes: () => [],
+      onUiParityError: () => {},
+      attachRegistryPayload: (payload) => payload,
+    }
+  );
+
+  assert.equal(response.ok, false);
+  assert.equal(String((response.error as Record<string, unknown> | undefined)?.type || ""), "contract_warning");
+  assert.equal(String(((response.state as any) || {}).reason_code || ""), "dream_compare_generic_card_content_present");
 });
 
 test("final response publishes a single server-owned pending interaction for wording choice", () => {
