@@ -383,7 +383,10 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
     });
     if (!renderedResult.ok) return renderedResult.payload;
 
-    const stateWithUi = await deps.ensureUiStrings(renderedResult.value.state, context.userMessage);
+    const stateWithUi = await deps.ensureUiStrings(
+      renderedResult.value.state,
+      String(context.actionCodeRaw || context.userMessage || "")
+    );
 
     return deps.turnResponseEngine.attachAndFinalize({
       state: stateWithUi,

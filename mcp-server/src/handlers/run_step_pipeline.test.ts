@@ -1487,6 +1487,149 @@ test("runPostSpecialistPipeline repairs Dream Builder REFINE overlap cases befor
   assert.equal(String(specialist.__dream_builder_compare_pending || ""), "true");
 });
 
+test("runPostSpecialistPipeline repairs a 20th Dream Builder append into overlap merge when the raw user input matches an existing statement more strongly than the appended line does", async () => {
+  const existingStatements = [
+    "Over 5 tot 10 jaar wordt het als vanzelfsprekend gezien dat werk bijdraagt aan het welzijn van mensen.",
+    "Mensen streven ernaar om iets blijvends toe te voegen aan de samenleving.",
+    "Vrijheid in tijd en keuzes wordt steeds belangrijker in de manier waarop mensen hun leven en werk vormgeven.",
+    "Mensen hechten meer waarde aan trots en zingeving in hun werk.",
+    "Bedrijven worden steeds vaker gezien als een verlengstuk van persoonlijke waarden en identiteit.",
+    "Mensen zoeken steeds vaker naar oplossingen voor problemen die voor hen echt belangrijk zijn.",
+    "Er ontstaat een groeiende behoefte aan helderheid en eenvoud in complexe of verwarrende gebieden.",
+    "Het belang van veilige omgevingen waarin mensen zich gezien en gesteund voelen, groeit sterk.",
+    "De samenleving wordt steeds meer uitgedaagd om bestaande patronen te doorbreken en te verbeteren.",
+    "Mensen streven ernaar zich persoonlijk te ontwikkelen en te groeien door hun werk en ondernemerschap.",
+    "Gemeenschappen ontstaan steeds vaker rondom gedeelde overtuigingen of bewegingen.",
+    "Er komen meer kansen voor mensen om samen te werken en elkaar te ondersteunen, zowel als klant, partner of collega.",
+    "Zingeving in werk wordt belangrijker, zonder dat dit ten koste gaat van gezondheid of relaties.",
+    "Financiele zekerheid wordt steeds meer gekoppeld aan werk dat als waardevol en juist wordt ervaren.",
+    "Mensen waarderen schoonheid, kwaliteit en vakmanschap steeds meer in producten en diensten.",
+    "Complexe processen worden toegankelijker, sneller en menselijker gemaakt.",
+    "Mensen worden vaker geinspireerd om in zichzelf te geloven en in actie te komen.",
+    "Steeds meer mensen willen bijdragen aan een toekomst waar ze trots op kunnen zijn.",
+    "Eerlijkheid, vertrouwen en integriteit worden steeds belangrijker in hoe bedrijven worden gezien.",
+  ];
+  const specialistCalls: string[] = [];
+  const userMessage =
+    "Het wordt steeds belangrijker om bij te dragen aan een toekomst waar we trots op kunnen zijn.";
+  const helpers = buildStrategyPipelineHarness({
+    specialistResults: [
+      {
+        action: "ASK",
+        message: "Statement 20 noted.",
+        question:
+          "What else do you see changing in the future, positive or negative? Let your imagination run free and formulate them as clear statements.",
+        feedback_reason_text: "",
+        refined_formulation: "",
+        dream: "",
+        statements: [
+          ...existingStatements,
+          "Het wordt steeds belangrijker om bij te dragen aan een toekomst waar mensen trots op kunnen zijn.",
+        ],
+        suggest_dreambuilder: "true",
+        scoring_phase: "false",
+        clusters: [],
+        user_state: "ok",
+        wants_recap: false,
+        is_offtopic: false,
+        user_intent: "STEP_INPUT",
+        meta_topic: "NONE",
+      },
+      {
+        action: "REFINE",
+        message: "Ik heb de overlap samengebracht in een scherpere maatschappelijke formulering.",
+        question: "Past deze samengevoegde formulering beter, of wil je hem aanpassen?",
+        feedback_reason_text:
+          "Deze nieuwe zin overlapt sterk met een bestaande statement, dus een samengevoegde formulering houdt je lijst scherper.",
+        refined_formulation:
+          "Steeds meer mensen willen bijdragen aan een toekomst waar ze trots op kunnen zijn.",
+        dream: "",
+        statements: existingStatements,
+        suggest_dreambuilder: "true",
+        scoring_phase: "false",
+        clusters: [],
+        user_state: "ok",
+        wants_recap: false,
+        is_offtopic: false,
+        user_intent: "STEP_INPUT",
+        meta_topic: "NONE",
+      },
+    ],
+    dreamRuntimeMode: "builder_collect",
+    onSpecialistCall: (message) => {
+      specialistCalls.push(message);
+    },
+  });
+
+  const payload = await helpers.runPostSpecialistPipeline({
+    routing: {
+      userMessage,
+      actionCodeRaw: "",
+      responseUiFlags: null,
+      inputMode: "widget",
+      wordingChoiceEnabled: true,
+      languageResolvedThisTurn: false,
+      isBootstrapPollCall: false,
+      motivationQuotesEnabled: false,
+    },
+    rendering: {
+      uiI18nTelemetry: null,
+      lang: "nl",
+      ensureUiStrings: async (state) => state,
+    },
+    state: {
+      state: {
+        current_step: "dream",
+        active_specialist: "DreamExplainer",
+        __dream_runtime_mode: "builder_collect",
+        dream_builder_statements: existingStatements,
+        provisional_by_step: {},
+        last_specialist_result: {
+          statements: existingStatements,
+          dream: "",
+          refined_formulation: "",
+        },
+      } as any,
+      transientPendingScores: null,
+      submittedUserText: userMessage,
+      submittedTextIntent: "content_input",
+      submittedTextAnchor: "user_input",
+      rawNormalized: userMessage,
+      pristineAtEntry: true,
+    },
+    specialist: {
+      model: "gpt-5-mini",
+      decideOrchestration: () =>
+        ({
+          current_step: "dream",
+          specialist_to_call: "DreamExplainer",
+          show_session_intro: "false",
+          show_step_intro: "false",
+        }) as any,
+      rememberLlmCall: () => {},
+    },
+  } as any);
+
+  assert.equal(specialistCalls.length, 2);
+  assert.equal(
+    specialistCalls[1]?.startsWith("__ROUTE__DREAM_EXPLAINER_OVERLAP_REPAIR__"),
+    true
+  );
+  const specialist = (((payload.specialist as Record<string, unknown>)?.__dream_builder_compare_pending
+    ? (payload.specialist as Record<string, unknown>)
+    : ((payload.state as Record<string, unknown>).last_specialist_result as Record<string, unknown>)) || {}) as Record<string, unknown>;
+  assert.equal(
+    String(specialist.__dream_builder_overlap_existing_statement || ""),
+    existingStatements[17]
+  );
+  assert.equal(
+    String(specialist.__dream_builder_overlap_incoming_statement || ""),
+    userMessage
+  );
+  assert.equal(String(specialist.__dream_builder_compare_pending || ""), "true");
+  assert.deepEqual(specialist.statements, existingStatements);
+});
+
 test("runPostSpecialistPipeline repairs incomplete multi-wish Dream Builder rewrites before publishing compare", async () => {
   const userWishBatch = [
     "I want to help people solve a problem they truly care about.",

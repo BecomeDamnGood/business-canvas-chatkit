@@ -1,7 +1,11 @@
 import { ACTIONCODE_REGISTRY } from "../core/actioncode_registry.js";
 import { VIEW_CONTRACT_VERSION as LOCALE_START_VIEW_CONTRACT_VERSION } from "../core/bootstrap_runtime.js";
 import type { CanvasState } from "../core/state.js";
-import { normalizeStringArray, synthesizeUiFeedbackContractFromWordingChoice } from "../core/ui_feedback_contract.js";
+import {
+  normalizeStringArray,
+  normalizeUiFeedbackContractSource,
+  synthesizeUiFeedbackContractFromWordingChoice,
+} from "../core/ui_feedback_contract.js";
 import { labelKeyForMenuAction } from "../core/menu_contract.js";
 import { UI_STRINGS_DEFAULT, UI_STRINGS_WITH_MENU_KEYS } from "../i18n/ui_strings_defaults.js";
 import { resolveUiStringForState } from "../i18n/ui_strings_lookup.js";
@@ -115,13 +119,14 @@ const UI_FEEDBACK_KINDS = new Set<UiFeedbackKind>([
 
 function ensureUnifiedUiFeedbackContract(response: RunStepContractResponse): void {
   const ui = toRecord(response.ui);
-  const existing = toRecord(ui.feedback_contract);
-  const existingKind = String(existing.kind || "").trim();
-  if (UI_FEEDBACK_KINDS.has(existingKind as UiFeedbackKind)) {
+  const normalizedExisting = normalizeUiFeedbackContractSource(ui.feedback_contract, response.specialist);
+  const existingKind = String(toRecord(normalizedExisting).kind || "").trim();
+  if (normalizedExisting && UI_FEEDBACK_KINDS.has(existingKind as UiFeedbackKind)) {
+    ui.feedback_contract = normalizedExisting;
+    response.ui = ui;
     return;
   }
 
-  const uiContent = toRecord(ui.content);
   const synthesizedFromWordingChoice = synthesizeUiFeedbackContractFromWordingChoice(
     ui.wording_choice,
     ui.flags,

@@ -4,6 +4,10 @@ function toRecord(value: unknown): Record<string, unknown> {
     : {};
 }
 
+function trimString(value: unknown): string {
+  return String(value || "").trim();
+}
+
 export function normalizeStringArray(raw: unknown): string[] {
   return Array.isArray(raw)
     ? raw.map((value) => String(value || "").trim()).filter(Boolean)
@@ -159,4 +163,86 @@ export function synthesizeUiFeedbackContractFromWordingChoice(
   }
 
   return undefined;
+}
+
+export function normalizeUiFeedbackContractSource(
+  raw: unknown,
+  specialistRaw?: unknown
+): Record<string, unknown> | undefined {
+  const record = toRecord(raw);
+  const kind = trimString(record.kind);
+  if (
+    kind !== "single_value_canonical_suggestion" &&
+    kind !== "single_value_compare" &&
+    kind !== "grouped_list_compare" &&
+    kind !== "list_edit_compare" &&
+    kind !== "list_duplicate_merge_compare"
+  ) {
+    return undefined;
+  }
+
+  const specialist = toRecord(specialistRaw);
+  const mode = trimString(record.mode).toLowerCase() === "list" ? "list" : "text";
+  const heading = trimString(record.heading);
+  const supportText =
+    kind === "single_value_canonical_suggestion" ? "" : trimString(record.support_text);
+  const rationale = trimString(record.rationale);
+  const currentLabel = trimString(record.current_label);
+  const suggestedLabel = trimString(record.suggested_label);
+  const retainedHeading = trimString(record.retained_heading);
+  const instruction = trimString(record.instruction);
+  const currentItems = normalizeStringArray(record.current_items);
+  const suggestedItems = normalizeStringArray(record.suggested_items);
+  const retainedItems = normalizeStringArray(record.retained_items);
+  const currentValue = trimString(
+    record.current_value ||
+      currentItems.join("\n") ||
+      specialist.wording_choice_user_normalized ||
+      specialist.wording_choice_user_raw
+  );
+  const suggestedValue = trimString(
+    record.suggested_value ||
+      suggestedItems.join("\n") ||
+      specialist.wording_choice_agent_current ||
+      specialist.refined_formulation
+  );
+
+  if (
+    !heading &&
+    !supportText &&
+    !rationale &&
+    !currentLabel &&
+    !suggestedLabel &&
+    !currentValue &&
+    !suggestedValue &&
+    !retainedHeading &&
+    !instruction &&
+    currentItems.length === 0 &&
+    suggestedItems.length === 0 &&
+    retainedItems.length === 0
+  ) {
+    return undefined;
+  }
+
+  if (kind === "single_value_compare" && !currentValue) {
+    return undefined;
+  }
+
+  return {
+    version: "2026-03-16.feedback_contract.v1",
+    kind,
+    mode,
+    ...(heading ? { heading } : {}),
+    ...(supportText ? { support_text: supportText } : {}),
+    ...(rationale ? { rationale } : {}),
+    ...(currentLabel ? { current_label: currentLabel } : {}),
+    ...(suggestedLabel ? { suggested_label: suggestedLabel } : {}),
+    ...(currentValue ? { current_value: currentValue } : {}),
+    ...(suggestedValue ? { suggested_value: suggestedValue } : {}),
+    ...(currentItems.length > 0 ? { current_items: currentItems } : {}),
+    ...(suggestedItems.length > 0 ? { suggested_items: suggestedItems } : {}),
+    ...(retainedHeading ? { retained_heading: retainedHeading } : {}),
+    ...(retainedItems.length > 0 ? { retained_items: retainedItems } : {}),
+    ...(instruction ? { instruction } : {}),
+  };
 }

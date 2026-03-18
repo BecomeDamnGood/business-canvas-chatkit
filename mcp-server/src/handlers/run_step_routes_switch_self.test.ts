@@ -743,6 +743,7 @@ test("dream_start_exercise reuses saved Dream Builder score context when it stil
 
 test("dream_submit_scores immediately transitions into Dream formulation with stored score context", async () => {
   const calls: Array<{ state: Record<string, unknown>; userMessage: string }> = [];
+  const ensureUiStringsInputs: string[] = [];
   const statements = Array.from({ length: 20 }, (_, index) => `Statement ${index + 1}`);
   const ports: any = {
     ids: {
@@ -798,7 +799,10 @@ test("dream_submit_scores immediately transitions into Dream formulation with st
         throw new Error("validateRenderedContractOrRecover should not be called in this test");
       },
       applyUiPhaseByStep: () => {},
-      ensureUiStrings: async (state: Record<string, unknown>) => state as any,
+      ensureUiStrings: async (state: Record<string, unknown>, routeOrText: string) => {
+        ensureUiStringsInputs.push(String(routeOrText || ""));
+        return state as any;
+      },
       buildContractId: () => "",
     },
     step0: {
@@ -958,6 +962,7 @@ test("dream_submit_scores immediately transitions into Dream formulation with st
       top_statements: ["Statement 1"],
     },
   ]);
+  assert.equal(ensureUiStringsInputs[0], "ACTION_DREAM_EXPLAINER_SUBMIT_SCORES");
 });
 
 test("dream_submit_scores rejects incomplete score matrices before Dream formulation", async () => {

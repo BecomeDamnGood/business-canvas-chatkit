@@ -261,6 +261,53 @@ test("runStepRuntimeActionRoutingLayer keeps Dream Builder pending free text out
   assert.equal(String(specialist.__dream_builder_compare_pending || ""), "false");
 });
 
+test("runStepRuntimeActionRoutingLayer keeps widget score-submit turns on the action code instead of the clicked label", async () => {
+  const params = buildParams(false) as any;
+  const ensureUiStringsInputs: string[] = [];
+  params.runtime.state = {
+    current_step: "dream",
+    active_specialist: "DreamExplainer",
+    __dream_runtime_mode: "builder_scoring",
+    __last_clicked_label_for_contract: "Formulate my dream for me based on what I find important.",
+    last_specialist_result: {
+      action: "ASK",
+      scoring_phase: "true",
+      clusters: [{ theme: "Trust", statement_indices: [0] }],
+      statements: ["Statement 1"],
+    },
+  };
+  params.runtime.userMessage = "";
+  params.runtime.actionCodeRaw = "ACTION_DREAM_EXPLAINER_SUBMIT_SCORES";
+  params.action.getDreamRuntimeMode = () => "builder_scoring" as const;
+  params.behavior.ensureUiStrings = async (state: any, routeOrText: string) => {
+    ensureUiStringsInputs.push(String(routeOrText || ""));
+    return state;
+  };
+  params.behavior.turnResponseEngine.renderValidateRecover = ({ state, specialist }: any) => ({
+    ok: true,
+    value: {
+      state,
+      specialist: {
+        ...specialist,
+        action: "ASK",
+      },
+      renderedStatus: "incomplete_output",
+      actionCodes: [],
+      renderedActions: [],
+      contractMeta: {
+        contractId: "",
+        contractVersion: "v1",
+        textKeys: [],
+      },
+    },
+  });
+
+  const result = await runStepRuntimeActionRoutingLayer(params);
+
+  assert.ok(result.response);
+  assert.equal(ensureUiStringsInputs[0], "ACTION_DREAM_EXPLAINER_SUBMIT_SCORES");
+});
+
 test("runStepRuntimeActionRoutingLayer accepts the pending suggestion explicitly without leaving residual picker state", async () => {
   const params = buildParams(false) as any;
   params.runtime.userMessage = "Ja, deze past goed.";

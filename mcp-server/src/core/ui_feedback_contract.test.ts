@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  normalizeUiFeedbackContractSource,
   parseRetainedInstruction,
   resolveWordingChoiceFeedbackSource,
   synthesizeUiFeedbackContractFromWordingChoice,
@@ -87,5 +88,33 @@ test("resolveWordingChoiceFeedbackSource backfills missing compare fields from s
   assert.equal(
     String(resolved.suggestion_text || ""),
     "Mindd droomt van een wereld waarin mensen zich zeker voelen omdat ze eerlijk geinformeerd worden."
+  );
+});
+
+test("normalizeUiFeedbackContractSource backfills single-value compare current_value from specialist wording state", () => {
+  const normalized = normalizeUiFeedbackContractSource(
+    {
+      version: "2026-03-16.feedback_contract.v1",
+      kind: "single_value_compare",
+      mode: "text",
+      rationale:
+        "Je benoemt een probleem, maar de Droom vraagt om een positief toekomstbeeld.",
+      current_label: "Dit is jouw input",
+      suggested_label: "Dit zou mijn suggestie zijn",
+      current_value: "",
+      suggested_value:
+        "Mindd droomt van een wereld waarin mensen zich zeker voelen omdat ze eerlijk geinformeerd worden.",
+      instruction: "Klik alsjeblieft wat het beste bij je past.",
+    },
+    {
+      wording_choice_user_normalized:
+        "Dit gaat over dat mensen het beu zijn om verkeerd voorgelicht te worden.",
+    }
+  );
+
+  assert.equal(String(normalized?.kind || ""), "single_value_compare");
+  assert.equal(
+    String(normalized?.current_value || ""),
+    "Dit gaat over dat mensen het beu zijn om verkeerd voorgelicht te worden."
   );
 });

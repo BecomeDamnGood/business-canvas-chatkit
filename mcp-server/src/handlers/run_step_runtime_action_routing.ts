@@ -901,7 +901,9 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
       runtime.lastSpecialistResult
     );
 
-    if (runtime.inputMode === "widget" && routed === actionCodeInput) {
+    if (runtime.inputMode === "widget" && actionCodeInput) {
+      userMessage = routed;
+    } else if (runtime.inputMode === "widget" && routed === actionCodeInput) {
       const clickedLabel = String((state as Record<string, unknown>).__last_clicked_label_for_contract || "").trim();
       userMessage = clickedLabel;
     } else {

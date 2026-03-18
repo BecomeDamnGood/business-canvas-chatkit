@@ -860,6 +860,53 @@ test("attachRegistryPayload backfills non-Dream compare current_value from speci
   assert.equal("wording_choice" in (payload.ui || {}), false);
 });
 
+test("attachRegistryPayload repairs explicit single-value compare contracts that are missing current_value", () => {
+  const helpers = buildHelpers();
+  const canonical = "Mindd droomt van een wereld waarin mensen zich goed geinformeerd en veilig voelen.";
+  const userInput = "Dit gaat over dat mensen het beu zijn om verkeerd voorgelicht te worden.";
+  const payload = helpers.attachRegistryPayload(
+    {
+      text: canonical,
+      prompt: "",
+      current_step_id: "dream",
+      state: {
+        current_step: "dream",
+        active_specialist: "Dream",
+      } as any,
+    },
+    {
+      ui_contract_id: "dream:ASK:DREAM_MENU_REFINE:v1",
+      wording_choice_pending: "true",
+      wording_choice_mode: "text",
+      wording_choice_presentation: "picker",
+      wording_choice_target_field: "dream",
+      wording_choice_user_normalized: userInput,
+      wording_choice_agent_current: canonical,
+      ui_feedback_contract: {
+        version: "2026-03-16.feedback_contract.v1",
+        kind: "single_value_compare",
+        mode: "text",
+        rationale:
+          "Je benoemt een probleem, maar de Droom vraagt om een positief toekomstbeeld.",
+        current_label: "Dit is jouw input",
+        suggested_label: "Dit zou mijn suggestie zijn",
+        current_value: "",
+        suggested_value: canonical,
+        instruction: "Klik alsjeblieft wat het beste bij je past.",
+      },
+    },
+    { require_wording_pick: true },
+    [],
+    [],
+    null
+  );
+
+  assert.equal(payload.ui?.view?.variant, "wording_choice");
+  assert.equal(String(payload.ui?.feedback_contract?.kind || ""), "single_value_compare");
+  assert.equal(String(payload.ui?.feedback_contract?.current_value || ""), userInput);
+  assert.equal(String(payload.ui?.feedback_contract?.suggested_value || ""), canonical);
+});
+
 test("attachRegistryPayload suppresses single-value ui.content while wording-choice picker is active for non-Dream steps", () => {
   const helpers = buildHelpers();
   const canonical = "Mindd bestaat om complexe keuzes begrijpelijk te maken.";

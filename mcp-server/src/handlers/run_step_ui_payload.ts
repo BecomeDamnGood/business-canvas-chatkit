@@ -5,6 +5,7 @@ import { NEXT_MENU_BY_ACTIONCODE, UI_CONTRACT_VERSION } from "../core/ui_contrac
 import { parseUiContractMenuForStep, parseUiContractStatusForStep } from "../core/ui_contract_id.js";
 import { currentTurnSupportMode } from "../core/stuck_support.js";
 import {
+  normalizeUiFeedbackContractSource,
   resolveWordingChoiceFeedbackSource,
   synthesizeUiFeedbackContractFromWordingChoice,
 } from "../core/ui_feedback_contract.js";
@@ -242,71 +243,11 @@ function normalizeUiContentPayload(raw: unknown): UiContentPayload | undefined {
   return undefined;
 }
 
-function normalizeUiFeedbackContract(raw: unknown): Record<string, unknown> | undefined {
-  const record = toRecord(raw);
-  const kind = String(record.kind || "").trim();
-  if (
-    kind !== "single_value_canonical_suggestion" &&
-    kind !== "single_value_compare" &&
-    kind !== "grouped_list_compare" &&
-    kind !== "list_edit_compare" &&
-    kind !== "list_duplicate_merge_compare"
-  ) {
-    return undefined;
-  }
-  const mode = String(record.mode || "").trim().toLowerCase() === "list" ? "list" : "text";
-  const heading = String(record.heading || "").trim();
-  const supportText =
-    kind === "single_value_canonical_suggestion" ? "" : String(record.support_text || "").trim();
-  const rationale = String(record.rationale || "").trim();
-  const currentLabel = String(record.current_label || "").trim();
-  const suggestedLabel = String(record.suggested_label || "").trim();
-  const currentValue = String(record.current_value || "").trim();
-  const suggestedValue = String(record.suggested_value || "").trim();
-  const retainedHeading = String(record.retained_heading || "").trim();
-  const instruction = String(record.instruction || "").trim();
-  const currentItems = Array.isArray(record.current_items)
-    ? record.current_items.map((value) => String(value || "").trim()).filter(Boolean)
-    : [];
-  const suggestedItems = Array.isArray(record.suggested_items)
-    ? record.suggested_items.map((value) => String(value || "").trim()).filter(Boolean)
-    : [];
-  const retainedItems = Array.isArray(record.retained_items)
-    ? record.retained_items.map((value) => String(value || "").trim()).filter(Boolean)
-    : [];
-  if (
-    !heading &&
-    !supportText &&
-    !rationale &&
-    !currentLabel &&
-    !suggestedLabel &&
-    !currentValue &&
-    !suggestedValue &&
-    !retainedHeading &&
-    !instruction &&
-    currentItems.length === 0 &&
-    suggestedItems.length === 0 &&
-    retainedItems.length === 0
-  ) {
-    return undefined;
-  }
-  return {
-    version: "2026-03-16.feedback_contract.v1",
-    kind,
-    mode,
-    ...(heading ? { heading } : {}),
-    ...(supportText ? { support_text: supportText } : {}),
-    ...(rationale ? { rationale } : {}),
-    ...(currentLabel ? { current_label: currentLabel } : {}),
-    ...(suggestedLabel ? { suggested_label: suggestedLabel } : {}),
-    ...(currentValue ? { current_value: currentValue } : {}),
-    ...(suggestedValue ? { suggested_value: suggestedValue } : {}),
-    ...(currentItems.length > 0 ? { current_items: currentItems } : {}),
-    ...(suggestedItems.length > 0 ? { suggested_items: suggestedItems } : {}),
-    ...(retainedHeading ? { retained_heading: retainedHeading } : {}),
-    ...(retainedItems.length > 0 ? { retained_items: retainedItems } : {}),
-    ...(instruction ? { instruction } : {}),
-  };
+function normalizeUiFeedbackContract(
+  raw: unknown,
+  specialistRaw?: unknown
+): Record<string, unknown> | undefined {
+  return normalizeUiFeedbackContractSource(raw, specialistRaw);
 }
 
 function normalizeDreamBuilderCompareContractFromFeedback(raw: unknown): DreamBuilderCompareContractPayload | undefined {
@@ -806,7 +747,8 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
       (specialist || {}) as Record<string, unknown>
     ) as WordingChoiceUiPayload | null;
     const explicitFeedbackContractPayload = normalizeUiFeedbackContract(
-      (specialist as Record<string, unknown>)?.ui_feedback_contract
+      (specialist as Record<string, unknown>)?.ui_feedback_contract,
+      specialist as Record<string, unknown>
     );
     const dreamSingleValuePickerActive =
       effectiveStepId === DREAM_STEP_ID &&

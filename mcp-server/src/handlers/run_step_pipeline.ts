@@ -239,6 +239,21 @@ function findDreamBuilderOverlapRepairPairFromUserInput(params: {
   return { existing: bestExisting, incoming };
 }
 
+function didDreamBuilderAppendExactlyOneStatement(params: {
+  previousStatements: string[];
+  nextStatements: string[];
+}): boolean {
+  const previousStatements = readStringArray(params.previousStatements);
+  const nextStatements = readStringArray(params.nextStatements);
+  if (previousStatements.length === 0 || nextStatements.length !== previousStatements.length + 1) {
+    return false;
+  }
+  for (let index = 0; index < previousStatements.length; index += 1) {
+    if (nextStatements[index] !== previousStatements[index]) return false;
+  }
+  return true;
+}
+
 export function shouldForcePendingWordingChoiceFromIntent(params: {
   submittedTextIntent: string;
   submittedTextAnchor: string;
@@ -1013,10 +1028,23 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
         const previousSpecialist = asRecord(stateRecord.last_specialist_result);
         return readStringArray(previousSpecialist.statements);
       })();
-      const overlapRepairPair = findDreamBuilderOverlapRepairPair({
-        previousStatements,
-        nextStatements: readStringArray(specialistResult.statements),
-      });
+      const nextStatements = readStringArray(specialistResult.statements);
+      const overlapRepairPair =
+        findDreamBuilderOverlapRepairPair({
+          previousStatements,
+          nextStatements,
+        }) ||
+        (
+          didDreamBuilderAppendExactlyOneStatement({
+            previousStatements,
+            nextStatements,
+          })
+            ? findDreamBuilderOverlapRepairPairFromUserInput({
+                previousStatements,
+                userMessage,
+              })
+            : null
+        );
       if (overlapRepairPair) {
         const repairInput = [
           deps.dreamExplainerOverlapRepairRoutePrefix,
