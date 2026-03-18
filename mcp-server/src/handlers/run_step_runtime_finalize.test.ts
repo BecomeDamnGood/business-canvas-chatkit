@@ -1,7 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { createRunStepRuntimeTextHelpers } from "./run_step_runtime_finalize.js";
+import {
+  createRunStepRuntimeFinalizeLayer,
+  createRunStepRuntimeTextHelpers,
+} from "./run_step_runtime_finalize.js";
 
 function buildTextHelpers(wordingSelectionMessage: (
   stepId: string,
@@ -46,6 +49,91 @@ function buildTextHelpers(wordingSelectionMessage: (
         .filter(Boolean),
     compactWordingPanelBody: (message: string) => String(message || ""),
   });
+}
+
+function buildFinalizeLayer() {
+  let currentState: any = {};
+  return {
+    setState(state: Record<string, unknown>) {
+      currentState = state;
+    },
+    layer: createRunStepRuntimeFinalizeLayer<Record<string, unknown>>({
+      routing: {
+        baselineModel: "gpt-5-mini",
+        modelRoutingEnabled: false,
+        modelRoutingShadow: false,
+        getState: () => currentState,
+        getActionCodeRaw: () => "",
+        deriveIntentTypeForRouting: () => "",
+        resolveModelForCall: ({ fallbackModel }) => ({
+          applied: false,
+          model: fallbackModel,
+        }),
+        shouldLogLocalDevDiagnostics: () => false,
+        isUiTranslationFastModelV1Enabled: () => false,
+      },
+      i18n: {
+        localeHint: "",
+        localeHintSource: "none",
+        inputMode: "widget",
+        isBootstrapPollCall: false,
+        uiI18nTelemetry: {},
+        isUiI18nV3LangBootstrapEnabled: () => false,
+        isUiStartTriggerLangResolveV1Enabled: () => false,
+        isInteractiveLocaleReady: () => true,
+        normalizeLangCode: (raw) => String(raw || ""),
+        ensureUiStringsForState: async (state) => state,
+        resolveLanguageForTurn: async (state) => state,
+        isLanguageResolvedThisTurn: () => false,
+      },
+      response: {
+        tokenLoggingEnabled: false,
+        baselineModel: "gpt-5-mini",
+        parseMenuFromContractIdForStep: () => "",
+        labelKeysForMenuActionCodes: () => [],
+        onUiParityError: () => {},
+        attachRegistryPayload: (payload) => payload,
+        uiI18nTelemetry: {},
+        getMigrationApplied: () => false,
+        getMigrationFromVersion: () => "",
+        getBlockingMarkerClass: () => "none",
+        resolveTurnTokenUsage: () => ({
+          usage: {
+            input_tokens: null,
+            output_tokens: null,
+            total_tokens: null,
+            provider_available: false,
+          },
+          attempts: 0,
+          models: [],
+        }),
+        getDreamRuntimeMode: (state) => String((state as Record<string, unknown>).__dream_runtime_mode || ""),
+        getDreamStepId: () => "dream",
+        getDreamExplainerSpecialist: () => "DreamExplainer",
+        buildTextForWidget: () => "",
+        deriveSuggestionStateForWidget: () => null,
+        pickPrompt: () => "",
+        renderFreeTextTurnPolicy: ({ state, specialist }) => ({
+          state,
+          specialist,
+          renderedStatus: "valid_output",
+          actionCodes: [],
+          renderedActions: [],
+          contractMeta: {
+            contractId: "",
+            contractVersion: "v1",
+            textKeys: [],
+          },
+        }),
+        validateRenderedContractOrRecover: ({ rendered, state }) => ({
+          rendered,
+          state,
+          violation: null,
+        }),
+        applyUiPhaseByStep: () => {},
+      },
+    }),
+  };
 }
 
 test("buildTextForWidget uses formatted strategy body with bullets from wording selection", () => {
@@ -1173,6 +1261,49 @@ test("buildTextForWidget strips raw HTML tags from user-facing text", () => {
   assert.doesNotMatch(output, /<[^>]+>/);
   assert.match(output, /Dit mag niet zichtbaar zijn/);
   assert.match(output, /Doelgroep blijft zichtbaar\./);
+});
+
+test("finalizeResponse keeps Dream self wording-choice actions when builder compare is not active", () => {
+  const helpers = buildFinalizeLayer();
+  const state = {
+    current_step: "dream",
+    active_specialist: "Dream",
+    started: "true",
+    last_specialist_result: {
+      ui_contract_id: "dream:ASK:DREAM_MENU_REFINE:v1",
+      wording_choice_pending: "true",
+      wording_choice_mode: "text",
+      wording_choice_presentation: "picker",
+      wording_choice_target_field: "dream",
+      wording_choice_user_normalized: "Mijn ruwe droom",
+      wording_choice_agent_current: "Mindd droomt van een wereld waarin keuzes rust geven.",
+      __dream_builder_compare_pending: "false",
+    },
+  } satisfies Record<string, unknown>;
+  helpers.setState(state);
+
+  const response = helpers.layer.finalizeResponse({
+    ok: false,
+    tool: "run_step",
+    current_step_id: "dream",
+    active_specialist: "Dream",
+    text: "",
+    prompt: "Kies welke formulering het beste past.",
+    specialist: {
+      ui_contract_id: "dream:ASK:DREAM_MENU_REFINE:v1",
+    },
+    state: state as any,
+    ui: {
+      view: {
+        mode: "interactive",
+        variant: "wording_choice",
+      },
+    },
+  });
+
+  const finalState = (response.state || {}) as Record<string, unknown>;
+  assert.equal(String(finalState.ui_action_wording_pick_user || ""), "ACTION_WORDING_PICK_USER");
+  assert.equal(String(finalState.ui_action_wording_pick_suggestion || ""), "ACTION_WORDING_PICK_SUGGESTION");
 });
 
 test("buildTextForWidget keeps single-value confirm fallback text stable without duplicating canonical output", () => {

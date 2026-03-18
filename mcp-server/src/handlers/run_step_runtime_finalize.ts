@@ -518,12 +518,8 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
       contractStepId === deps.dreamStepId &&
       String(specialist?.__dream_builder_compare_pending || "").trim().toLowerCase() === "true";
     const wordingPending =
-      contractStepId === deps.dreamStepId
-        ? dreamBuilderComparePending
-        : (
-          String(specialist?.wording_choice_pending || "").trim().toLowerCase() === "true" ||
-          dreamBuilderComparePending
-        );
+      String(specialist?.wording_choice_pending || "").trim().toLowerCase() === "true" ||
+      dreamBuilderComparePending;
     const wordingMode = dreamBuilderComparePending
       ? "list"
       : (String(specialist?.wording_choice_mode || "text") === "list" ? "list" : "text");
@@ -1382,12 +1378,8 @@ export function createRunStepRuntimeFinalizeLayer<TPayload extends Record<string
     const dreamBuilderComparePending =
       isDreamStep && String(lastSpecialist.__dream_builder_compare_pending || "").trim().toLowerCase() === "true";
     const wordingPending =
-      isDreamStep
-        ? dreamBuilderComparePending
-        : (
-          String(lastSpecialist.wording_choice_pending || "").trim().toLowerCase() === "true" ||
-          dreamBuilderComparePending
-        );
+      String(lastSpecialist.wording_choice_pending || "").trim().toLowerCase() === "true" ||
+      dreamBuilderComparePending;
     const isDreamExplainer = activeSpecialist === dreamExplainerSpecialist;
     const isDreamSpecialist = isDreamStep && !isDreamExplainer;
     const dreamBuilderModeActive =
