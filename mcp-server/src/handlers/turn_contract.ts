@@ -243,11 +243,14 @@ function buildPendingInteractionRenderModel(
   response: RunStepContractResponse
 ): PendingInteractionWordingChoiceRenderModel | null {
   const ui = toRecord(response.ui);
+  const state = toRecord(response.state);
   const feedback = toRecord(ui.feedback_contract);
   const feedbackKind = String(feedback.kind || "").trim();
   const dreamBuilder = toRecord(ui.dream_builder_contract);
   const dreamBuilderPhase = String(dreamBuilder.phase || "").trim();
   const dreamBuilderCompare = toRecord(dreamBuilder.compare);
+  const defaultUserLabel = uiLabelForKey(state, "wordingChoiceHeading");
+  const defaultSuggestionLabel = uiLabelForKey(state, "wordingChoiceSuggestionLabel");
   if (
     feedbackKind === "single_value_compare" ||
     feedbackKind === "grouped_list_compare" ||
@@ -263,8 +266,8 @@ function buildPendingInteractionRenderModel(
           : normalizePendingInteractionVariant(feedback.variant),
       instruction: String(feedback.instruction || "").trim(),
       feedback_reason_text: String(feedback.rationale || "").trim(),
-      user_label: String(feedback.current_label || "").trim(),
-      suggestion_label: String(feedback.suggested_label || "").trim(),
+      user_label: String(feedback.current_label || "").trim() || defaultUserLabel,
+      suggestion_label: String(feedback.suggested_label || "").trim() || defaultSuggestionLabel,
       user_text: String(feedback.current_value || "").trim(),
       suggestion_text: String(feedback.suggested_value || "").trim(),
       user_items: normalizeStringArray(feedback.current_items),
@@ -285,8 +288,8 @@ function buildPendingInteractionRenderModel(
       variant: "default",
       instruction: String(dreamBuilderCompare.instruction || "").trim(),
       feedback_reason_text: String(dreamBuilderCompare.rationale || "").trim(),
-      user_label: String(dreamBuilderCompare.current_label || "").trim(),
-      suggestion_label: String(dreamBuilderCompare.suggested_label || "").trim(),
+      user_label: String(dreamBuilderCompare.current_label || "").trim() || defaultUserLabel,
+      suggestion_label: String(dreamBuilderCompare.suggested_label || "").trim() || defaultSuggestionLabel,
       user_text: String(dreamBuilderCompare.current_value || "").trim(),
       suggestion_text: String(dreamBuilderCompare.suggested_value || "").trim(),
       user_items: normalizeStringArray(dreamBuilderCompare.current_items),
@@ -737,6 +740,14 @@ function applyDeterministicUiActionRenderPolicy(response: RunStepContractRespons
     variant === "dream_builder_scoring";
   const dreamBuilderCompareActive =
     String(toRecord(ui.dream_builder_contract).phase || "").trim() === "compare";
+  const feedbackKind = String(toRecord(ui.feedback_contract).kind || "").trim();
+  const feedbackCompareActive =
+    feedbackKind === "single_value_compare" ||
+    feedbackKind === "grouped_list_compare" ||
+    feedbackKind === "list_edit_compare" ||
+    feedbackKind === "list_duplicate_merge_compare";
+  const wordingChoiceSurfaceActive =
+    variant === "wording_choice" || dreamBuilderCompareActive || feedbackCompareActive;
   if (mode === "prestart") {
     allowedRoles.add("start");
   } else if (mode === "interactive") {
@@ -744,7 +755,7 @@ function applyDeterministicUiActionRenderPolicy(response: RunStepContractRespons
     if (variant === "dream_builder_scoring") {
       allowedRoles.add("score_submit");
     }
-    if (variant !== "wording_choice") {
+    if (!wordingChoiceSurfaceActive) {
       allowedRoles.add("dream_switch_to_self");
       if (!dreamBuilderVariantActive) {
         allowedRoles.add("dream_start_exercise");
@@ -752,7 +763,7 @@ function applyDeterministicUiActionRenderPolicy(response: RunStepContractRespons
     }
     if (hasChoiceActions) {
       allowedRoles.add("choice");
-    } else if (variant === "wording_choice" || dreamBuilderCompareActive) {
+    } else if (wordingChoiceSurfaceActive) {
       allowedRoles.add("wording_pick_user");
       allowedRoles.add("wording_pick_suggestion");
     } else {
@@ -929,6 +940,59 @@ export function validateUiPayloadContractParity(
   return null;
 }
 
+function repairUiPayloadContractParity(
+  response: RunStepContractResponse,
+  deps: UiParityDeps
+): string | null {
+  const ui =
+    response && typeof response.ui === "object" && response.ui
+      ? (response.ui as Record<string, unknown>)
+      : null;
+  if (!ui) return validateUiPayloadContractParity(response, deps);
+  const stepId =
+    String(response.current_step_id || "") ||
+    String(((response.state as Record<string, unknown> | undefined) || {}).current_step || "");
+  const contractId = String(ui.contract_id || "").trim();
+  if (!stepId || !contractId) return validateUiPayloadContractParity(response, deps);
+  const menuId = deps.parseMenuFromContractIdForStep(contractId, stepId);
+  const expectedActionCodes = Array.isArray(ACTIONCODE_REGISTRY.menus[menuId])
+    ? ACTIONCODE_REGISTRY.menus[menuId].map((code) => String(code || "").trim()).filter(Boolean)
+    : [];
+  if (expectedActionCodes.length === 0) return validateUiPayloadContractParity(response, deps);
+
+  ui.action_codes = expectedActionCodes;
+  response.ui = ui;
+  ensureUnifiedUiActionContract(response, deps);
+  applyDeterministicUiActionRenderPolicy(response);
+  ensurePendingInteractionContract(response);
+  delete ui.action_codes;
+  response.ui = ui;
+  return validateUiPayloadContractParity(response, deps);
+}
+
+function shouldEnforceDreamSingleValueActionLiveness(response: RunStepContractResponse): boolean {
+  const ui =
+    response && typeof response.ui === "object" && response.ui
+      ? (response.ui as Record<string, unknown>)
+      : null;
+  if (!ui) return false;
+  const state = (response.state as Record<string, unknown> | undefined) || {};
+  const stepId = String(response.current_step_id || state.current_step || "").trim();
+  if (stepId !== "dream") return false;
+  const view = toRecord(ui.view);
+  const variant = String(view.variant || "").trim().toLowerCase();
+  if (
+    variant === "dream_builder_collect" ||
+    variant === "dream_builder_refine" ||
+    variant === "dream_builder_scoring" ||
+    variant === "wording_choice"
+  ) {
+    return false;
+  }
+  const feedback = toRecord(ui.feedback_contract);
+  return String(feedback.kind || "").trim() === "single_value_canonical_suggestion";
+}
+
 export function assertRunStepContractOrThrow(response: RunStepContractResponse): void {
   void response;
 }
@@ -1013,15 +1077,6 @@ export function finalizeResponseContractInternals<T extends RunStepContractRespo
     }
     options.applyUiClientActionContract(responseStateForCleanup);
   }
-  if (finalResponse?.ok === true) {
-    const uiViolation = validateUiPayloadContractParity(finalResponse, {
-      parseMenuFromContractIdForStep: options.parseMenuFromContractIdForStep,
-      labelKeysForMenuActionCodes: options.labelKeysForMenuActionCodes,
-    });
-    if (uiViolation) {
-      options.onUiParityError();
-    }
-  }
   ensureUnifiedUiActionContract(finalResponse, {
     parseMenuFromContractIdForStep: options.parseMenuFromContractIdForStep,
     labelKeysForMenuActionCodes: options.labelKeysForMenuActionCodes,
@@ -1036,6 +1091,38 @@ export function finalizeResponseContractInternals<T extends RunStepContractRespo
   const canonicalViewDecision = applyCanonicalWidgetState(finalResponse);
   applyDeterministicUiActionRenderPolicy(finalResponse);
   ensurePendingInteractionContract(finalResponse);
+  if (finalResponse?.ok === true) {
+    const uiViolation = validateUiPayloadContractParity(finalResponse, {
+      parseMenuFromContractIdForStep: options.parseMenuFromContractIdForStep,
+      labelKeysForMenuActionCodes: options.labelKeysForMenuActionCodes,
+    });
+    if (uiViolation) {
+      options.onUiParityError();
+    }
+    if (shouldEnforceDreamSingleValueActionLiveness(finalResponse)) {
+      const actionContract = toRecord(toRecord(finalResponse.ui).action_contract);
+      const actions = Array.isArray(actionContract.actions)
+        ? (actionContract.actions as Array<Record<string, unknown>>)
+        : [];
+      if (actions.length === 0) {
+        const repairedViolation = repairUiPayloadContractParity(finalResponse, {
+          parseMenuFromContractIdForStep: options.parseMenuFromContractIdForStep,
+          labelKeysForMenuActionCodes: options.labelKeysForMenuActionCodes,
+        });
+        const repairedActionContract = toRecord(toRecord(finalResponse.ui).action_contract);
+        const repairedActions = Array.isArray(repairedActionContract.actions)
+          ? (repairedActionContract.actions as Array<Record<string, unknown>>)
+          : [];
+        if (repairedViolation || repairedActions.length === 0) {
+          options.onUiParityError();
+          return buildContractFailurePayload(
+            finalResponse,
+            repairedViolation || "ui_action_contract_missing_menu_action"
+          ) as T;
+        }
+      }
+    }
+  }
   (finalResponse as Record<string, unknown>).__canonical_view_decision = canonicalViewDecision;
 
   return finalResponse as T;

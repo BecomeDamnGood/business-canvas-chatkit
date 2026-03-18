@@ -422,6 +422,65 @@ test("dream follow-up menus keep exactly one exercise button with the original m
   }
 });
 
+test("dream canonical refine recovers missing menu actions from the final contract", () => {
+  const response = finalizeResponseContractInternals(
+    {
+      ok: true,
+      current_step_id: "dream",
+      text: "",
+      prompt: "",
+      specialist: {},
+      state: {
+        started: "true",
+        current_step: "dream",
+      } as any,
+      ui: {
+        view: {
+          mode: "interactive",
+        },
+        contract_id: "dream::valid_output::DREAM_MENU_REFINE",
+        feedback_contract: {
+          version: "2026-03-16.feedback_contract.v1",
+          kind: "single_value_canonical_suggestion",
+          heading: "Op basis van je input stel ik de volgende droom voor",
+          suggested_value: "Mindd droomt van een wereld waarin mensen zich verbonden voelen.",
+        },
+      },
+    } as any,
+    {
+      applyUiClientActionContract: () => {},
+      parseMenuFromContractIdForStep: () => "DREAM_MENU_REFINE",
+      labelKeysForMenuActionCodes: () => [
+        "menuLabel.DREAM_MENU_REFINE.ACTION_DREAM_REFINE_CONFIRM",
+        "menuLabel.DREAM_MENU_REFINE.ACTION_DREAM_REFINE_START_EXERCISE",
+      ],
+      onUiParityError: () => {},
+      attachRegistryPayload: (payload) => payload,
+    }
+  );
+
+  assert.equal(response.ok, true);
+  const ui = ((response.ui || {}) as Record<string, unknown>);
+  const actions = ((ui.action_contract || {}) as Record<string, unknown>).actions as Array<Record<string, unknown>>;
+  assert.deepEqual(
+    actions.map((action) => String(action.action_code || "")),
+    ["ACTION_DREAM_REFINE_CONFIRM", "ACTION_DREAM_REFINE_START_EXERCISE"]
+  );
+  assert.equal(
+    validateUiPayloadContractParity(
+      response as any,
+      {
+        parseMenuFromContractIdForStep: () => "DREAM_MENU_REFINE",
+        labelKeysForMenuActionCodes: () => [
+          "menuLabel.DREAM_MENU_REFINE.ACTION_DREAM_REFINE_CONFIRM",
+          "menuLabel.DREAM_MENU_REFINE.ACTION_DREAM_REFINE_START_EXERCISE",
+        ],
+      }
+    ),
+    null
+  );
+});
+
 test("dream builder interactive variants suppress the start-exercise action once the exercise is already active", () => {
   const response = finalizeResponseContractInternals(
     {
@@ -869,4 +928,55 @@ test("final response publishes a single server-owned pending interaction for wor
     String((((response.state as any).last_specialist_result || {}).pending_interaction_id || "")),
     String(pending.id || "")
   );
+});
+
+test("feedback compare contract keeps wording pick actions and default labels even without wording_choice view variant", () => {
+  const response = finalizeResponseContractInternals(
+    {
+      ok: true,
+      current_step_id: "dream",
+      text: "",
+      prompt: "",
+      specialist: {},
+      state: {
+        started: "true",
+        current_step: "dream",
+        ui_action_wording_pick_user: "ACTION_WORDING_PICK_USER",
+        ui_action_wording_pick_suggestion: "ACTION_WORDING_PICK_SUGGESTION",
+      } as any,
+      ui: {
+        contract_id: "dream:interactive:refine",
+        view: {
+          mode: "interactive",
+        },
+        feedback_contract: {
+          kind: "single_value_compare",
+          mode: "text",
+          rationale: "De suggestie maakt de droom concreter.",
+          current_value: "Wij willen betere bedrijven bouwen.",
+          suggested_value: "Mindd droomt van bedrijven die vanuit betekenis echte verandering brengen.",
+          instruction: "Choose the version that fits best.",
+        },
+      },
+    } as any,
+    {
+      applyUiClientActionContract: () => {},
+      parseMenuFromContractIdForStep: () => "",
+      labelKeysForMenuActionCodes: () => [],
+      onUiParityError: () => {},
+      attachRegistryPayload: (payload) => payload,
+    }
+  );
+
+  const actionContract = (((response.ui || {}) as Record<string, unknown>).action_contract || {}) as Record<string, unknown>;
+  const roles = Array.isArray(actionContract.actions)
+    ? (actionContract.actions as Array<Record<string, unknown>>).map((action) => String(action.role || ""))
+    : [];
+  assert.deepEqual(roles, ["wording_pick_user", "wording_pick_suggestion"]);
+
+  const pending = (((response.ui || {}) as Record<string, unknown>).pending_interaction || {}) as Record<string, unknown>;
+  const renderModel = (pending.render_model || {}) as Record<string, unknown>;
+  assert.equal(String(pending.kind || ""), "wording_choice");
+  assert.equal(String(renderModel.user_label || ""), "This is your input:");
+  assert.equal(String(renderModel.suggestion_label || ""), "This would be my suggestion:");
 });

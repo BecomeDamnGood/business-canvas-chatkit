@@ -1567,7 +1567,7 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
       }
     }
 
-    const effectiveStepSupportState = await resolveEffectiveStepSupportState({
+    let effectiveStepSupportState = await resolveEffectiveStepSupportState({
       state: nextState,
       stepId: String(decision1.current_step || ""),
       activeSpecialist: String(nextState.active_specialist || decision1.specialist_to_call || ""),
@@ -1578,6 +1578,40 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
       language: params.lang,
       classifyStepStuckTurn: deps.classifyStepStuckTurn,
     });
+    if (effectiveStepSupportState === "stuck" && readStepSupportState(specialistResult) !== "stuck") {
+      const stuckRecoveryState = {
+        ...stateForSpecialist,
+        __current_turn_step_support_state: "stuck",
+      } as CanvasState;
+      const stuckRecoveryCall = await deps.callSpecialistStrictSafe(
+        {
+          model: params.model,
+          state: stuckRecoveryState,
+          decision: decision1,
+          userMessage: userMessageForSpecialist,
+        },
+        deps.buildRoutingContext(userMessageForSpecialist),
+        stuckRecoveryState
+      );
+      if (stuckRecoveryCall.ok) {
+        params.rememberLlmCall(stuckRecoveryCall.value);
+        attempts = Math.max(attempts, stuckRecoveryCall.value.attempts);
+        const recoveredSpecialistResult = asRecord(stuckRecoveryCall.value.specialistResult);
+        if (readStepSupportState(recoveredSpecialistResult) === "stuck") {
+          specialistResult = recoveredSpecialistResult;
+          nextState = deps.applyPostSpecialistStateMutations({
+            prevState: state,
+            decision: decision1,
+            specialistResult,
+            provisionalSource: provisionalSourceForMutation,
+          });
+        } else {
+          effectiveStepSupportState = "ok";
+        }
+      } else {
+        effectiveStepSupportState = "ok";
+      }
+    }
     if (effectiveStepSupportState === "stuck" && readStepSupportState(specialistResult) !== "stuck") {
       specialistResult = {
         ...asRecord(specialistResult),

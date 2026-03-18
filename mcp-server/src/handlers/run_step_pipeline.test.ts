@@ -3051,20 +3051,37 @@ test("runPostSpecialistPipeline exposes a renderable next widget outcome for eve
 
 test("runPostSpecialistPipeline escalates stuck support from server-side classifier even when specialist returns ok", async () => {
   const helpers = buildStrategyPipelineHarness({
-    specialistResult: {
-      action: "ASK",
-      message: "Laat me strategie nog eens uitleggen.",
-      question: "Welke keuze wil je maken?",
-      refined_formulation: "",
-      strategy: "",
-      feedback_reason_text: "",
-      step_support_state: "ok",
-      wants_recap: false,
-      is_offtopic: false,
-      user_intent: "STEP_INPUT",
-      meta_topic: "NONE",
-      statements: [],
-    },
+    specialistResults: [
+      {
+        action: "ASK",
+        message: "Laat me strategie nog eens uitleggen.",
+        question: "Welke keuze wil je maken?",
+        refined_formulation: "",
+        strategy: "",
+        feedback_reason_text: "",
+        step_support_state: "ok",
+        wants_recap: false,
+        is_offtopic: false,
+        user_intent: "STEP_INPUT",
+        meta_topic: "NONE",
+        statements: [],
+      },
+      {
+        action: "ASK",
+        message:
+          "Ik merk dat deze stap lastig kan zijn.\n- Wat wil je echt bereiken?\n- Voor wie moet dit belangrijk zijn?\n- Wat wil je dat er concreet verandert?",
+        question: "",
+        refined_formulation: "",
+        strategy: "",
+        feedback_reason_text: "",
+        step_support_state: "stuck",
+        wants_recap: false,
+        is_offtopic: false,
+        user_intent: "STEP_INPUT",
+        meta_topic: "NONE",
+        statements: [],
+      },
+    ],
     classifyStepStuckTurn: async () => ({ is_stuck: true }),
   });
 
@@ -3115,6 +3132,205 @@ test("runPostSpecialistPipeline escalates stuck support from server-side classif
   assert.equal(
     Number(((payload.state as Record<string, unknown>).__step_stuck_count_by_step as Record<string, unknown>)?.strategy || 0),
     1
+  );
+});
+
+test("runPostSpecialistPipeline recovers a post-hoc stuck classification by re-running the specialist with authoritative stuck context", async () => {
+  const specialistCalls: string[] = [];
+  let classifyCalls = 0;
+  const helpers = buildStrategyPipelineHarness({
+    specialistResults: [
+      {
+        action: "ASK",
+        message: "Je strategie klinkt veelbelovend maar is nog erg breed.",
+        question: "Welke keuze wil je maken?",
+        refined_formulation: "",
+        strategy: "Focus op betekenisgedreven merken met een duidelijke groeivraag.",
+        feedback_reason_text: "",
+        step_support_state: "ok",
+        wants_recap: false,
+        is_offtopic: false,
+        user_intent: "STEP_INPUT",
+        meta_topic: "NONE",
+      },
+      {
+        action: "ASK",
+        message:
+          "Ik merk dat deze stap lastig kan zijn.\n- Waar wil je op focussen?\n- Voor wie moet dat verschil maken?\n- Wat wil je bewust niet meer doen?",
+        question: "",
+        refined_formulation: "",
+        strategy: "",
+        feedback_reason_text: "",
+        step_support_state: "stuck",
+        wants_recap: false,
+        is_offtopic: false,
+        user_intent: "STEP_INPUT",
+        meta_topic: "NONE",
+      },
+    ],
+    onSpecialistCall: (userMessage) => {
+      specialistCalls.push(String(userMessage || ""));
+    },
+    classifyStepStuckTurn: async () => {
+      classifyCalls += 1;
+      return { is_stuck: classifyCalls >= 2 };
+    },
+  });
+
+  const userMessage = "Ik wil een strategie die beter past bij wie we echt zijn.";
+  const payload = await helpers.runPostSpecialistPipeline({
+    routing: {
+      userMessage,
+      actionCodeRaw: "",
+      responseUiFlags: null,
+      inputMode: "widget",
+      wordingChoiceEnabled: true,
+      languageResolvedThisTurn: false,
+      isBootstrapPollCall: false,
+      motivationQuotesEnabled: false,
+    },
+    rendering: {
+      uiI18nTelemetry: null,
+      lang: "nl",
+      ensureUiStrings: async (state) => state,
+    },
+    state: {
+      state: {
+        current_step: "strategy",
+        active_specialist: "Strategy",
+        provisional_by_step: {},
+        last_specialist_result: {},
+      } as any,
+      transientPendingScores: null,
+      submittedUserText: userMessage,
+      submittedTextIntent: "",
+      submittedTextAnchor: "",
+      rawNormalized: userMessage,
+      pristineAtEntry: true,
+    },
+    specialist: {
+      model: "gpt-5-mini",
+      decideOrchestration: () =>
+        ({
+          current_step: "strategy",
+          specialist_to_call: "Strategy",
+          show_session_intro: "false",
+          show_step_intro: "false",
+        }) as any,
+      rememberLlmCall: () => {},
+    },
+  } as any);
+
+  assert.equal(String(specialistCalls[0] || ""), userMessage);
+  assert.equal(String(specialistCalls[specialistCalls.length - 1] || ""), userMessage);
+  assert.equal(
+    specialistCalls.filter((value) => value === userMessage).length,
+    2
+  );
+  assert.equal(String((payload.specialist as Record<string, unknown>).step_support_state || ""), "stuck");
+  assert.equal(
+    String((payload.specialist as Record<string, unknown>).strategy || ""),
+    ""
+  );
+  assert.match(
+    String((payload.specialist as Record<string, unknown>).message || ""),
+    /deze stap lastig kan zijn/i
+  );
+});
+
+test("runPostSpecialistPipeline does not post-hoc stamp stuck onto a normal contract when the stuck recovery call still returns ok", async () => {
+  let classifyCalls = 0;
+  const helpers = buildStrategyPipelineHarness({
+    specialistResults: [
+      {
+        action: "ASK",
+        message: "Op basis van je input stel ik de volgende droom voor",
+        question: "",
+        refined_formulation: "",
+        dream:
+          "Mindd droomt van een wereld waarin bedrijven hun bestaansrecht ontlenen aan diepere betekenis.",
+        feedback_reason_text: "",
+        feedback_mode: "compare_suggestion",
+        step_support_state: "ok",
+        wants_recap: false,
+        is_offtopic: false,
+        user_intent: "STEP_INPUT",
+        meta_topic: "NONE",
+      },
+      {
+        action: "ASK",
+        message: "Op basis van je input stel ik de volgende droom voor",
+        question: "",
+        refined_formulation: "",
+        dream:
+          "Mindd droomt van een wereld waarin bedrijven hun bestaansrecht ontlenen aan diepere betekenis.",
+        feedback_reason_text: "",
+        feedback_mode: "compare_suggestion",
+        step_support_state: "ok",
+        wants_recap: false,
+        is_offtopic: false,
+        user_intent: "STEP_INPUT",
+        meta_topic: "NONE",
+      },
+    ],
+    classifyStepStuckTurn: async () => {
+      classifyCalls += 1;
+      return { is_stuck: classifyCalls >= 2 };
+    },
+  });
+
+  const userMessage = "Ik droom van een wereld waarin bedrijven betekenisvoller worden.";
+  const payload = await helpers.runPostSpecialistPipeline({
+    routing: {
+      userMessage,
+      actionCodeRaw: "",
+      responseUiFlags: null,
+      inputMode: "widget",
+      wordingChoiceEnabled: true,
+      languageResolvedThisTurn: false,
+      isBootstrapPollCall: false,
+      motivationQuotesEnabled: false,
+    },
+    rendering: {
+      uiI18nTelemetry: null,
+      lang: "nl",
+      ensureUiStrings: async (state) => state,
+    },
+    state: {
+      state: {
+        current_step: "dream",
+        active_specialist: "Dream",
+        provisional_by_step: {},
+        last_specialist_result: {},
+      } as any,
+      transientPendingScores: null,
+      submittedUserText: userMessage,
+      submittedTextIntent: "",
+      submittedTextAnchor: "",
+      rawNormalized: userMessage,
+      pristineAtEntry: true,
+    },
+    specialist: {
+      model: "gpt-5-mini",
+      decideOrchestration: () =>
+        ({
+          current_step: "dream",
+          specialist_to_call: "Dream",
+          show_session_intro: "false",
+          show_step_intro: "false",
+        }) as any,
+      rememberLlmCall: () => {},
+    },
+  } as any);
+
+  assert.equal(String((payload.specialist as Record<string, unknown>).step_support_state || ""), "ok");
+  assert.equal(
+    Number(((payload.state as Record<string, unknown>).__step_stuck_count_by_step as Record<string, unknown>)?.dream || 0),
+    0
+  );
+  assert.equal(
+    String((payload.specialist as Record<string, unknown>).dream || ""),
+    "Mindd droomt van een wereld waarin bedrijven hun bestaansrecht ontlenen aan diepere betekenis."
   );
 });
 

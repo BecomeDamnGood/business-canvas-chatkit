@@ -2426,13 +2426,14 @@ test("bundled wording-choice view prefers the server feedback contract over lega
   const source = fs.readFileSync(new URL("../ui/step-card.bundled.html", import.meta.url), "utf8");
   assert.match(source, /class="wordingChoiceFeedback" id="wordingChoiceFeedback"/);
   assert.match(source, /function readFeedbackContract\(uiPayloadRaw\)/);
+  assert.match(source, /function readPendingInteraction\(uiPayloadRaw\)/);
   assert.match(source, /const feedbackEl = document\.getElementById\("wordingChoiceFeedback"\);/);
   assert.doesNotMatch(source, /function readWordingChoiceCompareFeedbackText\(wordingChoiceRaw\)/);
-  assert.match(source, /const contractOwnedCompare = feedbackContractEnabled \|\| dreamBuilderCompareEnabled;/);
-  assert.match(source, /const feedbackReasonText = contractOwnedCompare/);
+  assert.match(source, /const pendingInteraction = readPendingInteraction\(uiPayload\);/);
+  assert.match(source, /const feedbackReasonText = pendingInteraction\.renderModel\.feedbackReasonText;/);
   assert.match(source, /renderStructuredText\(feedbackEl, feedbackReasonText\);/);
   assert.match(source, /feedbackContract = readFeedbackContract\(uiPayload\);/);
-  assert.match(source, /retainedHeading: compareContract\?\.retainedHeading \|\| "",/);
+  assert.match(source, /retainedHeading: pendingInteraction\.renderModel\.retainedHeading,/);
   assert.match(source, /feedbackEl\.style\.display = feedbackReasonText \? "block" : "none";/);
   assert.match(source, /\.wordingChoiceFeedback p,/);
   assert.match(source, /\.cardDesc \.cardFeedbackNote/);

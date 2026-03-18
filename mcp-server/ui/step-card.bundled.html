@@ -5106,7 +5106,8 @@
       suggestedItems: normalizeStringArray(compareRaw.suggested_items),
       retainedHeading: String(compareRaw.retained_heading || "").trim(),
       retainedItems: normalizeStringArray(compareRaw.retained_items),
-      instruction: String(compareRaw.instruction || "").trim()
+      instruction: String(compareRaw.instruction || "").trim(),
+      committedStatements: normalizeStringArray(compareRaw.committed_statements)
     } : null;
     const scoringRaw = toRecord3(contract.scoring);
     const scoringClusters = Array.isArray(scoringRaw.clusters) ? scoringRaw.clusters.map((entry) => {
@@ -5193,14 +5194,7 @@ ${String(item || "").trim()}`.trim())
   }
   function shouldSuppressMainCardForWordingChoice(uiPayloadRaw, uiViewVariantRaw) {
     const uiPayload = uiPayloadRaw && typeof uiPayloadRaw === "object" ? uiPayloadRaw : {};
-    const feedbackContract = readFeedbackContract(uiPayload);
-    const dreamBuilderContract = readDreamBuilderContract(uiPayload);
-    const uiViewVariant = String(uiViewVariantRaw || "").trim();
-    const dreamBuilderContractPresent = Boolean(dreamBuilderContract?.phase);
-    const dreamBuilderCompareActive = dreamBuilderContract?.phase === "compare";
-    const wordingChoicePayload = uiPayload && typeof uiPayload.wording_choice === "object" && uiPayload.wording_choice ? uiPayload.wording_choice : {};
-    const flags = toRecord3(uiPayload.flags);
-    return feedbackContract?.kind === "single_value_compare" || feedbackContract?.kind === "grouped_list_compare" || feedbackContract?.kind === "list_edit_compare" || feedbackContract?.kind === "list_duplicate_merge_compare" || dreamBuilderCompareActive || !dreamBuilderContractPresent && uiViewVariant === "wording_choice" || !dreamBuilderContractPresent && wordingChoicePayload.enabled === true || !dreamBuilderContractPresent && String(flags.require_wording_pick || "").trim() === "true";
+    return Boolean(readPendingInteraction(uiPayload));
   }
   function shouldSuppressPromptForWordingChoice(params) {
     return String(params.uiViewVariant || "").trim() === "wording_choice" || params.wordingChoiceActive === true || params.requireWordingPick === true;
@@ -5249,6 +5243,57 @@ ${String(item || "").trim()}`.trim())
       });
     }
     return [];
+  }
+  function readPendingInteraction(uiPayloadRaw) {
+    const uiPayload = toRecord3(uiPayloadRaw);
+    const pending = toRecord3(uiPayload.pending_interaction);
+    const kind = String(pending.kind || "").trim();
+    const status = String(pending.status || "").trim();
+    if (kind !== "wording_choice" || status !== "pending") return null;
+    const renderModelRaw = toRecord3(pending.render_model);
+    const mode = String(renderModelRaw.mode || "").trim().toLowerCase() === "list" ? "list" : "text";
+    const variantRaw = String(renderModelRaw.variant || "").trim();
+    const variant = variantRaw === "clarify_dual" || variantRaw === "grouped_list_units" ? variantRaw : "default";
+    const allowedActions = Array.isArray(pending.allowed_actions) ? pending.allowed_actions.map((entry) => {
+      const action = toRecord3(entry);
+      const id = String(action.id || "").trim();
+      const actionCode = String(action.action_code || "").trim();
+      const label = String(action.label || "").trim();
+      const labelKey = String(action.label_key || "").trim();
+      const role = String(action.role || "").trim();
+      const surface = String(action.surface || "").trim();
+      if (!id || !actionCode || !label || !labelKey || !role || !surface) return null;
+      return {
+        id,
+        actionCode,
+        label,
+        labelKey,
+        role,
+        surface,
+        primary: action.primary === true
+      };
+    }).filter((entry) => Boolean(entry)) : [];
+    if (allowedActions.length === 0) return null;
+    return {
+      id: String(pending.id || "").trim(),
+      kind: "wording_choice",
+      status: "pending",
+      allowedActions,
+      renderModel: {
+        mode,
+        variant,
+        instruction: String(renderModelRaw.instruction || "").trim(),
+        feedbackReasonText: String(renderModelRaw.feedback_reason_text || "").trim(),
+        userLabel: String(renderModelRaw.user_label || "").trim(),
+        suggestionLabel: String(renderModelRaw.suggestion_label || "").trim(),
+        userText: String(renderModelRaw.user_text || "").trim(),
+        suggestionText: String(renderModelRaw.suggestion_text || "").trim(),
+        userItems: normalizeStringArray(renderModelRaw.user_items),
+        suggestionItems: normalizeStringArray(renderModelRaw.suggestion_items),
+        retainedHeading: String(renderModelRaw.retained_heading || "").trim(),
+        retainedItems: normalizeStringArray(renderModelRaw.retained_items)
+      }
+    };
   }
   function actionDescriptorForRole(resultData, role) {
     const roleNorm = String(role || "").trim().toLowerCase();
@@ -5400,28 +5445,6 @@ ${String(item || "").trim()}`.trim())
     const translated = String(t(lang, key) || "").trim();
     if (translated) return translated;
     return "";
-  }
-  function parseWordingChoiceInstruction(instructionRaw) {
-    const instruction = String(instructionRaw || "").replace(/\r/g, "\n").trim();
-    if (!instruction) {
-      return { retainedHeading: "", retainedItems: [], instructionText: "" };
-    }
-    const lines = instruction.split("\n").map((line) => String(line || "").trim());
-    const firstBulletIndex = lines.findIndex((line) => /^(?:[-*•·]|\d+[\).])\s+/.test(line));
-    if (firstBulletIndex < 0) {
-      return { retainedHeading: "", retainedItems: [], instructionText: instruction };
-    }
-    let bulletEndIndex = firstBulletIndex;
-    while (bulletEndIndex < lines.length && /^(?:[-*•·]|\d+[\).])\s+/.test(lines[bulletEndIndex])) {
-      bulletEndIndex += 1;
-    }
-    const retainedHeading = lines.slice(0, firstBulletIndex).filter(Boolean).join("\n").trim();
-    const retainedItems = lines.slice(firstBulletIndex, bulletEndIndex).map((line) => line.replace(/^\s*(?:[-*•·]|\d+[\).])\s+/, "").trim()).filter(Boolean);
-    const instructionText = lines.slice(bulletEndIndex).filter(Boolean).join("\n").trim();
-    if (!retainedHeading || retainedItems.length === 0) {
-      return { retainedHeading: "", retainedItems: [], instructionText: instruction };
-    }
-    return { retainedHeading, retainedItems, instructionText: instructionText || instruction };
   }
   function normalizeDreamScoreValue(raw) {
     const trimmed = String(raw ?? "").trim();
@@ -5758,53 +5781,26 @@ ${String(item || "").trim()}`.trim())
       return false;
     }
     const uiPayload = resultData && typeof resultData.ui === "object" && resultData.ui ? resultData.ui : {};
-    const feedbackContract = readFeedbackContract(uiPayload);
-    const dreamBuilderContract = readDreamBuilderContract(uiPayload);
-    const flags = uiPayload && typeof uiPayload.flags === "object" && uiPayload.flags ? uiPayload.flags : {};
-    const wording = uiPayload && typeof uiPayload.wording_choice === "object" && uiPayload.wording_choice ? uiPayload.wording_choice : {};
-    const requirePick = String(flags.require_wording_pick || "false") === "true";
-    const feedbackContractEnabled = feedbackContract?.kind === "single_value_compare" || feedbackContract?.kind === "grouped_list_compare" || feedbackContract?.kind === "list_edit_compare" || feedbackContract?.kind === "list_duplicate_merge_compare";
-    const dreamBuilderCompareEnabled = dreamBuilderContract?.phase === "compare" && (dreamBuilderContract.compare?.kind === "batch_rewrite_compare" || dreamBuilderContract.compare?.kind === "overlap_merge_compare");
-    const dreamBuilderContractPresent = Boolean(dreamBuilderContract?.phase);
-    const contractOwnedCompare = feedbackContractEnabled || dreamBuilderCompareEnabled;
-    const enabled = contractOwnedCompare || !dreamBuilderContractPresent && (requirePick || wording.enabled === true);
-    if (!enabled) {
+    const pendingInteraction = readPendingInteraction(uiPayload);
+    if (!pendingInteraction) {
       wrap.style.display = "none";
       return false;
     }
-    const legacyInstruction = String(wording.instruction || "").trim();
-    const legacyInstructionParts = parseWordingChoiceInstruction(legacyInstruction);
-    const mode = feedbackContract?.mode || (dreamBuilderCompareEnabled ? "list" : String(wording.mode || "text") === "list" ? "list" : "text");
-    const variant = String(wording.variant || "default").trim().toLowerCase();
-    const compareContract = feedbackContract?.kind === "grouped_list_compare" ? feedbackContract : dreamBuilderCompareEnabled ? {
-      kind: "grouped_list_compare",
-      mode: "list",
-      rationale: String(dreamBuilderContract?.compare?.rationale || "").trim(),
-      heading: "",
-      supportText: "",
-      currentLabel: String(dreamBuilderContract?.compare?.currentLabel || "").trim(),
-      suggestedLabel: String(dreamBuilderContract?.compare?.suggestedLabel || "").trim(),
-      currentValue: String(dreamBuilderContract?.compare?.currentValue || "").trim(),
-      suggestedValue: String(dreamBuilderContract?.compare?.suggestedValue || "").trim(),
-      currentItems: dreamBuilderContract?.compare?.currentItems || [],
-      suggestedItems: dreamBuilderContract?.compare?.suggestedItems || [],
-      retainedHeading: String(dreamBuilderContract?.compare?.retainedHeading || "").trim(),
-      retainedItems: dreamBuilderContract?.compare?.retainedItems || [],
-      instruction: String(dreamBuilderContract?.compare?.instruction || "").trim()
-    } : feedbackContract;
-    const feedbackReasonText = contractOwnedCompare ? String(compareContract?.rationale || "").trim() : String(compareContract?.rationale || wording.feedback_reason_text || "").trim();
-    const userText = contractOwnedCompare ? String(compareContract?.currentValue || "").trim() : String(compareContract?.currentValue || wording.user_text || "").trim();
-    const suggestionText = contractOwnedCompare ? String(compareContract?.suggestedValue || "").trim() : String(compareContract?.suggestedValue || wording.suggestion_text || "").trim();
-    const userLabelFromPayload = contractOwnedCompare ? String(compareContract?.currentLabel || "").trim() : String(compareContract?.currentLabel || wording.user_label || "").trim();
-    const suggestionLabelFromPayload = contractOwnedCompare ? String(compareContract?.suggestedLabel || "").trim() : String(compareContract?.suggestedLabel || wording.suggestion_label || "").trim();
-    const userItems = contractOwnedCompare ? compareContract?.currentItems || [] : compareContract?.currentItems || (Array.isArray(wording.user_items) ? wording.user_items : []);
-    const suggestionItems = contractOwnedCompare ? compareContract?.suggestedItems || [] : compareContract?.suggestedItems || (Array.isArray(wording.suggestion_items) ? wording.suggestion_items : []);
-    const instruction = contractOwnedCompare ? compareContract?.instruction || t(lang, "wordingChoiceInstruction") : compareContract?.instruction || legacyInstruction || t(lang, "wordingChoiceInstruction");
-    const instructionParts = compareContract ? {
-      retainedHeading: compareContract?.retainedHeading || "",
-      retainedItems: compareContract?.retainedItems || [],
-      instructionText: compareContract?.instruction || instruction
-    } : legacyInstructionParts;
+    const mode = pendingInteraction.renderModel.mode;
+    const variant = pendingInteraction.renderModel.variant;
+    const feedbackReasonText = pendingInteraction.renderModel.feedbackReasonText;
+    const userText = pendingInteraction.renderModel.userText;
+    const suggestionText = pendingInteraction.renderModel.suggestionText;
+    const userLabelFromPayload = pendingInteraction.renderModel.userLabel;
+    const suggestionLabelFromPayload = pendingInteraction.renderModel.suggestionLabel;
+    const userItems = pendingInteraction.renderModel.userItems;
+    const suggestionItems = pendingInteraction.renderModel.suggestionItems;
+    const instruction = pendingInteraction.renderModel.instruction || t(lang, "wordingChoiceInstruction");
+    const instructionParts = {
+      retainedHeading: pendingInteraction.renderModel.retainedHeading,
+      retainedItems: pendingInteraction.renderModel.retainedItems,
+      instructionText: instruction
+    };
     const ensureLabelColon = (value) => {
       const trimmed = String(value || "").trim();
       if (!trimmed) return "";
@@ -5861,7 +5857,7 @@ ${String(item || "").trim()}`.trim())
     userBtn.disabled = getIsLoading();
     suggestionBtn.disabled = getIsLoading();
     wrap.style.display = "flex";
-    return enabled;
+    return true;
   }
   function render(overrideToolOutput) {
     const data = toolData(overrideToolOutput);
@@ -6232,7 +6228,7 @@ ${String(item || "").trim()}`.trim())
     const statementsListEl = document.getElementById("statementsList");
     const specialistStatements = result?.specialist?.statements;
     const canonicalDreamStatements = Array.isArray(state.dream_builder_statements) && state.dream_builder_statements.length > 0 ? state.dream_builder_statements : [];
-    let statementsArray = dreamBuilderContract?.statements && dreamBuilderContract.statements.length > 0 ? dreamBuilderContract.statements : canonicalDreamStatements.length > 0 ? canonicalDreamStatements : Array.isArray(specialistStatements) ? specialistStatements : [];
+    let statementsArray = dreamBuilderContract?.phase === "compare" && dreamBuilderContract.compare && dreamBuilderContract.compare.committedStatements.length > 0 ? dreamBuilderContract.compare.committedStatements : dreamBuilderContract?.statements && dreamBuilderContract.statements.length > 0 ? dreamBuilderContract.statements : canonicalDreamStatements.length > 0 ? canonicalDreamStatements : Array.isArray(specialistStatements) ? specialistStatements : [];
     const lastStatements = Array.isArray(lastSpecialist.statements) ? lastSpecialist.statements : [];
     if (current === "dream" && isDreamExplainerMode && (!statementsArray || statementsArray.length === 0)) {
       if (lastStatements.length > 0) {
@@ -6659,6 +6655,34 @@ ${String(item || "").trim()}`.trim())
     const resolved = resolveWidgetPayload2(data);
     return resolved.result && typeof resolved.result === "object" ? resolved.result : {};
   }
+  function latestPendingInteraction() {
+    const result = latestWidgetResult();
+    const ui = result && typeof result.ui === "object" ? result.ui : {};
+    const pending = ui && typeof ui.pending_interaction === "object" ? ui.pending_interaction : {};
+    const kind = String(pending.kind || "").trim().toLowerCase();
+    const status = String(pending.status || "").trim().toLowerCase();
+    if (kind !== "wording_choice" || status !== "pending") return null;
+    const allowedActions = Array.isArray(pending.allowed_actions) ? pending.allowed_actions : [];
+    return {
+      id: String(pending.id || "").trim(),
+      allowedActions
+    };
+  }
+  function pendingInteractionAction(actionId) {
+    const pending = latestPendingInteraction();
+    if (!pending) return null;
+    for (const action of pending.allowedActions) {
+      if (!action || typeof action !== "object") continue;
+      if (String(action.id || "").trim() !== String(actionId || "").trim()) continue;
+      const actionCode = String(action.action_code || "").trim();
+      if (!actionCode) continue;
+      return {
+        interactionId: pending.id,
+        actionCode
+      };
+    }
+    return null;
+  }
   function actionRoleForStateKey(stateKey) {
     const normalized = String(stateKey || "").trim();
     const roleMap = {
@@ -6879,30 +6903,34 @@ ${String(item || "").trim()}`.trim())
   if (wordingChoicePickUser) {
     wordingChoicePickUser.addEventListener("click", () => {
       if (getIsLoading()) return;
-      const actionCode = actionCodeFromState("ui_action_wording_pick_user");
-      if (!actionCode) {
-        console.warn("[ui_action_missing]", { state_key: "ui_action_wording_pick_user" });
+      const pendingAction = pendingInteractionAction("pick_user");
+      if (!pendingAction?.actionCode || !pendingAction?.interactionId) {
+        console.warn("[ui_pending_interaction_missing]", { action_id: "pick_user" });
         setInlineNotice(
           uiStringFromContract("error.contract.body")
         );
         return;
       }
-      callRunStep(actionCode);
+      callRunStep(pendingAction.actionCode, {
+        __submitted_pending_interaction_id: pendingAction.interactionId
+      });
     });
   }
   var wordingChoicePickSuggestion = document.getElementById("wordingChoicePickSuggestion");
   if (wordingChoicePickSuggestion) {
     wordingChoicePickSuggestion.addEventListener("click", () => {
       if (getIsLoading()) return;
-      const actionCode = actionCodeFromState("ui_action_wording_pick_suggestion");
-      if (!actionCode) {
-        console.warn("[ui_action_missing]", { state_key: "ui_action_wording_pick_suggestion" });
+      const pendingAction = pendingInteractionAction("pick_suggestion");
+      if (!pendingAction?.actionCode || !pendingAction?.interactionId) {
+        console.warn("[ui_pending_interaction_missing]", { action_id: "pick_suggestion" });
         setInlineNotice(
           uiStringFromContract("error.contract.body")
         );
         return;
       }
-      callRunStep(actionCode);
+      callRunStep(pendingAction.actionCode, {
+        __submitted_pending_interaction_id: pendingAction.interactionId
+      });
     });
   }
   var btnStart = document.getElementById("btnStart");
