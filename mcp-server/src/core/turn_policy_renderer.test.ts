@@ -2151,6 +2151,109 @@ test("dream valid output keeps confirm available when staged canonical Dream sti
   assert.equal(rendered.uiActionCodes.includes("ACTION_DREAM_REFINE_CONFIRM"), true);
 });
 
+test("dream picker ignores stale no-buttons support mode and keeps wording-choice actions", () => {
+  const state = getDefaultState();
+  const canonical = "Mindd droomt van een wereld waarin mensen zich goed geinformeerd en veilig voelen.";
+  (state as any).current_step = "dream";
+  (state as any).active_specialist = "Dream";
+  (state as any).business_name = "Mindd";
+  (state as any).__step_support_mode_by_step = { dream: "stuck_questions" };
+  (state as any).provisional_by_step = { dream: canonical };
+  (state as any).provisional_source_by_step = { dream: "user_input" };
+  (state as any).provisional_by_step = { dream: canonical };
+  (state as any).provisional_source_by_step = { dream: "user_input" };
+
+  const rendered = renderFreeTextTurnPolicy({
+    stepId: "dream",
+    state,
+    specialist: {
+      action: "ASK",
+      message: "Je oorspronkelijke formulering noemt het probleem, maar nog niet scherp genoeg het toekomstbeeld.",
+      question: "",
+      refined_formulation: canonical,
+      dream: "",
+      wording_choice_pending: "true",
+      wording_choice_mode: "text",
+      wording_choice_target_field: "dream",
+      wording_choice_presentation: "picker",
+      wording_choice_user_normalized: "Mensen zijn het zat om verkeerd voorgelicht te worden.",
+      wording_choice_agent_current: canonical,
+      step_support_state: "ok",
+      is_offtopic: false,
+    },
+    previousSpecialist: {},
+  });
+
+  assert.equal(rendered.contractId, "dream:incomplete_output:DREAM_MENU_INTRO");
+  assert.equal(rendered.uiActionCodes.includes("ACTION_DREAM_INTRO_START_EXERCISE"), true);
+  assert.equal(rendered.uiActionCodes.length > 0, true);
+});
+
+test("dream canonical refine ignores stale no-buttons support mode and keeps refine actions", () => {
+  const state = getDefaultState();
+  const canonical = "Mindd droomt van een wereld waarin mensen met vertrouwen en helderheid kiezen.";
+  (state as any).current_step = "dream";
+  (state as any).active_specialist = "Dream";
+  (state as any).business_name = "Mindd";
+  (state as any).__step_support_mode_by_step = { dream: "stuck_questions" };
+  (state as any).provisional_by_step = { dream: canonical };
+  (state as any).provisional_source_by_step = { dream: "user_input" };
+
+  const rendered = renderFreeTextTurnPolicy({
+    stepId: "dream",
+    state,
+    specialist: {
+      action: "ASK",
+      message: "Je oorspronkelijke formulering benoemt het verlangen, maar nog niet scherp genoeg het effect voor mensen.",
+      question: "",
+      refined_formulation: canonical,
+      dream: canonical,
+      step_support_state: "ok",
+      current_value_refinement_pending: "true",
+      current_value_refinement_target_field: "dream",
+      current_value_refinement_feedback_text: "Ik heb je droom compacter gemaakt.",
+      is_offtopic: false,
+    },
+    previousSpecialist: {},
+  });
+
+  assert.equal(rendered.contractId, "dream:valid_output:DREAM_MENU_REFINE");
+  assert.equal(rendered.uiActionCodes.includes("ACTION_DREAM_REFINE_CONFIRM"), true);
+});
+
+test("dream explicit stuck support suppresses stale canonical dream contracts", () => {
+  const state = getDefaultState();
+  const canonical = "Mindd droomt van een wereld waarin mensen met vertrouwen kiezen.";
+  (state as any).current_step = "dream";
+  (state as any).active_specialist = "Dream";
+  (state as any).business_name = "Mindd";
+  (state as any).provisional_by_step = { dream: canonical };
+  (state as any).provisional_source_by_step = { dream: "user_input" };
+  (state as any).__step_support_mode_by_step = { dream: "stuck_questions" };
+
+  const rendered = renderFreeTextTurnPolicy({
+    stepId: "dream",
+    state,
+    specialist: {
+      action: "ASK",
+      message: "Ik merk dat deze stap nog niet helder voelt.",
+      question: "Welke verandering wil je het liefst voor mensen zien?",
+      refined_formulation: canonical,
+      dream: canonical,
+      step_support_state: "stuck",
+      wording_choice_pending: "true",
+      wording_choice_presentation: "canonical",
+      wording_choice_agent_current: canonical,
+      is_offtopic: false,
+    },
+    previousSpecialist: {},
+  });
+
+  assert.deepEqual(rendered.uiActionCodes, []);
+  assert.equal(String((rendered.specialist as any).ui_content || ""), "");
+  assert.equal(String((rendered.specialist as any).ui_feedback_contract || ""), "");
+});
+
 test("dream self drops stale refine confirm when no renderable dream content remains", () => {
   const state = getDefaultState();
   (state as any).current_step = "dream";

@@ -3,7 +3,7 @@ import {
   type CanvasState,
   type ProvisionalSource,
 } from "../core/state.js";
-import { resolveSpecialistSupportFamily } from "../core/stuck_support.js";
+import { clearStepStuckSupport, resolveSpecialistSupportFamily } from "../core/stuck_support.js";
 import {
   formatStepSectionTitle,
   hasGroupedCompareListSemantics,
@@ -341,6 +341,13 @@ export function createRunStepRuntimeStateHelpers(deps: CreateRunStepRuntimeState
       proceed_block_rule_count: 0,
     };
     (next as any).last_specialist_result = resetLast;
+    return next;
+  }
+
+  function clearStepSupportState(state: CanvasState, stepId: string): CanvasState {
+    if (!stepId) return state;
+    const next = { ...state };
+    clearStepStuckSupport(next, stepId);
     return next;
   }
 
@@ -743,6 +750,7 @@ ${stuckSupportLines}
     withProvisionalValue,
     clearProvisionalValue,
     clearStepInteractiveState,
+    clearStepSupportState,
     informationalActionMutatesProgress,
     fieldForStep,
     wordingStepLabel,

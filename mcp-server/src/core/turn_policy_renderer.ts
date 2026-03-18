@@ -79,6 +79,7 @@ const OFFTOPIC_STEP_LABEL_UI_KEY_BY_STEP: Record<string, string> = {
 };
 
 type DreamRuntimeMode = "self" | "builder_collect" | "builder_scoring" | "builder_refine";
+type DreamSelfViewVariant = "default" | "picker" | "canonical_refine" | "stuck_support";
 
 function envFlagEnabled(name: string, fallback: boolean): boolean {
   const raw = String(process.env[name] ?? "").trim().toLowerCase();
@@ -333,6 +334,31 @@ function renderModeForStep(state: CanvasState, stepId: string): "menu" | "no_but
       ? ((state as any).__ui_render_mode_by_step as Record<string, unknown>)
       : {};
   return String(phaseMap[stepId] || "").trim() === "no_buttons" ? "no_buttons" : "menu";
+}
+
+function resolveDreamSelfViewVariant(params: {
+  stepId: string;
+  state: CanvasState;
+  specialist: Record<string, unknown>;
+  status: TurnOutputStatus;
+  wordingPending: boolean;
+  wordingPresentation: "picker" | "canonical";
+  currentValueRefinementPending: boolean;
+}): DreamSelfViewVariant {
+  if (params.stepId !== "dream") return "default";
+  if (dreamRuntimeModeFromState(params.state) !== "self") return "default";
+
+  const explicitStuck = String(params.specialist.step_support_state || "").trim().toLowerCase() === "stuck";
+  if (explicitStuck) return "stuck_support";
+  if (params.wordingPending && params.wordingPresentation === "picker") return "picker";
+  if (
+    params.wordingPending ||
+    params.currentValueRefinementPending ||
+    params.status === "valid_output"
+  ) {
+    return "canonical_refine";
+  }
+  return "default";
 }
 
 function companyNameForPrompt(state: CanvasState): string {
@@ -1622,9 +1648,10 @@ function resolveMenuContract(params: {
   state: CanvasState;
   specialist: Record<string, unknown>;
   prev: Record<string, unknown>;
+  renderModeOverride?: "menu" | "no_buttons";
 }): { menuId: string; actionCodes: string[]; labels: string[]; labelKeys: string[] } {
-  const { stepId, status, confirmEligible, state, specialist, prev } = params;
-  if (renderModeForStep(state, stepId) === "no_buttons") {
+  const { stepId, status, confirmEligible, state, specialist, prev, renderModeOverride } = params;
+  if ((renderModeOverride || renderModeForStep(state, stepId)) === "no_buttons") {
     return { menuId: "", actionCodes: [], labels: [], labelKeys: [] };
   }
   if (stepId === "dream") {
@@ -1974,6 +2001,30 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
 
   const specialistForMenu = specialistForDisplay;
   const prevForMenu = prev;
+  const rawWordingPresentation =
+    String((specialistForDisplay as any).wording_choice_presentation || "").trim() === "canonical"
+      ? "canonical"
+      : "picker";
+  const rawCurrentValueRefinementPending =
+    String((specialistForDisplay as any).current_value_refinement_pending || "").trim() === "true" &&
+    String((specialistForDisplay as any).current_value_refinement_target_field || "").trim() === stepId;
+  const dreamSelfViewVariant = resolveDreamSelfViewVariant({
+    stepId,
+    state,
+    specialist: specialistForDisplay,
+    status: effectiveStatus,
+    wordingPending,
+    wordingPresentation: rawWordingPresentation,
+    currentValueRefinementPending: rawCurrentValueRefinementPending,
+  });
+  const renderModeOverride =
+    dreamSelfViewVariant === "stuck_support"
+      ? "no_buttons"
+      : dreamSelfViewVariant === "picker" || dreamSelfViewVariant === "canonical_refine"
+        ? "menu"
+        : undefined;
+  const normalizedWordingPending =
+    dreamSelfViewVariant === "stuck_support" ? false : wordingPending;
 
   const resolved = resolveMenuContract({
     stepId,
@@ -1982,6 +2033,7 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     state,
     specialist: specialistForMenu,
     prev: prevForMenu,
+    renderModeOverride,
   });
   let menuId = resolved.menuId;
   let safeActionCodes = resolved.actionCodes;
@@ -2003,12 +2055,13 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
   }
   const wordingChoiceSelected = String((specialistForDisplay as any).wording_choice_selected || "").trim();
   const wordingPresentation =
-    String((specialistForDisplay as any).wording_choice_presentation || "").trim() === "canonical"
-      ? "canonical"
-      : "picker";
+    dreamSelfViewVariant === "picker"
+      ? "picker"
+      : dreamSelfViewVariant === "stuck_support"
+        ? "canonical"
+        : rawWordingPresentation;
   const currentValueRefinementPending =
-    String((specialistForDisplay as any).current_value_refinement_pending || "").trim() === "true" &&
-    String((specialistForDisplay as any).current_value_refinement_target_field || "").trim() === stepId;
+    dreamSelfViewVariant === "stuck_support" ? false : rawCurrentValueRefinementPending;
   const currentValueRefinementCanonicalValue =
     currentValueRefinementPending
       ? String(
@@ -2018,11 +2071,11 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
   const showStepIntroChrome =
     stepId === "purpose"
       ? isSemanticPurposeIntroVisibleState({
-          stepId,
-          status: effectiveStatus,
-          menuId,
-          wordingPending,
-        }) || legacyShowStepIntroChrome
+        stepId,
+        status: effectiveStatus,
+        menuId,
+        wordingPending: normalizedWordingPending,
+      }) || legacyShowStepIntroChrome
       : legacyShowStepIntroChrome;
   const headline = contractHeadlineForState({
     state,
@@ -2051,14 +2104,16 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
       ? interactiveAskPromptFallback(state, stepId)
       : "";
   let question =
-    wordingPending && wordingPresentation === "picker"
+    dreamSelfViewVariant === "stuck_support"
+      ? ""
+      : normalizedWordingPending && wordingPresentation === "picker"
       ? ""
       : stripStructuredChoiceLinesForPrompt(dreamExplainerPrompt || headline || fallbackPrompt, state);
   let effectiveUiStatus: TurnOutputStatus = effectiveStatus;
   let contractId = buildContractId(stepId, effectiveUiStatus, menuId);
   let textKeys = buildContractTextKeys({ stepId, status: effectiveUiStatus, menuId });
   const pendingCanonicalValue =
-    wordingPending && wordingPresentation === "canonical"
+    normalizedWordingPending && wordingPresentation === "canonical"
       ? String((specialistForDisplay as any).wording_choice_agent_current || specialistForDisplay.refined_formulation || "")
         .trim()
       : "";
@@ -2104,11 +2159,12 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
   const singleValueUiCanonicalValue = (() => {
     if (recapRequested) return "";
     if (isOfftopic) return "";
+    if (dreamSelfViewVariant === "stuck_support") return "";
     if (currentValueRefinementPending && currentValueRefinementCanonicalValue) {
       return currentValueRefinementCanonicalValue;
     }
     if (
-      !wordingPending &&
+      !normalizedWordingPending &&
       effectiveStatus === "valid_output" &&
       hasSingleValueStructuredContent(stepId)
     ) {
@@ -2125,14 +2181,14 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     (
       currentValueRefinementPending ||
       (
-        !wordingPending &&
+        !normalizedWordingPending &&
         effectiveStatus === "valid_output" &&
         !shouldUseCurrentValueHeading(stepId, state)
       )
     );
   let messageForDisplay =
     isSemanticInvariantsV1Enabled() &&
-    wordingPending &&
+    normalizedWordingPending &&
     wordingPresentation === "picker" &&
     !String(message || "").trim()
       ? uiStringFromState(
@@ -2148,7 +2204,7 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
       message: messageForDisplay,
     });
   }
-  if (wordingPending && wordingPresentation === "canonical" && pendingCanonicalValue) {
+  if (normalizedWordingPending && wordingPresentation === "canonical" && pendingCanonicalValue) {
     messageForDisplay = singleValueSupportText({
       message: messageForDisplay,
       heading: singleValueConfirmHeading(stepId, state),
@@ -2170,7 +2226,7 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     Boolean(canonicalAcceptedValue) &&
     effectiveStatus === "valid_output" &&
     !isOfftopic &&
-    !wordingPending &&
+    !normalizedWordingPending &&
     !currentValueRefinementPending &&
     !recapRequested;
   if (useSingleValueConfirmSsot && !shouldPublishCanonicalSuggestionFeedbackContract) {
@@ -2181,7 +2237,7 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
   } else if (
     shouldEnforceConfirmVisibility &&
     canonicalAcceptedValue &&
-    !wordingPending &&
+    !normalizedWordingPending &&
     !shouldPublishCanonicalSuggestionFeedbackContract
   ) {
     messageForDisplay = ensureCanonicalContextBlockInMessage({
@@ -2228,6 +2284,7 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
       state,
       specialist: specialistForDisplay,
       prev,
+      renderModeOverride,
     });
     menuId = normalized.menuId;
     effectiveUiStatus = normalizedStatus;
@@ -2253,7 +2310,7 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
         ? interactiveAskPromptFallback(state, stepId)
         : "";
     question =
-      wordingPending && wordingPresentation === "picker"
+      normalizedWordingPending && wordingPresentation === "picker"
         ? ""
         : stripStructuredChoiceLinesForPrompt(normalizedHeadline || normalizedFallbackPrompt, state);
   }

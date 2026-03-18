@@ -43,6 +43,7 @@ type CreateRunStepRuntimeSemanticHelpersDeps = {
   provisionalValueForStep: (state: CanvasState, stepId: string) => string;
   provisionalSourceForStep: (state: CanvasState, stepId: string) => ProvisionalSource;
   clearStepInteractiveState: (state: CanvasState, stepId: string) => CanvasState;
+  clearStepSupportState: (state: CanvasState, stepId: string) => CanvasState;
   renderFreeTextTurnPolicy: (params: {
     stepId: string;
     state: CanvasState;
@@ -69,6 +70,7 @@ type SemanticViolationReason =
   | "intro_mode_must_not_expose_confirm"
   | "wording_choice_mode_requires_instruction_or_context"
   | "rules_confirm_policy_violation"
+  | "dream_no_buttons_requires_explicit_stuck_support"
   | "user_facing_markup_detected";
 
 const SEMANTIC_VIOLATION_REASONS = new Set<SemanticViolationReason>([
@@ -77,6 +79,7 @@ const SEMANTIC_VIOLATION_REASONS = new Set<SemanticViolationReason>([
   "intro_mode_must_not_expose_confirm",
   "wording_choice_mode_requires_instruction_or_context",
   "rules_confirm_policy_violation",
+  "dream_no_buttons_requires_explicit_stuck_support",
   "user_facing_markup_detected",
 ]);
 
@@ -140,6 +143,10 @@ export function createRunStepRuntimeSemanticHelpers(deps: CreateRunStepRuntimeSe
     const uiActions = Array.isArray(rendered.uiActions) ? rendered.uiActions : [];
     const question = String(specialist.question || "").trim();
     const numberedCount = deps.countNumberedOptions(question);
+    const renderMode = state ? deps.inferUiRenderModeForStep(state, stepId) : "menu";
+    const explicitDreamStuckSupport =
+      stepId === deps.dreamStepId &&
+      String((specialist as Record<string, unknown>).step_support_state || "").trim().toLowerCase() === "stuck";
     const userFacingCandidates: string[] = [
       String((specialist as Record<string, unknown>).message || ""),
       String((specialist as Record<string, unknown>).question || ""),
@@ -223,6 +230,10 @@ export function createRunStepRuntimeSemanticHelpers(deps: CreateRunStepRuntimeSe
       }
     }
 
+    if (stepId === deps.dreamStepId && renderMode === "no_buttons" && !explicitDreamStuckSupport) {
+      return "dream_no_buttons_requires_explicit_stuck_support";
+    }
+
     const hasConfirmAction = actionCodes.some((code) => deps.isConfirmActionCode(code));
     if (rendered.status === "no_output" && hasConfirmAction) {
       return "intro_mode_must_not_expose_confirm";
@@ -251,7 +262,6 @@ export function createRunStepRuntimeSemanticHelpers(deps: CreateRunStepRuntimeSe
       action === "ASK" &&
       (rendered.status === "no_output" || rendered.status === "incomplete_output")
     ) {
-      const renderMode = state ? deps.inferUiRenderModeForStep(state, stepId) : "menu";
       const dreamMode = state && stepId === deps.dreamStepId ? deps.getDreamRuntimeMode(state) : "self";
       const promptRequired = !(renderMode === "no_buttons" || (stepId === deps.dreamStepId && dreamMode === "builder_scoring"));
       if (promptRequired && !question) {
@@ -273,7 +283,7 @@ export function createRunStepRuntimeSemanticHelpers(deps: CreateRunStepRuntimeSe
     }
 
     if (stepId !== deps.step0Id && rendered.status === "valid_output") {
-      if (state && deps.inferUiRenderModeForStep(state, stepId) === "no_buttons") {
+      if (state && renderMode === "no_buttons") {
         return null;
       }
       const inDreamBuilderMode =
@@ -293,7 +303,7 @@ export function createRunStepRuntimeSemanticHelpers(deps: CreateRunStepRuntimeSe
       rendered.status !== "no_output" &&
       actionCodes.length === 0
     ) {
-      if (state && deps.inferUiRenderModeForStep(state, stepId) === "no_buttons") {
+      if (state && renderMode === "no_buttons") {
         return null;
       }
       return "missing_action_codes_for_interactive_step";
@@ -432,6 +442,10 @@ export function createRunStepRuntimeSemanticHelpers(deps: CreateRunStepRuntimeSe
       deps.bumpUiI18nCounter(params.telemetry, "semantic_confirm_blocked_count");
     }
     let fallbackState = state;
+    if (violation === "dream_no_buttons_requires_explicit_stuck_support") {
+      fallbackState = deps.clearStepSupportState(fallbackState, stepId);
+      deps.bumpUiI18nCounter(params.telemetry, "state_hygiene_resets_count");
+    }
     if (
       violation === "confirm_present_without_accepted_evidence" ||
       violation === "intro_mode_must_not_expose_confirm" ||
