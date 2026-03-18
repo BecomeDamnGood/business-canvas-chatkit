@@ -133,7 +133,7 @@ export function applyDreamRuntimePolicy(params: {
     currentValue,
   });
   const suppressWordingChoice =
-    sourceViolationCodes.length > 0 || candidateViolationCodes.length > 0;
+    candidateViolationCodes.length > 0 && !candidateShapeValid;
 
   const nextSpecialist: Record<string, unknown> = {
     ...specialist,
