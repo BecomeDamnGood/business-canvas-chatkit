@@ -868,6 +868,53 @@ test("runStepRuntimeActionRoutingLayer keeps confirm blocked when a visible pick
   assert.equal(String(specialist.wording_choice_pending || ""), "true");
 });
 
+test("runStepRuntimeActionRoutingLayer strips stale legacy wording-choice state while Dream Builder mode is active", async () => {
+  const params = buildParams(true) as any;
+  params.runtime.state = {
+    current_step: "dream",
+    active_specialist: "DreamExplainer",
+    __dream_runtime_mode: "builder_collect",
+    dream_builder_statements: ["Statement 1", "Statement 2"],
+    last_specialist_result: {
+      wording_choice_pending: "true",
+      wording_choice_mode: "text",
+      wording_choice_presentation: "picker",
+      wording_choice_target_field: "dream",
+      wording_choice_user_raw: "I want to help people solve a problem they care about.",
+      wording_choice_user_normalized: "I want to help people solve a problem they care about.",
+      wording_choice_agent_current:
+        "Over 5 tot 10 jaar zoeken mensen steeds meer naar oplossingen die voor hen echt betekenisvol zijn.",
+      feedback_reason_text: "Dream Builder zoekt hier naar bredere maatschappelijke verschuivingen.",
+      __dream_builder_compare_pending: "true",
+      __dream_builder_compare_kind: "batch_rewrite_compare",
+      __dream_builder_compare_current_items: ["I want to help people solve a problem they care about."],
+      __dream_builder_compare_suggested_items: [
+        "Over 5 tot 10 jaar zoeken mensen steeds meer naar oplossingen die voor hen echt betekenisvol zijn.",
+      ],
+    },
+  };
+  params.runtime.userMessage = "";
+  params.runtime.inputMode = "widget";
+  params.runtime.wordingChoiceEnabled = true;
+  params.behavior.buildTextForWidget = ({ specialist }: { specialist: Record<string, unknown> }) =>
+    JSON.stringify({
+      wording_choice_pending: specialist.wording_choice_pending,
+      dream_builder_compare_pending: specialist.__dream_builder_compare_pending,
+    });
+
+  const result = await runStepRuntimeActionRoutingLayer(params);
+  const specialist = ((((result.response as Record<string, unknown> | null)?.specialist) || (result.state as Record<string, unknown>).last_specialist_result) || {}) as Record<string, unknown>;
+  assert.equal(String(specialist.wording_choice_pending || ""), "false");
+  assert.equal(String(specialist.wording_choice_target_field || ""), "");
+  assert.equal(String(specialist.__dream_builder_compare_pending || ""), "true");
+  if (result.response) {
+    assert.equal(
+      "wording_choice" in ((((result.response as Record<string, unknown>).ui || {}) as Record<string, unknown>)),
+      false
+    );
+  }
+});
+
 test("runStepRuntimeActionRoutingLayer keeps strategy confirm blocked while grouped compare units are still pending", async () => {
   const params = buildParams(true) as any;
   params.runtime.actionCodeRaw = "ACTION_STRATEGY_CONFIRM_SATISFIED";

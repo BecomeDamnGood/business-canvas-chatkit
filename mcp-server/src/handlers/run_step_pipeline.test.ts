@@ -1014,11 +1014,14 @@ test("runPostSpecialistPipeline restores Dream Builder canonical statements when
     },
   } as any);
 
-  assert.equal(String((payload.specialist as Record<string, unknown>).wording_choice_pending || ""), "false");
-  assert.equal(String((payload.specialist as Record<string, unknown>).__dream_builder_compare_pending || ""), "true");
-  assert.deepEqual((payload.specialist as Record<string, unknown>).statements, existingStatements);
+  const specialist = (((payload.specialist as Record<string, unknown>)?.__dream_builder_compare_pending
+    ? (payload.specialist as Record<string, unknown>)
+    : ((payload.state as Record<string, unknown>).last_specialist_result as Record<string, unknown>)) || {}) as Record<string, unknown>;
+  assert.equal(String(specialist.wording_choice_pending || ""), "false");
+  assert.equal(String(specialist.__dream_builder_compare_pending || ""), "true");
+  assert.deepEqual(specialist.statements, existingStatements);
   assert.deepEqual((payload.state as Record<string, unknown>).dream_builder_statements, existingStatements);
-  assert.ok(payload.wordingChoiceOverride);
+  assert.equal(payload.wordingChoiceOverride, null);
 });
 
 test("runPostSpecialistPipeline recovers Dream Builder compare when a material rewrite is returned without explicit feedback_reason_text", async () => {
@@ -1112,13 +1115,16 @@ test("runPostSpecialistPipeline recovers Dream Builder compare when a material r
     },
   } as any);
 
-  assert.equal(String((payload.specialist as Record<string, unknown>).wording_choice_pending || ""), "false");
-  assert.equal(String((payload.specialist as Record<string, unknown>).__dream_builder_compare_pending || ""), "true");
-  assert.deepEqual((payload.specialist as Record<string, unknown>).statements, existingStatements);
+  const specialist = (((payload.specialist as Record<string, unknown>)?.__dream_builder_compare_pending
+    ? (payload.specialist as Record<string, unknown>)
+    : ((payload.state as Record<string, unknown>).last_specialist_result as Record<string, unknown>)) || {}) as Record<string, unknown>;
+  assert.equal(String(specialist.wording_choice_pending || ""), "false");
+  assert.equal(String(specialist.__dream_builder_compare_pending || ""), "true");
+  assert.deepEqual(specialist.statements, existingStatements);
   assert.deepEqual((payload.state as Record<string, unknown>).dream_builder_statements, existingStatements);
-  assert.ok(payload.wordingChoiceOverride);
+  assert.equal(payload.wordingChoiceOverride, null);
   assert.match(
-    String((payload.specialist as Record<string, unknown>).feedback_reason_text || ""),
+    String(specialist.feedback_reason_text || ""),
     /broader change in the world/i
   );
 });
@@ -1218,11 +1224,14 @@ test("runPostSpecialistPipeline keeps Dream Builder compare active even when a c
     },
   } as any);
 
-  assert.equal(String((payload.specialist as Record<string, unknown>).wording_choice_pending || ""), "false");
-  assert.equal(String((payload.specialist as Record<string, unknown>).__dream_builder_compare_pending || ""), "true");
-  assert.deepEqual((payload.specialist as Record<string, unknown>).statements, existingStatements);
+  const specialist = (((payload.specialist as Record<string, unknown>)?.__dream_builder_compare_pending
+    ? (payload.specialist as Record<string, unknown>)
+    : ((payload.state as Record<string, unknown>).last_specialist_result as Record<string, unknown>)) || {}) as Record<string, unknown>;
+  assert.equal(String(specialist.wording_choice_pending || ""), "false");
+  assert.equal(String(specialist.__dream_builder_compare_pending || ""), "true");
+  assert.deepEqual(specialist.statements, existingStatements);
   assert.deepEqual((payload.state as Record<string, unknown>).dream_builder_statements, existingStatements);
-  assert.ok(payload.wordingChoiceOverride);
+  assert.equal(payload.wordingChoiceOverride, null);
 });
 
 test("runPostSpecialistPipeline repairs a near-duplicate Dream Builder append into a merge compare before state is updated", async () => {
@@ -1337,13 +1346,16 @@ test("runPostSpecialistPipeline repairs a near-duplicate Dream Builder append in
     specialistCalls[1]?.startsWith("__ROUTE__DREAM_EXPLAINER_OVERLAP_REPAIR__"),
     true
   );
-  assert.equal(String((payload.specialist as Record<string, unknown>).wording_choice_pending || ""), "false");
-  assert.equal(String((payload.specialist as Record<string, unknown>).__dream_builder_compare_pending || ""), "true");
-  assert.deepEqual((payload.specialist as Record<string, unknown>).statements, existingStatements);
+  const specialist = (((payload.specialist as Record<string, unknown>)?.__dream_builder_compare_pending
+    ? (payload.specialist as Record<string, unknown>)
+    : ((payload.state as Record<string, unknown>).last_specialist_result as Record<string, unknown>)) || {}) as Record<string, unknown>;
+  assert.equal(String(specialist.wording_choice_pending || ""), "false");
+  assert.equal(String(specialist.__dream_builder_compare_pending || ""), "true");
+  assert.deepEqual(specialist.statements, existingStatements);
   assert.deepEqual((payload.state as Record<string, unknown>).dream_builder_statements, existingStatements);
-  assert.ok(payload.wordingChoiceOverride);
+  assert.equal(payload.wordingChoiceOverride, null);
   assert.match(
-    String((payload.specialist as Record<string, unknown>).feedback_reason_text || ""),
+    String(specialist.feedback_reason_text || ""),
     /samengevoegde formulering|lijst scherper/i
   );
 });
@@ -1460,16 +1472,19 @@ test("runPostSpecialistPipeline repairs Dream Builder REFINE overlap cases befor
     specialistCalls[1]?.startsWith("__ROUTE__DREAM_EXPLAINER_OVERLAP_REPAIR__"),
     true
   );
+  const specialist = (((payload.specialist as Record<string, unknown>)?.__dream_builder_compare_pending
+    ? (payload.specialist as Record<string, unknown>)
+    : ((payload.state as Record<string, unknown>).last_specialist_result as Record<string, unknown>)) || {}) as Record<string, unknown>;
   assert.equal(
-    String((payload.specialist as Record<string, unknown>).__dream_builder_overlap_existing_statement || ""),
+    String(specialist.__dream_builder_overlap_existing_statement || ""),
     existingStatements[3]
   );
   assert.equal(
-    String((payload.specialist as Record<string, unknown>).__dream_builder_overlap_incoming_statement || ""),
+    String(specialist.__dream_builder_overlap_incoming_statement || ""),
     "Betekenisvolle verhalen wordt steeds belangrijker voor mensen. dat willen ze ook delen als ze er trots op zijn"
   );
-  assert.equal(String((payload.specialist as Record<string, unknown>).wording_choice_pending || ""), "false");
-  assert.equal(String((payload.specialist as Record<string, unknown>).__dream_builder_compare_pending || ""), "true");
+  assert.equal(String(specialist.wording_choice_pending || ""), "false");
+  assert.equal(String(specialist.__dream_builder_compare_pending || ""), "true");
 });
 
 test("runPostSpecialistPipeline repairs incomplete multi-wish Dream Builder rewrites before publishing compare", async () => {
@@ -1602,9 +1617,12 @@ test("runPostSpecialistPipeline repairs incomplete multi-wish Dream Builder rewr
     specialistCalls[1]?.startsWith("__ROUTE__DREAM_EXPLAINER_MULTI_REWRITE_REPAIR__"),
     true
   );
-  assert.equal(String((payload.specialist as Record<string, unknown>).wording_choice_pending || ""), "false");
-  assert.equal(String((payload.specialist as Record<string, unknown>).__dream_builder_compare_pending || ""), "true");
-  assert.deepEqual((payload.wordingChoiceOverride as Record<string, unknown>)?.suggestion_items, [
+  const specialist = (((payload.specialist as Record<string, unknown>)?.__dream_builder_compare_pending
+    ? (payload.specialist as Record<string, unknown>)
+    : ((payload.state as Record<string, unknown>).last_specialist_result as Record<string, unknown>)) || {}) as Record<string, unknown>;
+  assert.equal(String(specialist.wording_choice_pending || ""), "false");
+  assert.equal(String(specialist.__dream_builder_compare_pending || ""), "true");
+  assert.deepEqual(specialist.__dream_builder_compare_suggested_items, [
     "Over 5 tot 10 jaar zullen meer mensen vooral problemen willen oplossen die voor henzelf en hun omgeving echt betekenisvol zijn.",
     "De behoefte aan helderheid en eenvoud in complexe of verwarrende domeinen zal sterk toenemen.",
     "Er zal meer aandacht zijn voor veilige omgevingen waarin mensen zich gezien en gesteund voelen.",

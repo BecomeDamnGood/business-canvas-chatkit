@@ -233,10 +233,44 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
       ? raw.map((line) => String(line || "").trim()).filter(Boolean)
       : [];
 
+  const clearDreamBuilderLegacyWordingChoiceFields = (
+    specialist: Record<string, unknown>
+  ): Record<string, unknown> => ({
+    ...specialist,
+    wording_choice_pending: "false",
+    wording_choice_selected: "",
+    wording_choice_user_raw: "",
+    wording_choice_user_normalized: "",
+    wording_choice_user_items: [],
+    wording_choice_suggestion_items: [],
+    wording_choice_base_items: [],
+    wording_choice_list_semantics: "delta",
+    wording_choice_agent_current: "",
+    wording_choice_mode: "",
+    wording_choice_target_field: "",
+    wording_choice_presentation: "",
+    wording_choice_variant: "",
+    wording_choice_user_label: "",
+    wording_choice_suggestion_label: "",
+    wording_choice_compare_mode: "",
+    wording_choice_compare_cursor: "",
+    wording_choice_compare_units: [],
+    wording_choice_compare_segments: [],
+    wording_choice_user_variant_semantics: "",
+    wording_choice_user_variant_stepworthy: "",
+    pending_suggestion_intent: "",
+    pending_suggestion_anchor: "",
+    pending_suggestion_feedback_text: "",
+    pending_suggestion_presentation_mode: "",
+  });
+
   const hasRenderablePendingWordingChoice = (specialist: Record<string, unknown>): boolean => {
     if (String(specialist.wording_choice_pending || "").trim() !== "true") return false;
     const mode = String(specialist.wording_choice_mode || "text").trim() === "list" ? "list" : "text";
     const stepId = String(specialist.wording_choice_target_field || "").trim();
+    const dreamRuntimeMode = action.getDreamRuntimeMode(state);
+    const dreamBuilderFlowActive = String(state.current_step || "") === ids.dreamStepId && dreamRuntimeMode !== "self";
+    if (dreamBuilderFlowActive && stepId === ids.dreamStepId) return false;
     const hasExplicitFeedbackReason = Boolean(String(specialist.feedback_reason_text || "").trim());
     const userText = String(specialist.wording_choice_user_normalized || specialist.wording_choice_user_raw || "").trim();
     const suggestionText = String(specialist.wording_choice_agent_current || specialist.refined_formulation || "").trim();
@@ -271,6 +305,11 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     stepId: string
   ): Promise<Record<string, unknown>> => {
     if (String(specialist.wording_choice_pending || "").trim() !== "true") return specialist;
+    const dreamRuntimeMode = action.getDreamRuntimeMode(state);
+    const dreamBuilderFlowActive = String(state.current_step || "") === ids.dreamStepId && dreamRuntimeMode !== "self";
+    if (dreamBuilderFlowActive && stepId === ids.dreamStepId) {
+      return clearDreamBuilderLegacyWordingChoiceFields(specialist);
+    }
     const mode = String(specialist.wording_choice_mode || "text").trim() === "list" ? "list" : "text";
     if (!isSingleValueTextPickerStep(stepId, mode)) return specialist;
     if (pendingWordingChoicePresentation(specialist) !== "picker") return specialist;
@@ -938,9 +977,13 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
       (!params.wordingChoice || params.wordingChoice.enabled !== true) &&
       String(params.specialist.wording_choice_pending || "").trim() === "true" &&
       pendingWordingChoicePresentation(params.specialist) === "picker";
-    const responseSpecialist = shouldSuspendPendingPicker
+    const responseSpecialistBase = shouldSuspendPendingPicker
       ? suspendPendingWordingChoiceSpecialist(params.specialist)
       : params.specialist;
+    const responseSpecialist =
+      dreamBuilderModeActive
+        ? clearDreamBuilderLegacyWordingChoiceFields(responseSpecialistBase)
+        : responseSpecialistBase;
     (stateWithUi as Record<string, unknown>).last_specialist_result = responseSpecialist;
     state = stateWithUi;
     const payload = params.wordingChoice && params.wordingChoice.enabled === true

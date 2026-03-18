@@ -533,6 +533,13 @@ function clearPendingWordingChoiceFields(specialistResult: Record<string, unknow
   };
 }
 
+function clearDreamBuilderLegacyWordingChoiceFields(specialistResult: Record<string, unknown>): Record<string, unknown> {
+  return {
+    ...specialistResult,
+    ...clearPendingWordingChoiceFields(specialistResult),
+  };
+}
+
 export function isWordingChoiceIntentEligible(specialistResult: Record<string, unknown>): boolean {
   const metaTopic = String(specialistResult.meta_topic || "").trim().toUpperCase();
   if (metaTopic && metaTopic !== "NONE") return false;
@@ -1493,7 +1500,6 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
       String((specialistResult as Record<string, unknown>).__business_list_turn_preclassified || "").trim() === "true";
     if (
       params.wordingChoiceEnabled &&
-      !dreamBuilderFlowActiveForWording &&
       !suppressWordingChoiceForAutoSuggest &&
       params.inputMode === "widget" &&
       wordingIntentEligible &&
@@ -1538,6 +1544,11 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
         provisionalSource: provisionalSourceForMutation,
       });
     }
+    if (dreamBuilderFlowActiveForWording) {
+      specialistResult = clearDreamBuilderLegacyWordingChoiceFields(asRecord(specialistResult));
+      wordingChoiceOverride = null;
+      requireWordingPick = false;
+    }
     asStateRecord(nextState).last_specialist_result = specialistResult;
     if (
       params.wordingChoiceEnabled &&
@@ -1578,8 +1589,10 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
           specialistResult = clearPendingWordingChoiceFields(asRecord(specialistResult));
         }
       }
-    } else if (dreamBuilderFlowActiveForWording && isTrueFlag(specialistResult.wording_choice_pending)) {
-      specialistResult = clearPendingWordingChoiceFields(asRecord(specialistResult));
+    } else if (dreamBuilderFlowActiveForWording) {
+      specialistResult = clearDreamBuilderLegacyWordingChoiceFields(asRecord(specialistResult));
+      wordingChoiceOverride = null;
+      requireWordingPick = false;
     } else if (isTrueFlag(specialistResult.wording_choice_pending)) {
       specialistResult = clearPendingWordingChoiceFields(asRecord(specialistResult));
     }

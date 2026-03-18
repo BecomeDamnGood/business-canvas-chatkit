@@ -306,6 +306,50 @@ function normalizeUiFeedbackContract(raw: unknown): Record<string, unknown> | un
   };
 }
 
+function resolveWordingChoiceForFeedbackContract(params: {
+  wordingChoice: WordingChoiceUiPayload | null | undefined;
+  specialist: Record<string, unknown>;
+}): WordingChoiceUiPayload | null {
+  const wordingChoice = params.wordingChoice;
+  if (!wordingChoice || wordingChoice.enabled !== true) return wordingChoice || null;
+  const specialist = params.specialist || {};
+  const userText = String(
+    wordingChoice.user_text ||
+      specialist.wording_choice_user_normalized ||
+      specialist.wording_choice_user_raw ||
+      ""
+  ).trim();
+  const suggestionText = String(
+    wordingChoice.suggestion_text ||
+      specialist.wording_choice_agent_current ||
+      specialist.refined_formulation ||
+      ""
+  ).trim();
+  const userItems =
+    Array.isArray(wordingChoice.user_items) && wordingChoice.user_items.length > 0
+      ? wordingChoice.user_items
+      : (
+        Array.isArray(specialist.wording_choice_user_items)
+          ? (specialist.wording_choice_user_items as unknown[]).map((value) => String(value || "").trim()).filter(Boolean)
+          : []
+      );
+  const suggestionItems =
+    Array.isArray(wordingChoice.suggestion_items) && wordingChoice.suggestion_items.length > 0
+      ? wordingChoice.suggestion_items
+      : (
+        Array.isArray(specialist.wording_choice_suggestion_items)
+          ? (specialist.wording_choice_suggestion_items as unknown[]).map((value) => String(value || "").trim()).filter(Boolean)
+          : []
+      );
+  return {
+    ...wordingChoice,
+    user_text: userText,
+    suggestion_text: suggestionText,
+    user_items: userItems,
+    suggestion_items: suggestionItems,
+  };
+}
+
 function normalizeDreamBuilderCompareContractFromFeedback(raw: unknown): DreamBuilderCompareContractPayload | undefined {
   const feedback = normalizeUiFeedbackContract(raw);
   if (!feedback) return undefined;
@@ -808,17 +852,37 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
       effectiveStepId === DREAM_STEP_ID &&
       dreamBuilderFlowActive &&
       String((specialist as Record<string, unknown>).__dream_builder_compare_pending || "").trim() === "true";
+    const resolvedWordingChoiceForFeedbackContract = resolveWordingChoiceForFeedbackContract({
+      wordingChoice: wordingChoiceOverride,
+      specialist: (specialist || {}) as Record<string, unknown>,
+    });
     const explicitFeedbackContractPayload = normalizeUiFeedbackContract(
       (specialist as Record<string, unknown>)?.ui_feedback_contract
     );
+    const dreamSingleValuePickerActive =
+      effectiveStepId === DREAM_STEP_ID &&
+      !dreamBuilderFlowActive &&
+      isSingleValueTextPickerState({
+        specialist: specialist as Record<string, unknown>,
+        stepIdHint: effectiveStepId,
+      });
     const rawFeedbackContractPayload =
       effectiveStepId === DREAM_STEP_ID
-        ? (dreamBuilderFlowActive ? undefined : explicitFeedbackContractPayload)
+        ? (
+          dreamBuilderFlowActive
+            ? undefined
+            : (
+              explicitFeedbackContractPayload ||
+              (dreamSingleValuePickerActive
+                ? synthesizeUiFeedbackContractFromWordingChoice(resolvedWordingChoiceForFeedbackContract, flags)
+                : undefined)
+            )
+        )
         : (
           explicitFeedbackContractPayload ||
           (dreamBuilderCompareActive
             ? undefined
-            : synthesizeUiFeedbackContractFromWordingChoice(wordingChoiceOverride, flags))
+            : synthesizeUiFeedbackContractFromWordingChoice(resolvedWordingChoiceForFeedbackContract, flags))
         );
     let viewVariant: UiViewVariant = "default";
     if (
@@ -833,7 +897,7 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
         forceDreamBuilderRefine || contractMenuId === "DREAM_EXPLAINER_MENU_REFINE"
           ? "dream_builder_refine"
           : "dream_builder_collect";
-    } else if (wordingPickPending && effectiveStepId !== DREAM_STEP_ID) {
+    } else if (wordingPickPending && (effectiveStepId !== DREAM_STEP_ID || dreamSingleValuePickerActive)) {
       viewVariant = "wording_choice";
     }
     const questionTextPayload =

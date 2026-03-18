@@ -16,7 +16,6 @@ export function isPickerPresentation(presentationRaw: unknown): boolean {
 }
 
 export function isSingleValueTextPickerStep(stepId: string, modeRaw: unknown): boolean {
-  if (String(stepId || "").trim() === "dream") return false;
   return normalizedMode(modeRaw) === "text" && isSingleValueWordingStep(stepId);
 }
 

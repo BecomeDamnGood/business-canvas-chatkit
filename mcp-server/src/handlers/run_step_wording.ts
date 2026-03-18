@@ -3083,6 +3083,9 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     dreamRuntimeModeRaw?: unknown
   ): WordingChoiceUiPayload | null {
     const stepId = String(stepIdHint || specialist?.wording_choice_target_field || "").trim();
+    if (stepId === deps.dreamStepId && String(dreamRuntimeModeRaw || "").trim() !== "self") {
+      return null;
+    }
     const dreamBuilderComparePending =
       stepId === deps.dreamStepId &&
       String(specialist?.__dream_builder_compare_pending || "").trim().toLowerCase() === "true";

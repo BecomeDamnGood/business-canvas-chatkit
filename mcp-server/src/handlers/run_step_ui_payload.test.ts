@@ -597,7 +597,7 @@ test("attachRegistryPayload preserves compare rationale and retained items from 
   assert.equal("wording_choice" in (payload.ui || {}), false);
 });
 
-test("attachRegistryPayload keeps Dream single-value ui.content when stale wording-choice picker state is present", () => {
+test("attachRegistryPayload keeps Dream single-value ui.content when stale canonical wording-choice state is present", () => {
   const helpers = buildHelpers();
   const canonical = "Mindd droomt van een wereld waarin keuzes rust geven.";
   const payload = helpers.attachRegistryPayload(
@@ -614,7 +614,7 @@ test("attachRegistryPayload keeps Dream single-value ui.content when stale wordi
       ui_contract_id: "dream:ASK:DREAM_MENU_REFINE:v1",
       wording_choice_pending: "true",
       wording_choice_mode: "text",
-      wording_choice_presentation: "picker",
+      wording_choice_presentation: "canonical",
       wording_choice_target_field: "dream",
       wording_choice_user_normalized: "Wij willen bedrijven helpen groeien.",
       wording_choice_agent_current: canonical,
@@ -645,6 +645,146 @@ test("attachRegistryPayload keeps Dream single-value ui.content when stale wordi
     canonical_text: canonical,
   });
   assert.equal(payload.ui?.feedback_contract, undefined);
+  assert.equal("wording_choice" in (payload.ui || {}), false);
+});
+
+test("attachRegistryPayload restores Dream single-value compare feedback contracts for active wording-choice picker state", () => {
+  const helpers = buildHelpers();
+  const canonical = "Mindd droomt van een wereld waarin keuzes rust geven.";
+  const payload = helpers.attachRegistryPayload(
+    {
+      text: canonical,
+      prompt: "",
+      current_step_id: "dream",
+      state: {
+        current_step: "dream",
+        active_specialist: "Dream",
+      } as any,
+    },
+    {
+      ui_contract_id: "dream:ASK:DREAM_MENU_REFINE:v1",
+      wording_choice_pending: "true",
+      wording_choice_mode: "text",
+      wording_choice_presentation: "picker",
+      wording_choice_target_field: "dream",
+      wording_choice_user_normalized: "Dit gaat over dat mensen het beu zijn om verkeerd voorgelicht te worden.",
+      wording_choice_agent_current: canonical,
+      ui_content: {
+        kind: "single_value",
+        heading: "JE HUIDIGE DROOM VOOR MINDD IS",
+        canonical_text: canonical,
+      },
+    },
+    { require_wording_pick: true },
+    [],
+    [],
+    {
+      enabled: true,
+      mode: "text",
+      user_text: "Dit gaat over dat mensen het beu zijn om verkeerd voorgelicht te worden.",
+      suggestion_text: canonical,
+      user_items: [],
+      suggestion_items: [],
+      instruction: "Kies welke formulering je wilt gebruiken.",
+    }
+  );
+
+  assert.equal(payload.ui?.view?.variant, "wording_choice");
+  assert.equal(payload.ui?.content, undefined);
+  assert.equal(String(payload.ui?.feedback_contract?.kind || ""), "single_value_compare");
+  assert.equal(
+    String(payload.ui?.feedback_contract?.current_value || ""),
+    "Dit gaat over dat mensen het beu zijn om verkeerd voorgelicht te worden."
+  );
+  assert.equal(String(payload.ui?.feedback_contract?.suggested_value || ""), canonical);
+  assert.equal("wording_choice" in (payload.ui || {}), false);
+});
+
+test("attachRegistryPayload backfills Dream compare current_value from specialist wording-choice state when override user_text is blank", () => {
+  const helpers = buildHelpers();
+  const canonical = "Mindd droomt van een wereld waarin mensen zich goed geinformeerd en veilig voelen.";
+  const userInput = "Dit gaat over dat mensen het beu zijn om verkeerd voorgelicht te worden.";
+  const payload = helpers.attachRegistryPayload(
+    {
+      text: canonical,
+      prompt: "",
+      current_step_id: "dream",
+      state: {
+        current_step: "dream",
+        active_specialist: "Dream",
+      } as any,
+    },
+    {
+      ui_contract_id: "dream:ASK:DREAM_MENU_REFINE:v1",
+      wording_choice_pending: "true",
+      wording_choice_mode: "text",
+      wording_choice_presentation: "picker",
+      wording_choice_target_field: "dream",
+      wording_choice_user_normalized: userInput,
+      wording_choice_agent_current: canonical,
+    },
+    { require_wording_pick: true },
+    [],
+    [],
+    {
+      enabled: true,
+      mode: "text",
+      user_text: "",
+      suggestion_text: canonical,
+      user_items: [],
+      suggestion_items: [],
+      instruction: "Kies welke formulering je wilt gebruiken.",
+    }
+  );
+
+  assert.equal(payload.ui?.view?.variant, "wording_choice");
+  assert.equal(String(payload.ui?.feedback_contract?.kind || ""), "single_value_compare");
+  assert.equal(String(payload.ui?.feedback_contract?.current_value || ""), userInput);
+  assert.equal(String(payload.ui?.feedback_contract?.suggested_value || ""), canonical);
+  assert.equal("wording_choice" in (payload.ui || {}), false);
+});
+
+test("attachRegistryPayload backfills non-Dream compare current_value from specialist wording-choice state when override user_text is blank", () => {
+  const helpers = buildHelpers();
+  const canonical = "Mindd exists to make complex choices understandable.";
+  const userInput = "We want to do something good.";
+  const payload = helpers.attachRegistryPayload(
+    {
+      text: canonical,
+      prompt: "",
+      current_step_id: "purpose",
+      state: {
+        current_step: "purpose",
+        active_specialist: "Purpose",
+      } as any,
+    },
+    {
+      ui_contract_id: "purpose:ASK:PURPOSE_MENU_REFINE:v1",
+      wording_choice_pending: "true",
+      wording_choice_mode: "text",
+      wording_choice_presentation: "picker",
+      wording_choice_target_field: "purpose",
+      wording_choice_user_normalized: userInput,
+      wording_choice_agent_current: canonical,
+    },
+    { require_wording_pick: true },
+    [],
+    [],
+    {
+      enabled: true,
+      mode: "text",
+      user_text: "",
+      suggestion_text: canonical,
+      user_items: [],
+      suggestion_items: [],
+      instruction: "Choose the wording that fits best.",
+    }
+  );
+
+  assert.equal(payload.ui?.view?.variant, "wording_choice");
+  assert.equal(String(payload.ui?.feedback_contract?.kind || ""), "single_value_compare");
+  assert.equal(String(payload.ui?.feedback_contract?.current_value || ""), userInput);
+  assert.equal(String(payload.ui?.feedback_contract?.suggested_value || ""), canonical);
   assert.equal("wording_choice" in (payload.ui || {}), false);
 });
 

@@ -430,7 +430,7 @@ test("buildWordingChoiceFromTurn keeps targetgroup in picker pending presentatio
     isOfftopic: false,
   });
 
-  assert.ok(result.wordingChoice);
+  assert.equal(result.wordingChoice, null);
   assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "true");
   assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_presentation || ""), "picker");
 });
@@ -454,7 +454,7 @@ test("buildWordingChoiceFromTurn keeps targetgroup picker pending presentation f
     isOfftopic: false,
   });
 
-  assert.ok(result.wordingChoice);
+  assert.equal(result.wordingChoice, null);
   assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "true");
   assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_presentation || ""), "picker");
 });
@@ -477,7 +477,7 @@ test("buildWordingChoiceFromTurn keeps Dream in picker pending presentation for 
     isOfftopic: false,
   });
 
-  assert.ok(result.wordingChoice);
+  assert.equal(result.wordingChoice, null);
   assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "true");
   assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_presentation || ""), "picker");
 });
@@ -515,7 +515,7 @@ test("buildWordingChoiceFromTurn keeps Dream Builder statements canonical while 
     dreamRuntimeModeRaw: "builder_collect",
   });
 
-  assert.ok(result.wordingChoice);
+  assert.equal(result.wordingChoice, null);
   assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "false");
   assert.equal(String((result.specialist as Record<string, unknown>).__dream_builder_compare_pending || ""), "true");
   assert.deepEqual((result.specialist as Record<string, unknown>).statements, [
@@ -605,7 +605,7 @@ test("buildWordingChoiceFromTurn keeps Purpose in picker pending presentation fo
     isOfftopic: false,
   });
 
-  assert.ok(result.wordingChoice);
+  assert.equal(result.wordingChoice, null);
   assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "true");
   assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_presentation || ""), "picker");
 });
@@ -628,7 +628,7 @@ test("buildWordingChoiceFromTurn keeps Role in picker pending presentation for d
     isOfftopic: false,
   });
 
-  assert.ok(result.wordingChoice);
+  assert.equal(result.wordingChoice, null);
   assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "true");
   assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_presentation || ""), "picker");
 });
@@ -750,7 +750,7 @@ test("buildWordingChoiceFromTurn treats remove-line requests as list edit intent
     isOfftopic: false,
   });
 
-  assert.ok(result.wordingChoice);
+  assert.equal(result.wordingChoice, null);
   assert.equal(result.wordingChoice?.mode, "list");
   assert.deepEqual(result.wordingChoice?.user_items, [
     "AI-compatible websites and apps",
@@ -801,7 +801,7 @@ test("buildWordingChoiceFromTurn compares strategy wording choices per differing
     isOfftopic: false,
   });
 
-  assert.ok(result.wordingChoice);
+  assert.equal(result.wordingChoice, null);
   assert.equal(result.wordingChoice?.mode, "list");
   assert.equal(result.wordingChoice?.user_label, "This is your compact wording:");
   assert.equal(
@@ -1026,7 +1026,7 @@ test("buildWordingChoiceFromTurn creates grouped compare unit for free-text stra
     isOfftopic: false,
   });
 
-  assert.ok(result.wordingChoice);
+  assert.equal(result.wordingChoice, null);
   assert.equal(result.wordingChoice?.user_label, "This is your compact wording:");
   assert.equal(result.wordingChoice?.suggestion_label, "This is my suggestion:");
   assert.deepEqual(result.wordingChoice?.user_items, ["Operational simplicity"]);
@@ -2278,26 +2278,27 @@ test("buildWordingChoiceFromTurn opens a merge choice for a near-duplicate Dream
     dreamRuntimeModeRaw: "builder_collect",
   });
 
-  assert.ok(result.wordingChoice);
+  assert.equal(result.wordingChoice, null);
   assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "false");
   assert.equal(String((result.specialist as Record<string, unknown>).__dream_builder_compare_pending || ""), "true");
-  assert.equal(String((result.specialist as Record<string, unknown>).__dream_builder_compare_kind || ""), "batch_rewrite_compare");
+  assert.equal(String((result.specialist as Record<string, unknown>).__dream_builder_compare_kind || ""), "overlap_merge_compare");
   assert.deepEqual((result.specialist as Record<string, unknown>).statements, [
     "Over 5 tot 10 jaar zullen meer mensen streven naar werk dat een positieve impact heeft op het leven van anderen.",
     "Er zal meer behoefte zijn aan bedrijven en initiatieven die een blijvende waarde nalaten voor toekomstige generaties.",
   ]);
-  assert.deepEqual((result.wordingChoice as Record<string, unknown>).user_items, [
+  assert.deepEqual((result.specialist as Record<string, unknown>).__dream_builder_compare_current_items, [
+    "Over 5 tot 10 jaar zullen meer mensen streven naar werk dat een positieve impact heeft op het leven van anderen.",
     "Over 5 tot 10 jaar zal het belangrijker worden dat werk zichtbaar iets goeds doet in het leven van mensen.",
   ]);
-  assert.deepEqual((result.wordingChoice as Record<string, unknown>).suggestion_items, [
+  assert.deepEqual((result.specialist as Record<string, unknown>).__dream_builder_compare_suggested_items, [
     "Over 5 tot 10 jaar zal werk steeds vaker worden gezien als iets dat zichtbaar betekenis toevoegt aan het leven van anderen.",
   ]);
   assert.equal(
-    String((result.wordingChoice as Record<string, unknown>).instruction || ""),
+    String((result.specialist as Record<string, unknown>).__dream_builder_compare_instruction || ""),
     "Choose the version that fits best for the remaining difference."
   );
-  assert.ok(String((result.wordingChoice as Record<string, unknown>).user_label || "").trim().length > 0);
-  assert.ok(String((result.wordingChoice as Record<string, unknown>).suggestion_label || "").trim().length > 0);
+  assert.ok(String((result.specialist as Record<string, unknown>).__dream_builder_compare_current_label || "").trim().length > 0);
+  assert.ok(String((result.specialist as Record<string, unknown>).__dream_builder_compare_suggested_label || "").trim().length > 0);
 });
 
 test("buildWordingChoiceFromTurn opens a grouped compare for multiple Dream Builder wishes that are rewritten into future statements", () => {
@@ -2343,14 +2344,14 @@ test("buildWordingChoiceFromTurn opens a grouped compare for multiple Dream Buil
   assert.equal(String((result.specialist as Record<string, unknown>).__dream_builder_compare_pending || ""), "true");
   assert.equal(String((result.specialist as Record<string, unknown>).__dream_builder_compare_kind || ""), "batch_rewrite_compare");
   assert.deepEqual((result.specialist as Record<string, unknown>).statements, []);
-  assert.deepEqual((result.wordingChoice as Record<string, unknown>).user_items, [
+  assert.deepEqual((result.specialist as Record<string, unknown>).__dream_builder_compare_current_items, [
     "I want my work to make a positive difference in people's lives.",
     "I want to build something that lasts beyond me.",
     "I want to create freedom in my time and choices.",
     "I want to feel proud when I talk about what I do.",
     "I want my business to reflect who I am and what I stand for.",
   ]);
-  assert.deepEqual((result.wordingChoice as Record<string, unknown>).suggestion_items, [
+  assert.deepEqual((result.specialist as Record<string, unknown>).__dream_builder_compare_suggested_items, [
     "Over 5 tot 10 jaar zal positieve impact op het leven van anderen voor meer mensen een belangrijk criterium worden in hun werk.",
     "Mensen zullen meer waarde hechten aan het opbouwen van iets dat duurzaam blijft bestaan voorbij henzelf.",
     "Vrijheid in tijd en keuzes zal voor steeds meer mensen een belangrijk onderdeel worden van hun werkende leven.",
@@ -2399,14 +2400,14 @@ test("buildWordingChoiceFromTurn uses the real Dream Builder suggestion gate for
   assert.ok(result.wordingChoice);
   assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "false");
   assert.equal(String((result.specialist as Record<string, unknown>).__dream_builder_compare_pending || ""), "true");
-  assert.deepEqual((result.wordingChoice as Record<string, unknown>).user_items, [
+  assert.deepEqual((result.specialist as Record<string, unknown>).__dream_builder_compare_current_items, [
     "I want my work to make a positive difference in people's lives.",
     "I want to build something that lasts beyond me.",
     "I want to create freedom in my time and choices.",
     "I want to feel proud when I talk about what I do.",
     "I want my business to reflect who I am and what I stand for.",
   ]);
-  assert.deepEqual((result.wordingChoice as Record<string, unknown>).suggestion_items, [
+  assert.deepEqual((result.specialist as Record<string, unknown>).__dream_builder_compare_suggested_items, [
     "Over 5 tot 10 jaar zal het voor mensen belangrijker zijn dat hun werk een positieve impact heeft op anderen.",
     "Mensen zullen steeds meer waarde hechten aan het bouwen van iets dat generaties overstijgt.",
     "Vrijheid in tijd en keuzes wordt een centrale waarde in het werkende leven.",
@@ -2456,7 +2457,7 @@ test("buildWordingChoiceFromTurn keeps Dream Builder grouped compare active for 
   assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "false");
   assert.equal(String((result.specialist as Record<string, unknown>).__dream_builder_compare_pending || ""), "true");
   assert.match(
-    String((result.wordingChoice as Record<string, unknown>).feedback_reason_text || ""),
+    String((result.specialist as Record<string, unknown>).__dream_builder_compare_rationale || ""),
     /broader change|bredere verandering/i
   );
 });
@@ -2506,22 +2507,22 @@ test("buildWordingChoiceFromTurn keeps existing Dream Builder statements retaine
     dreamRuntimeModeRaw: "builder_collect",
   });
 
-  assert.ok(result.wordingChoice);
-  assert.deepEqual((result.wordingChoice as Record<string, unknown>).user_items, [
+  assert.equal(result.wordingChoice, null);
+  assert.deepEqual((result.specialist as Record<string, unknown>).__dream_builder_compare_current_items, [
     "I want to help people solve a problem they truly care about.",
     "I want to bring clarity and simplicity to a confusing area.",
     "I want to create a safe space where people feel seen and supported.",
     "I want to challenge the status quo and improve how things are done.",
     "I want to grow into the best version of myself through this business.",
   ]);
-  assert.deepEqual((result.wordingChoice as Record<string, unknown>).suggestion_items, [
+  assert.deepEqual((result.specialist as Record<string, unknown>).__dream_builder_compare_suggested_items, [
     "Over 5 tot 10 jaar zullen meer mensen hulp zoeken bij problemen die voor hen echt betekenisvol zijn.",
     "Duidelijkheid en eenvoud worden belangrijker in domeinen die nu nog verwarrend of complex zijn.",
     "Er zal meer behoefte ontstaan aan omgevingen waarin mensen zich gezien, veilig en gesteund voelen.",
     "Steeds meer mensen zullen bestaande systemen ter discussie stellen en zoeken naar betere manieren van werken.",
     "Persoonlijke groei en zelfontwikkeling zullen vaker een drijvende kracht worden achter ondernemerschap en werk.",
   ]);
-  const instruction = String((result.wordingChoice as Record<string, unknown>).instruction || "");
+  const instruction = String((result.specialist as Record<string, unknown>).__dream_builder_compare_instruction || "");
   assert.equal(instruction, "Choose the version that fits best for the remaining difference.");
 });
 
@@ -2590,10 +2591,10 @@ test("buildWordingChoiceFromTurn keeps a full 14-line Dream Builder rewrite in o
     dreamRuntimeModeRaw: "builder_collect",
   });
 
-  assert.ok(result.wordingChoice);
-  assert.deepEqual((result.wordingChoice as Record<string, unknown>).user_items, userWishBatch);
-  assert.deepEqual((result.wordingChoice as Record<string, unknown>).suggestion_items, rewrittenBatch);
-  const instruction = String((result.wordingChoice as Record<string, unknown>).instruction || "");
+  assert.equal(result.wordingChoice, null);
+  assert.deepEqual((result.specialist as Record<string, unknown>).__dream_builder_compare_current_items, userWishBatch);
+  assert.deepEqual((result.specialist as Record<string, unknown>).__dream_builder_compare_suggested_items, rewrittenBatch);
+  const instruction = String((result.specialist as Record<string, unknown>).__dream_builder_compare_instruction || "");
   assert.equal(instruction, "Choose the version that fits best for the remaining difference.");
 });
 
@@ -2636,18 +2637,18 @@ test("buildWordingChoiceFromTurn uses the merged Dream Builder rewrite instead o
     dreamRuntimeModeRaw: "builder_collect",
   });
 
-  assert.ok(result.wordingChoice);
-  assert.deepEqual((result.wordingChoice as Record<string, unknown>).user_items, [
+  assert.equal(result.wordingChoice, null);
+  assert.deepEqual((result.specialist as Record<string, unknown>).__dream_builder_compare_current_items, [
     "Bedrijven zullen vaker een weerspiegeling zijn van persoonlijke waarden en identiteit, in plaats van alleen winstgedreven te zijn.",
     "Ondernemingen worden een weerspiegeling van eigen waarden en identiteit, in plaats van alleen de focus te leggen op winst.",
   ]);
-  assert.deepEqual((result.wordingChoice as Record<string, unknown>).suggestion_items, [
+  assert.deepEqual((result.specialist as Record<string, unknown>).__dream_builder_compare_suggested_items, [
     "Ondernemingen zullen steeds vaker een weerspiegeling worden van de waarden en identiteit van hun oprichters, in plaats van alleen winst na te streven.",
   ]);
-  assert.equal((result.wordingChoice as Record<string, unknown>).user_label, "Keep both statements:");
-  assert.equal((result.wordingChoice as Record<string, unknown>).suggestion_label, "Merge into one statement:");
+  assert.equal((result.specialist as Record<string, unknown>).__dream_builder_compare_current_label, "Keep both statements:");
+  assert.equal((result.specialist as Record<string, unknown>).__dream_builder_compare_suggested_label, "Merge into one statement:");
   assert.match(
-    String((result.wordingChoice as Record<string, unknown>).instruction || ""),
+    String((result.specialist as Record<string, unknown>).__dream_builder_compare_instruction || ""),
     /keep both similar statements or merge them into one stronger statement/i
   );
 });
