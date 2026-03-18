@@ -292,6 +292,88 @@ function didDreamBuilderAppendExactlyOneStatement(params: {
   return true;
 }
 
+type DreamBuilderScoringCluster = {
+  theme: string;
+  statement_indices: number[];
+};
+
+function hasValidDreamBuilderScoringContract(
+  specialistResult: Record<string, unknown>,
+  minimumStatements: number
+): boolean {
+  if (!isTrueFlag(specialistResult.scoring_phase)) return false;
+  const statements = readStringArray(specialistResult.statements);
+  if (statements.length < minimumStatements) return false;
+  const clustersRaw = Array.isArray(specialistResult.clusters)
+    ? (specialistResult.clusters as unknown[])
+    : [];
+  if (clustersRaw.length === 0) return false;
+  return clustersRaw.every((cluster) => {
+    const record = asRecord(cluster);
+    const theme = String(record.theme || "").trim();
+    const indices = Array.isArray(record.statement_indices)
+      ? (record.statement_indices as unknown[])
+          .map((value) => Number(value))
+          .filter((value) => Number.isFinite(value) && value >= 0)
+      : [];
+    return Boolean(theme) && indices.length > 0;
+  });
+}
+
+function buildFallbackDreamBuilderScoringClusters(
+  statements: string[],
+  categoryTemplate: string
+): DreamBuilderScoringCluster[] {
+  const safeStatements = readStringArray(statements);
+  if (safeStatements.length === 0) return [];
+  const clusterCount = Math.max(1, Math.ceil(safeStatements.length / 7));
+  const baseSize = Math.floor(safeStatements.length / clusterCount);
+  const remainder = safeStatements.length % clusterCount;
+  const clusters: DreamBuilderScoringCluster[] = [];
+  let cursor = 0;
+  for (let clusterIndex = 0; clusterIndex < clusterCount; clusterIndex += 1) {
+    const size = baseSize + (clusterIndex < remainder ? 1 : 0);
+    const statementIndices = Array.from({ length: size }, (_, offset) => cursor + offset);
+    cursor += size;
+    const theme = String(categoryTemplate || "Category {0}").replace("{0}", String(clusterIndex + 1)).trim();
+    clusters.push({
+      theme: theme || `Category ${clusterIndex + 1}`,
+      statement_indices: statementIndices,
+    });
+  }
+  return clusters.filter((cluster) => cluster.statement_indices.length > 0);
+}
+
+function buildFallbackDreamBuilderScoringSpecialist(params: {
+  specialistResult: Record<string, unknown>;
+  state: CanvasState;
+  statements: string[];
+}): Record<string, unknown> {
+  const scoringMessage = resolveUiStringForState(
+    params.state,
+    "scoringIntro2",
+    "Please score each statement from 1 to 10 based on how important it is for your Dream (1 = low, 10 = very important)."
+  ).trim();
+  const categoryTemplate = resolveUiStringForState(
+    params.state,
+    "scoring.categoryFallback",
+    "Category {0}"
+  ).trim();
+  return {
+    ...params.specialistResult,
+    action: "ASK",
+    message: scoringMessage || String(params.specialistResult.message || "").trim(),
+    question: "",
+    feedback_reason_text: "",
+    refined_formulation: "",
+    dream: "",
+    suggest_dreambuilder: "true",
+    statements: readStringArray(params.statements),
+    scoring_phase: "true",
+    clusters: buildFallbackDreamBuilderScoringClusters(params.statements, categoryTemplate),
+  };
+}
+
 export function shouldForcePendingWordingChoiceFromIntent(params: {
   submittedTextIntent: string;
   submittedTextAnchor: string;
@@ -1430,6 +1512,60 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
       specialistResult,
       provisionalSource: provisionalSourceForMutation,
     });
+
+    if (
+      decision1.specialist_to_call === deps.dreamExplainerSpecialist &&
+      String(decision1.current_step || "") === deps.dreamStepId &&
+      !isTrueFlag(specialistResult.is_offtopic) &&
+      String((specialistResult as Record<string, unknown>).__dream_builder_compare_pending || "").trim() !== "true" &&
+      String((nextState as Record<string, unknown>).dream_awaiting_direction ?? "").trim() !== "true"
+    ) {
+      const canonicalDreamBuilderStatements = readStringArray((nextState as Record<string, unknown>).dream_builder_statements);
+      if (
+        canonicalDreamBuilderStatements.length >= 20 &&
+        !hasValidDreamBuilderScoringContract(asRecord(specialistResult), 20)
+      ) {
+        const scoringRecoveryRoute = "__ROUTE__DREAM_EXPLAINER_CONTINUE__";
+        const scoringRecoveryCall = await deps.callSpecialistStrictSafe(
+          {
+            model: params.model,
+            state: nextState,
+            decision: decision1,
+            userMessage: scoringRecoveryRoute,
+          },
+          deps.buildRoutingContext(scoringRecoveryRoute),
+          nextState
+        );
+
+        if (scoringRecoveryCall.ok) {
+          params.rememberLlmCall(scoringRecoveryCall.value);
+          attempts = Math.max(attempts, scoringRecoveryCall.value.attempts);
+          specialistResult = asRecord(scoringRecoveryCall.value.specialistResult);
+          nextState = deps.applyPostSpecialistStateMutations({
+            prevState: nextState,
+            decision: decision1,
+            specialistResult,
+            provisionalSource: provisionalSourceForMutation,
+          });
+        }
+
+        if (
+          !hasValidDreamBuilderScoringContract(asRecord(specialistResult), 20)
+        ) {
+          specialistResult = buildFallbackDreamBuilderScoringSpecialist({
+            specialistResult: asRecord(specialistResult),
+            state: nextState,
+            statements: canonicalDreamBuilderStatements,
+          });
+          nextState = deps.applyPostSpecialistStateMutations({
+            prevState: nextState,
+            decision: decision1,
+            specialistResult,
+            provisionalSource: provisionalSourceForMutation,
+          });
+        }
+      }
+    }
 
     const effectiveStepSupportState = await resolveEffectiveStepSupportState({
       state: nextState,

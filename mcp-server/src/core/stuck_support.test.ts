@@ -54,6 +54,23 @@ test("step stuck support resets after a usable reply", () => {
   assert.equal(currentStepSupportMode(state, "dream"), "normal");
 });
 
+test("step stuck support resets after a usable ACTION_TEXT_SUBMIT reply", () => {
+  const state = getDefaultState();
+  (state as Record<string, unknown>).__step_stuck_count_by_step = { dream: 3 };
+  (state as Record<string, unknown>).__step_support_mode_by_step = { dream: "stuck_exit" };
+
+  applyStepStuckSupportAfterSpecialist({
+    state,
+    stepId: "dream",
+    activeSpecialist: "Dream",
+    specialist: { step_support_state: "ok" },
+    actionCodeRaw: "ACTION_TEXT_SUBMIT",
+  });
+
+  assert.equal(currentStepStuckCount(state, "dream"), 0);
+  assert.equal(currentStepSupportMode(state, "dream"), "normal");
+});
+
 test("dream explainer user_state does not affect main step stuck support", () => {
   const state = getDefaultState();
 

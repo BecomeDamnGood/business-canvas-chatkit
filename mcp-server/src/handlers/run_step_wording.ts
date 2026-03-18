@@ -2279,8 +2279,25 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
       submittedTextIntent: submittedIntent,
       submittedTextAnchor: submittedAnchor,
     });
+    const targetField = deps.fieldForStep(stepId);
+    const stateRecord = state as Record<string, unknown>;
+    const provisionalByStep =
+      stateRecord.provisional_by_step && typeof stateRecord.provisional_by_step === "object"
+        ? (stateRecord.provisional_by_step as Record<string, unknown>)
+        : {};
+    const existingTargetValue = targetField
+      ? String(previousSpecialist[targetField] || provisionalByStep[stepId] || stateRecord[`${targetField}_final`] || "")
+        .trim()
+      : "";
+    const shouldPreferInitialDreamPicker =
+      stepId === deps.dreamStepId &&
+      mode === "text" &&
+      !dreamBuilderContext &&
+      !forcePending &&
+      !existingTargetValue;
     const shouldSuppressUserVariantPicker =
       isAcceptedOutputSingleValueTextStep(stepId, mode) &&
+      !shouldPreferInitialDreamPicker &&
       acceptedOutputUserTurnClassification?.user_variant_is_stepworthy === false;
     const presentation: WordingChoicePresentation =
       shouldSuppressUserVariantPicker ? "canonical" : basePresentation;
@@ -2450,7 +2467,6 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
       userRaw,
       knownItems: mergeListItems(baseItems, suggestionFullItems),
     });
-    const targetField = deps.fieldForStep(stepId);
     const committedTextFromPrev = targetField ? String(previousSpecialist[targetField] || "").trim() : "";
     const committedText = mode === "list" ? baseItems.join("\n") : committedTextFromPrev;
     let variant: WordingChoiceVariant =
@@ -2506,6 +2522,10 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     });
     const feedbackText = String(params.submittedFeedbackText || "").trim();
     const feedbackMode = normalizeFeedbackMode(specialistResult.feedback_mode);
+    const effectiveFeedbackMode =
+      shouldPreferInitialDreamPicker && feedbackMode !== "refine_current"
+        ? "compare_suggestion"
+        : feedbackMode;
     const enriched: Record<string, unknown> = {
       ...specialistResult,
       message: pendingMessage,
@@ -2535,7 +2555,7 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
           : "",
       feedback_reason_key: "",
       feedback_reason_text: effectiveFeedbackReason,
-      feedback_mode: feedbackMode,
+      feedback_mode: effectiveFeedbackMode,
       pending_suggestion_intent: submittedIntent,
       pending_suggestion_anchor: submittedAnchor,
       pending_suggestion_seed_source: pendingSuggestionSeedSource,
@@ -2561,7 +2581,7 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     if (presentation === "canonical") {
       return { specialist: enriched, wordingChoice: null };
     }
-    if (isAcceptedOutputSingleValueTextStep(stepId, mode) && feedbackMode !== "compare_suggestion") {
+    if (isAcceptedOutputSingleValueTextStep(stepId, mode) && effectiveFeedbackMode !== "compare_suggestion") {
       enriched.wording_choice_presentation = "canonical";
       return { specialist: enriched, wordingChoice: null };
     }

@@ -523,7 +523,7 @@ test("buildWordingChoiceFromTurn keeps Dream Builder statements canonical while 
   ]);
 });
 
-test("buildWordingChoiceFromTurn suppresses Dream picker when user text is only raw source content", () => {
+test("buildWordingChoiceFromTurn keeps Dream in picker for a first draft even when the classifier marks it as source content", () => {
   const helpers = buildHelpers(true);
   const result = helpers.buildWordingChoiceFromTurn({
     stepId: "dream",
@@ -545,9 +545,9 @@ test("buildWordingChoiceFromTurn suppresses Dream picker when user text is only 
     },
   });
 
-  assert.equal(result.wordingChoice, null);
   assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "true");
-  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_presentation || ""), "canonical");
+  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_presentation || ""), "picker");
+  assert.equal(String((result.specialist as Record<string, unknown>).feedback_mode || ""), "compare_suggestion");
   assert.equal(
     String((result.specialist as Record<string, unknown>).wording_choice_user_variant_semantics || ""),
     "raw_source_content"

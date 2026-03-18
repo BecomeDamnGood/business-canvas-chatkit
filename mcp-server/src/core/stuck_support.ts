@@ -87,7 +87,8 @@ export function applyStepStuckSupportAfterSpecialist(params: {
 }): void {
   const stepId = String(params.stepId || "").trim();
   if (resolveSpecialistSupportFamily(params) !== "core_step") return;
-  if (String(params.actionCodeRaw || "").trim()) return;
+  const normalizedActionCode = String(params.actionCodeRaw || "").trim().toUpperCase();
+  if (normalizedActionCode && normalizedActionCode !== "ACTION_TEXT_SUBMIT") return;
 
   const userState = readStepSupportState(params.specialist);
   const previousCount = currentStepStuckCount(params.state, stepId);

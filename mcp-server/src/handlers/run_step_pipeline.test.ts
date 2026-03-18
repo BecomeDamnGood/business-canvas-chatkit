@@ -241,15 +241,27 @@ function buildStrategyPipelineHarness(params: {
           String((decision as Record<string, unknown>).specialist_to_call || "").trim() === "DreamExplainer" &&
           Array.isArray((specialistResult as Record<string, unknown>).statements)
         ) {
-          nextState.dream_builder_statements = ((specialistResult as Record<string, unknown>).statements as unknown[])
+          const canonicalStatements = ((specialistResult as Record<string, unknown>).statements as unknown[])
             .map((line) => String(line || "").trim())
             .filter(Boolean);
+          nextState.dream_builder_statements = canonicalStatements;
+          if (
+            String((specialistResult as Record<string, unknown>).__dream_builder_compare_pending || "").trim() !== "true" &&
+            canonicalStatements.length >= 20
+          ) {
+            nextState.dream_scoring_statements = canonicalStatements;
+          }
+          const scoringPhase = String((specialistResult as Record<string, unknown>).scoring_phase || "").trim() === "true";
+          const hasClusters =
+            Array.isArray((specialistResult as Record<string, unknown>).clusters) &&
+            ((specialistResult as Record<string, unknown>).clusters as unknown[]).length > 0;
+          nextState.__dream_runtime_mode = scoringPhase && hasClusters ? "builder_scoring" : "builder_collect";
         }
         return nextState as any;
       },
       getDreamRuntimeMode: (state) =>
-        params.dreamRuntimeMode ||
         String((state as Record<string, unknown> | null | undefined)?.__dream_runtime_mode || "").trim() ||
+        params.dreamRuntimeMode ||
         "self",
       isMetaOfftopicFallbackTurn: () => false,
       shouldTreatAsStepContributingInput: () => true,
@@ -2107,6 +2119,237 @@ test("runPostSpecialistPipeline reaches Dream Builder scoring after adding 5 the
       : 0,
     21
   );
+  assert.equal(
+    Array.isArray(widgetPayload.ui?.dream_builder_contract?.scoring?.clusters)
+      ? widgetPayload.ui?.dream_builder_contract?.scoring?.clusters.length
+      : 0,
+    3
+  );
+});
+
+test("runPostSpecialistPipeline forces Dream Builder scoring after the twentieth statement even when the specialist stays in collect", async () => {
+  const uiPayloadHelpers = buildPipelineUiPayloadHelpers();
+  const specialistCalls: string[] = [];
+  const previousStatements = Array.from({ length: 19 }, (_, index) => `Statement ${index + 1}`);
+  const appendedStatement = "De kloof tussen arm en rijk wordt groter en tech bedrijven nemen de wereld over";
+  const canonicalStatements = [...previousStatements, appendedStatement];
+  const helpers = buildStrategyPipelineHarness({
+    specialistResults: [
+      {
+        action: "ASK",
+        message: "Statement 20 noted.",
+        question:
+          "Wat zie je nog meer veranderen in de toekomst, positief of negatief? Laat je verbeelding de vrije loop en formuleer dit als duidelijke uitspraken.",
+        feedback_reason_text: "",
+        refined_formulation: "",
+        dream: "",
+        statements: canonicalStatements,
+        suggest_dreambuilder: "true",
+        scoring_phase: "false",
+        clusters: [],
+        user_state: "ok",
+        wants_recap: false,
+        is_offtopic: false,
+        user_intent: "STEP_INPUT",
+        meta_topic: "NONE",
+      },
+      {
+        action: "ASK",
+        message: "Geef elke statement een score.",
+        question: "",
+        feedback_reason_text: "",
+        refined_formulation: "",
+        dream: "",
+        statements: canonicalStatements,
+        suggest_dreambuilder: "true",
+        scoring_phase: "true",
+        clusters: [
+          { theme: "Categorie 1", statement_indices: [0, 1, 2, 3, 4, 5, 6] },
+          { theme: "Categorie 2", statement_indices: [7, 8, 9, 10, 11, 12, 13] },
+          { theme: "Categorie 3", statement_indices: [14, 15, 16, 17, 18, 19] },
+        ],
+        user_state: "ok",
+        wants_recap: false,
+        is_offtopic: false,
+        user_intent: "STEP_INPUT",
+        meta_topic: "NONE",
+      },
+    ],
+    dreamRuntimeMode: "builder_collect",
+    onSpecialistCall: (userMessage) => {
+      specialistCalls.push(String(userMessage || ""));
+    },
+  });
+
+  const payload = await helpers.runPostSpecialistPipeline({
+    routing: {
+      userMessage: appendedStatement,
+      actionCodeRaw: "",
+      responseUiFlags: null,
+      inputMode: "widget",
+      wordingChoiceEnabled: true,
+      languageResolvedThisTurn: false,
+      isBootstrapPollCall: false,
+      motivationQuotesEnabled: false,
+    },
+    rendering: {
+      uiI18nTelemetry: null,
+      lang: "nl",
+      ensureUiStrings: async (state) => state,
+    },
+    state: {
+      state: {
+        current_step: "dream",
+        active_specialist: "DreamExplainer",
+        __dream_runtime_mode: "builder_collect",
+        dream_builder_statements: previousStatements,
+        provisional_by_step: {},
+        last_specialist_result: {
+          statements: previousStatements,
+          suggest_dreambuilder: "true",
+          scoring_phase: "false",
+          clusters: [],
+        },
+      } as any,
+      transientPendingScores: null,
+      submittedUserText: appendedStatement,
+      submittedTextIntent: "content_input",
+      submittedTextAnchor: "user_input",
+      rawNormalized: appendedStatement,
+      pristineAtEntry: true,
+    },
+    specialist: {
+      model: "gpt-5-mini",
+      decideOrchestration: () =>
+        ({
+          current_step: "dream",
+          specialist_to_call: "DreamExplainer",
+          show_session_intro: "false",
+          show_step_intro: "false",
+        }) as any,
+      rememberLlmCall: () => {},
+    },
+  } as any);
+
+  assert.deepEqual(specialistCalls, [appendedStatement, "__ROUTE__DREAM_EXPLAINER_CONTINUE__"]);
+  assert.equal(String((payload.specialist as Record<string, unknown>).scoring_phase || ""), "true");
+  assert.equal(String((payload.state as Record<string, unknown>).__dream_runtime_mode || ""), "builder_scoring");
+  assert.equal(
+    ((payload.state as Record<string, unknown>).dream_builder_statements as unknown[]).length,
+    20
+  );
+
+  const widgetPayload = uiPayloadHelpers.attachRegistryPayload(
+    {
+      ok: true,
+      text: "",
+      prompt: "",
+      current_step_id: "dream",
+      state: (payload.state || {}) as any,
+    },
+    payload.specialist
+  );
+
+  assert.equal(String(widgetPayload.ui?.view?.variant || ""), "dream_builder_scoring");
+  assert.equal(String(widgetPayload.ui?.dream_builder_contract?.phase || ""), "scoring");
+});
+
+test("runPostSpecialistPipeline synthesizes a Dream Builder scoring contract when the recovery call still fails to switch out of collect", async () => {
+  const uiPayloadHelpers = buildPipelineUiPayloadHelpers();
+  const previousStatements = Array.from({ length: 19 }, (_, index) => `Statement ${index + 1}`);
+  const appendedStatement = "Statement 20";
+  const canonicalStatements = [...previousStatements, appendedStatement];
+  const collectStyleSpecialist = {
+    action: "ASK",
+    message: "Statement 20 noted.",
+    question: "What else do you see changing in the future, positive or negative?",
+    feedback_reason_text: "",
+    refined_formulation: "",
+    dream: "",
+    statements: canonicalStatements,
+    suggest_dreambuilder: "true",
+    scoring_phase: "false",
+    clusters: [],
+    user_state: "ok",
+    wants_recap: false,
+    is_offtopic: false,
+    user_intent: "STEP_INPUT",
+    meta_topic: "NONE",
+  };
+  const helpers = buildStrategyPipelineHarness({
+    specialistResult: collectStyleSpecialist,
+    specialistResults: [collectStyleSpecialist, collectStyleSpecialist],
+    dreamRuntimeMode: "builder_collect",
+  });
+
+  const payload = await helpers.runPostSpecialistPipeline({
+    routing: {
+      userMessage: appendedStatement,
+      actionCodeRaw: "",
+      responseUiFlags: null,
+      inputMode: "widget",
+      wordingChoiceEnabled: true,
+      languageResolvedThisTurn: false,
+      isBootstrapPollCall: false,
+      motivationQuotesEnabled: false,
+    },
+    rendering: {
+      uiI18nTelemetry: null,
+      lang: "en",
+      ensureUiStrings: async (state) => state,
+    },
+    state: {
+      state: {
+        current_step: "dream",
+        active_specialist: "DreamExplainer",
+        __dream_runtime_mode: "builder_collect",
+        dream_builder_statements: previousStatements,
+        provisional_by_step: {},
+        last_specialist_result: {
+          statements: previousStatements,
+          suggest_dreambuilder: "true",
+          scoring_phase: "false",
+          clusters: [],
+        },
+      } as any,
+      transientPendingScores: null,
+      submittedUserText: appendedStatement,
+      submittedTextIntent: "content_input",
+      submittedTextAnchor: "user_input",
+      rawNormalized: appendedStatement,
+      pristineAtEntry: true,
+    },
+    specialist: {
+      model: "gpt-5-mini",
+      decideOrchestration: () =>
+        ({
+          current_step: "dream",
+          specialist_to_call: "DreamExplainer",
+          show_session_intro: "false",
+          show_step_intro: "false",
+        }) as any,
+      rememberLlmCall: () => {},
+    },
+  } as any);
+
+  assert.equal(String((payload.specialist as Record<string, unknown>).scoring_phase || ""), "true");
+  assert.equal(Array.isArray((payload.specialist as Record<string, unknown>).clusters), true);
+  assert.equal(((payload.specialist as Record<string, unknown>).clusters as unknown[]).length, 3);
+  assert.equal(String((payload.state as Record<string, unknown>).__dream_runtime_mode || ""), "builder_scoring");
+
+  const widgetPayload = uiPayloadHelpers.attachRegistryPayload(
+    {
+      ok: true,
+      text: "",
+      prompt: "",
+      current_step_id: "dream",
+      state: (payload.state || {}) as any,
+    },
+    payload.specialist
+  );
+
+  assert.equal(String(widgetPayload.ui?.view?.variant || ""), "dream_builder_scoring");
+  assert.equal(String(widgetPayload.ui?.dream_builder_contract?.phase || ""), "scoring");
   assert.equal(
     Array.isArray(widgetPayload.ui?.dream_builder_contract?.scoring?.clusters)
       ? widgetPayload.ui?.dream_builder_contract?.scoring?.clusters.length
