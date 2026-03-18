@@ -27,6 +27,8 @@ export const ALLOWED_TRANSIENT_STATE_KEYS = new Set<string>([
   "__session_started_at",
   "__dream_runtime_mode",
   "__dream_builder_prompt_stage",
+  "__pending_interaction_id",
+  "__submitted_pending_interaction_id",
   "__last_clicked_action_for_contract",
   "__last_clicked_label_for_contract",
 ]);

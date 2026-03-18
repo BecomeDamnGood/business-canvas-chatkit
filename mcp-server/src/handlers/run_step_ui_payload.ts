@@ -71,6 +71,7 @@ type DreamBuilderCompareContractPayload = {
   retained_heading?: string;
   retained_items?: string[];
   instruction?: string;
+  committed_statements?: string[];
 };
 
 type DreamBuilderScoringClusterPayload = {
@@ -274,6 +275,9 @@ function normalizeDreamBuilderCompareContractFromFeedback(raw: unknown): DreamBu
   const retainedItems = Array.isArray(feedback.retained_items)
     ? (feedback.retained_items as unknown[]).map((value) => String(value || "").trim()).filter(Boolean)
     : [];
+  const committedStatements = Array.isArray(feedback.committed_statements)
+    ? (feedback.committed_statements as unknown[]).map((value) => String(value || "").trim()).filter(Boolean)
+    : [];
 
   if (rationale) normalized.rationale = rationale;
   if (currentLabel) normalized.current_label = currentLabel;
@@ -285,6 +289,7 @@ function normalizeDreamBuilderCompareContractFromFeedback(raw: unknown): DreamBu
   if (retainedHeading) normalized.retained_heading = retainedHeading;
   if (retainedItems.length > 0) normalized.retained_items = retainedItems;
   if (instruction) normalized.instruction = instruction;
+  if (committedStatements.length > 0) normalized.committed_statements = committedStatements;
   return normalized;
 }
 
@@ -323,10 +328,16 @@ function normalizeDreamBuilderCompareContractFromSpecialist(
   const currentLabel = String(specialist.__dream_builder_compare_current_label || "").trim();
   const suggestedLabel = String(specialist.__dream_builder_compare_suggested_label || "").trim();
   const instruction = String(specialist.__dream_builder_compare_instruction || "").trim();
+  const committedStatements = Array.isArray(specialist.__dream_builder_compare_committed_statements)
+    ? (specialist.__dream_builder_compare_committed_statements as unknown[])
+      .map((value) => String(value || "").trim())
+      .filter(Boolean)
+    : [];
   if (rationale) normalized.rationale = rationale;
   if (currentLabel) normalized.current_label = currentLabel;
   if (suggestedLabel) normalized.suggested_label = suggestedLabel;
   normalized.instruction = instruction || "Choose the version that fits best.";
+  if (committedStatements.length > 0) normalized.committed_statements = committedStatements;
   return normalized;
 }
 
@@ -397,7 +408,9 @@ function buildDreamBuilderContract(params: {
 }): DreamBuilderContractPayload | undefined {
   if (params.stepId !== DREAM_STEP_ID) return undefined;
   void params.feedbackContractPayload;
-  const compareFromFeedback = normalizeDreamBuilderCompareContractFromSpecialist(params.specialist);
+  const compareFromFeedback = normalizeDreamBuilderCompareContractFromFeedback(params.feedbackContractPayload);
+  const compareFromSpecialist = normalizeDreamBuilderCompareContractFromSpecialist(params.specialist);
+  const compareContract = compareFromFeedback || compareFromSpecialist;
   const scoringFromSpecialist = normalizeDreamBuilderScoringContract({
     specialist: params.specialist,
     state: params.state,
@@ -407,14 +420,14 @@ function buildDreamBuilderContract(params: {
     params.viewVariant === "dream_builder_collect" ||
     params.viewVariant === "dream_builder_refine" ||
     params.viewVariant === "dream_builder_scoring" ||
-    Boolean(compareFromFeedback) ||
+    Boolean(compareContract) ||
     Boolean(scoringFromSpecialist);
   if (!hasDreamBuilderContext) return undefined;
 
   let phase: DreamBuilderContractPhase = "collect";
   if (params.viewVariant === "dream_builder_scoring") {
     phase = "scoring";
-  } else if (compareFromFeedback) {
+  } else if (compareContract) {
     phase = "compare";
   } else if (params.viewVariant === "dream_builder_refine") {
     phase = "refine";
@@ -430,8 +443,14 @@ function buildDreamBuilderContract(params: {
   if (params.questionText) contract.question = params.questionText;
 
   if (phase === "compare") {
-    if (compareFromFeedback) {
-      contract.compare = compareFromFeedback;
+    if (compareContract) {
+      contract.compare = {
+        ...compareContract,
+        committed_statements:
+          Array.isArray(compareContract.committed_statements) && compareContract.committed_statements.length > 0
+            ? compareContract.committed_statements
+            : params.statements,
+      };
     }
   }
   if (phase === "scoring" && scoringFromSpecialist) {

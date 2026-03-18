@@ -62,7 +62,9 @@ function buildPipelineUiPayloadHelpers() {
   });
 }
 
-function buildPipelineWordingHelpers() {
+function buildPipelineWordingHelpers(params?: {
+  isMaterialRewriteCandidate?: (userRaw: string, suggestionRaw: string) => boolean;
+}) {
   const defaultUi: Record<string, string> = {
     wordingChoiceHeading: "This is your input:",
     wordingChoiceInterpretedListHeading: "This is what I took from your input:",
@@ -131,7 +133,9 @@ function buildPipelineWordingHelpers() {
         .split(/\s+/)
         .map((token) => token.trim())
         .filter(Boolean),
-    isMaterialRewriteCandidate: () => true,
+    isMaterialRewriteCandidate:
+      params?.isMaterialRewriteCandidate ||
+      (() => true),
     shouldTreatAsStepContributingInput: () => true,
     pickDualChoiceSuggestion: (_stepId, specialistResult) => {
       const record = (specialistResult as Record<string, unknown>) || {};
@@ -166,6 +170,7 @@ function buildStrategyPipelineHarness(params: {
   dreamRuntimeMode?: "self" | "builder_collect" | "builder_scoring" | "builder_refine";
   pickBigWhyCandidate?: (result: Record<string, unknown>) => string;
   buildBigWhyTooLongFeedback?: () => Record<string, unknown>;
+  isMaterialRewriteCandidate?: (userRaw: string, suggestionRaw: string) => boolean;
   classifyStepStuckTurn?: (params: {
     model: string;
     stepId: string;
@@ -175,7 +180,9 @@ function buildStrategyPipelineHarness(params: {
     language?: string;
   }) => Promise<{ is_stuck: boolean }>;
 }) {
-  const wordingHelpers = buildPipelineWordingHelpers();
+  const wordingHelpers = buildPipelineWordingHelpers({
+    isMaterialRewriteCandidate: params.isMaterialRewriteCandidate,
+  });
   const queuedResults = [...(params.specialistResults || [params.specialistResult])];
   const helpers = createRunStepPipelineHelpers<any>({
     ids: {
@@ -1630,6 +1637,135 @@ test("runPostSpecialistPipeline repairs a 20th Dream Builder append into overlap
   assert.deepEqual(specialist.statements, existingStatements);
 });
 
+test("runPostSpecialistPipeline repairs a semantically overlapping Dream Builder append into compare before it becomes a committed new statement", async () => {
+  const existingStatements = [
+    "Over 5 tot 10 jaar dragen bedrijven zichtbaar bij aan het welzijn en de levenskwaliteit van mensen.",
+    "In de toekomst ontstaan er meer initiatieven die een blijvende positieve impact hebben op de samenleving.",
+    "Mensen krijgen steeds meer vrijheid om hun tijd en keuzes zelf te bepalen.",
+    "Over 5 tot 10 jaar voelen meer mensen trots op hun werk en hun bijdrage aan de samenleving.",
+    "Bedrijven weerspiegelen steeds vaker de waarden en identiteit van hun oprichters.",
+  ];
+  const specialistCalls: string[] = [];
+  const userMessage = "De waarden en identiteit van oprichters worden beter zichtbaar voor de buitenwereld.";
+  const helpers = buildStrategyPipelineHarness({
+    specialistResults: [
+      {
+        action: "ASK",
+        message: "Statement 6 noted.",
+        question:
+          "Wat zie je nog meer veranderen in de toekomst, positief of negatief? Laat je verbeelding de vrije loop en formuleer dit als duidelijke uitspraken.",
+        feedback_reason_text: "",
+        refined_formulation: "",
+        dream: "",
+        statements: [
+          ...existingStatements,
+          "De waarden en identiteit van oprichters worden beter zichtbaar voor de buitenwereld.",
+        ],
+        suggest_dreambuilder: "true",
+        scoring_phase: "false",
+        clusters: [],
+        user_state: "ok",
+        wants_recap: false,
+        is_offtopic: false,
+        user_intent: "STEP_INPUT",
+        meta_topic: "NONE",
+      },
+      {
+        action: "REFINE",
+        message: "Ik heb de overlap samengebracht in een scherpere maatschappelijke formulering.",
+        question: "Past deze samengevoegde formulering beter, of wil je hem aanpassen?",
+        feedback_reason_text:
+          "Deze nieuwe zin overlapt sterk met een bestaande statement, dus een samengevoegde formulering houdt je lijst scherper.",
+        refined_formulation:
+          "Bedrijven weerspiegelen steeds zichtbaarder de waarden en identiteit van hun oprichters.",
+        dream: "",
+        statements: existingStatements,
+        suggest_dreambuilder: "true",
+        scoring_phase: "false",
+        clusters: [],
+        user_state: "ok",
+        wants_recap: false,
+        is_offtopic: false,
+        user_intent: "STEP_INPUT",
+        meta_topic: "NONE",
+      },
+    ],
+    dreamRuntimeMode: "builder_collect",
+    onSpecialistCall: (message) => {
+      specialistCalls.push(message);
+    },
+  });
+
+  const payload = await helpers.runPostSpecialistPipeline({
+    routing: {
+      userMessage,
+      actionCodeRaw: "",
+      responseUiFlags: null,
+      inputMode: "widget",
+      wordingChoiceEnabled: true,
+      languageResolvedThisTurn: false,
+      isBootstrapPollCall: false,
+      motivationQuotesEnabled: false,
+    },
+    rendering: {
+      uiI18nTelemetry: null,
+      lang: "nl",
+      ensureUiStrings: async (state) => state,
+    },
+    state: {
+      state: {
+        current_step: "dream",
+        active_specialist: "DreamExplainer",
+        __dream_runtime_mode: "builder_collect",
+        dream_builder_statements: existingStatements,
+        provisional_by_step: {},
+        last_specialist_result: {
+          statements: existingStatements,
+          dream: "",
+          refined_formulation: "",
+        },
+      } as any,
+      transientPendingScores: null,
+      submittedUserText: userMessage,
+      submittedTextIntent: "content_input",
+      submittedTextAnchor: "user_input",
+      rawNormalized: userMessage,
+      pristineAtEntry: true,
+    },
+    specialist: {
+      model: "gpt-5-mini",
+      decideOrchestration: () =>
+        ({
+          current_step: "dream",
+          specialist_to_call: "DreamExplainer",
+          show_session_intro: "false",
+          show_step_intro: "false",
+        }) as any,
+      rememberLlmCall: () => {},
+    },
+  } as any);
+
+  assert.equal(specialistCalls.length, 2);
+  assert.equal(
+    specialistCalls[1]?.startsWith("__ROUTE__DREAM_EXPLAINER_OVERLAP_REPAIR__"),
+    true
+  );
+  const specialist = (((payload.specialist as Record<string, unknown>)?.__dream_builder_compare_pending
+    ? (payload.specialist as Record<string, unknown>)
+    : ((payload.state as Record<string, unknown>).last_specialist_result as Record<string, unknown>)) || {}) as Record<string, unknown>;
+  assert.equal(
+    String(specialist.__dream_builder_overlap_existing_statement || ""),
+    existingStatements[4]
+  );
+  assert.equal(
+    String(specialist.__dream_builder_overlap_incoming_statement || ""),
+    userMessage
+  );
+  assert.equal(String(specialist.__dream_builder_compare_pending || ""), "true");
+  assert.deepEqual(specialist.statements, existingStatements);
+  assert.deepEqual((payload.state as Record<string, unknown>).dream_builder_statements, existingStatements);
+});
+
 test("runPostSpecialistPipeline repairs incomplete multi-wish Dream Builder rewrites before publishing compare", async () => {
   const userWishBatch = [
     "I want to help people solve a problem they truly care about.",
@@ -1773,6 +1909,210 @@ test("runPostSpecialistPipeline repairs incomplete multi-wish Dream Builder rewr
     "Steeds meer mensen zullen werk zien als een weg om zichzelf verder te ontwikkelen en te versterken.",
     "Mensen zullen zich vaker verbinden rond gedeelde overtuigingen en bewegingen die groter zijn dan henzelf.",
   ]);
+});
+
+test("runPostSpecialistPipeline reaches Dream Builder scoring after adding 5 then 14 then 2 statements", async () => {
+  const uiPayloadHelpers = buildPipelineUiPayloadHelpers();
+  const firstBatch = [
+    "Lokale zorgnetwerken worden toegankelijker voor gezinnen met complexe hulpvragen.",
+    "Digitale geletterdheid bepaalt steeds vaker wie mee kan doen in werk en onderwijs.",
+    "Vakmanschap krijgt opnieuw meer waarde in een economie vol automatisering.",
+    "Mensen zoeken vaker naar rustige plekken om te herstellen van constante prikkels.",
+    "Transparantie over herkomst en impact wordt doorslaggevend bij koopgedrag.",
+  ];
+  const secondBatch = [
+    "Regionale voedselketens worden belangrijker nu leveringszekerheid minder vanzelfsprekend is.",
+    "Burgerinitiatieven nemen vaker taken over waar instituties traag of afstandelijk zijn.",
+    "Mentale veerkracht wordt een belangrijker thema in hoe organisaties werk vormgeven.",
+    "Mensen verwachten dat technologie menselijker en begrijpelijker wordt ontworpen.",
+    "Ambachtelijke kwaliteit wordt vaker verkozen boven snelle wegwerpoplossingen.",
+    "Leiderschap verschuift van controle naar het bouwen van vertrouwen en duidelijkheid.",
+    "Onderwijs richt zich sterker op aanpassingsvermogen dan op vaste beroepsrollen.",
+    "Gezondheid wordt meer benaderd als dagelijks gedrag dan als losse medische interventie.",
+    "Gemeenschappen organiseren zich vaker rondom gedeelde waarden dan rondom locatie alleen.",
+    "Privacy wordt een concreet concurrentievoordeel in digitale dienstverlening.",
+    "Mensen willen werk dat beter aansluit op hun ritme, energie en levensfase.",
+    "Nieuwe samenwerkingsvormen ontstaan tussen zelfstandigen, klanten en kleine teams.",
+    "Bedrijven worden vaker afgerekend op hoe eerlijk zij omgaan met aandacht en data.",
+    "Herstel van vertrouwen in publieke informatie wordt een maatschappelijke prioriteit.",
+  ];
+  const thirdBatch = [
+    "Menselijke nabijheid wordt schaarser en daardoor waardevoller in dienstverlening.",
+    "Eenvoudige taal wordt belangrijker nu steeds meer mensen complexe systemen moeten begrijpen.",
+  ];
+  const allStatements = [...firstBatch, ...secondBatch, ...thirdBatch];
+  const helpers = buildStrategyPipelineHarness({
+    specialistResults: [
+      {
+        action: "ASK",
+        message: "Statements 1 to 5 noted.",
+        question:
+          "What else do you see changing in the future, positive or negative? Let your imagination run free and formulate them as clear statements.",
+        feedback_reason_text: "",
+        refined_formulation: "",
+        dream: "",
+        statements: firstBatch,
+        suggest_dreambuilder: "true",
+        scoring_phase: "false",
+        clusters: [],
+        user_state: "ok",
+        wants_recap: false,
+        is_offtopic: false,
+        user_intent: "STEP_INPUT",
+        meta_topic: "NONE",
+      },
+      {
+        action: "ASK",
+        message: "Statements 6 to 19 noted.",
+        question:
+          "What else do you see changing in the future, positive or negative? Let your imagination run free and formulate them as clear statements.",
+        feedback_reason_text: "",
+        refined_formulation: "",
+        dream: "",
+        statements: [...firstBatch, ...secondBatch],
+        suggest_dreambuilder: "true",
+        scoring_phase: "false",
+        clusters: [],
+        user_state: "ok",
+        wants_recap: false,
+        is_offtopic: false,
+        user_intent: "STEP_INPUT",
+        meta_topic: "NONE",
+      },
+      {
+        action: "ASK",
+        message: "Fill in a score for each statement.",
+        question: "",
+        feedback_reason_text: "",
+        refined_formulation: "",
+        dream: "",
+        statements: allStatements,
+        suggest_dreambuilder: "true",
+        scoring_phase: "true",
+        clusters: [
+          { theme: "Theme 1", statement_indices: [0, 1, 2, 3, 4, 5, 6] },
+          { theme: "Theme 2", statement_indices: [7, 8, 9, 10, 11, 12, 13] },
+          { theme: "Theme 3", statement_indices: [14, 15, 16, 17, 18, 19, 20] },
+        ],
+        user_state: "ok",
+        wants_recap: false,
+        is_offtopic: false,
+        user_intent: "STEP_INPUT",
+        meta_topic: "NONE",
+      },
+    ],
+    dreamRuntimeMode: "builder_collect",
+    isMaterialRewriteCandidate: (userRaw: string, suggestionRaw: string) => {
+      const normalizeItems = (value: string) =>
+        String(value || "")
+          .split(/\n+/)
+          .map((line) => line.trim().toLowerCase())
+          .filter(Boolean);
+      const userItems = normalizeItems(userRaw);
+      const suggestionItems = normalizeItems(suggestionRaw);
+      if (userItems.length > 0 && suggestionItems.length >= userItems.length) {
+        const suggestionSet = new Set(suggestionItems);
+        if (userItems.every((item) => suggestionSet.has(item))) {
+          return false;
+        }
+      }
+      return true;
+    },
+  });
+
+  const baseState = {
+    current_step: "dream",
+    active_specialist: "DreamExplainer",
+    __dream_runtime_mode: "builder_collect",
+    dream_builder_statements: [],
+    provisional_by_step: {},
+    last_specialist_result: {
+      statements: [],
+      dream: "",
+      refined_formulation: "",
+    },
+  } as any;
+
+  const runTurn = async (state: Record<string, unknown>, batch: string[]) =>
+    helpers.runPostSpecialistPipeline({
+      routing: {
+        userMessage: batch.join("\n"),
+        actionCodeRaw: "",
+        responseUiFlags: null,
+        inputMode: "widget",
+        wordingChoiceEnabled: true,
+        languageResolvedThisTurn: false,
+        isBootstrapPollCall: false,
+        motivationQuotesEnabled: false,
+      },
+      rendering: {
+        uiI18nTelemetry: null,
+        lang: "en",
+        ensureUiStrings: async (nextState) => nextState,
+      },
+      state: {
+        state: state as any,
+        transientPendingScores: null,
+        submittedUserText: batch.join("\n"),
+        submittedTextIntent: "content_input",
+        submittedTextAnchor: "user_input",
+        rawNormalized: batch.join("\n"),
+        pristineAtEntry: true,
+      },
+      specialist: {
+        model: "gpt-5-mini",
+        decideOrchestration: () =>
+          ({
+            current_step: "dream",
+            specialist_to_call: "DreamExplainer",
+            show_session_intro: "false",
+            show_step_intro: "false",
+          }) as any,
+        rememberLlmCall: () => {},
+      },
+    } as any);
+
+  const firstPayload = await runTurn(baseState, firstBatch);
+  assert.deepEqual((firstPayload.state as Record<string, unknown>).dream_builder_statements, firstBatch);
+
+  const secondPayload = await runTurn((firstPayload.state || {}) as Record<string, unknown>, secondBatch);
+  assert.equal(
+    ((secondPayload.state as Record<string, unknown>).dream_builder_statements as unknown[]).length,
+    19
+  );
+
+  const thirdPayload = await runTurn((secondPayload.state || {}) as Record<string, unknown>, thirdBatch);
+  assert.equal(String((thirdPayload.specialist as Record<string, unknown>).scoring_phase || ""), "true");
+  assert.equal(
+    ((thirdPayload.state as Record<string, unknown>).dream_builder_statements as unknown[]).length,
+    21
+  );
+
+  const widgetPayload = uiPayloadHelpers.attachRegistryPayload(
+    {
+      ok: true,
+      text: "",
+      prompt: "",
+      current_step_id: "dream",
+      state: (thirdPayload.state || {}) as any,
+    },
+    thirdPayload.specialist
+  );
+
+  assert.equal(String(widgetPayload.ui?.view?.variant || ""), "dream_builder_scoring");
+  assert.equal(String(widgetPayload.ui?.dream_builder_contract?.phase || ""), "scoring");
+  assert.equal(
+    Array.isArray(widgetPayload.ui?.dream_builder_contract?.statements)
+      ? widgetPayload.ui?.dream_builder_contract?.statements.length
+      : 0,
+    21
+  );
+  assert.equal(
+    Array.isArray(widgetPayload.ui?.dream_builder_contract?.scoring?.clusters)
+      ? widgetPayload.ui?.dream_builder_contract?.scoring?.clusters.length
+      : 0,
+    3
+  );
 });
 
 test("runPostSpecialistPipeline keeps overlapping strategy merge proposals in a grouped compare picker", async () => {

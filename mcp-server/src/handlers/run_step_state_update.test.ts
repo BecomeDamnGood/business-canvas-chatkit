@@ -424,3 +424,36 @@ test("applyPostSpecialistStateMutations preserves Dream Builder statements when 
 
   assert.deepEqual((next as any).dream_builder_statements, existingStatements);
 });
+
+test("applyPostSpecialistStateMutations keeps committed Dream Builder statements stable while compare is pending", () => {
+  const helpers = buildHelpers();
+  const existingStatements = [
+    "Bedrijven weerspiegelen steeds vaker de waarden en identiteit van hun oprichters.",
+  ];
+  const next = helpers.applyPostSpecialistStateMutations({
+    prevState: {
+      current_step: "dream",
+      dream_builder_statements: existingStatements,
+      dream_scoring_statements: [],
+    } as any,
+    decision: { current_step: "dream", specialist_to_call: "DreamExplainer" } as any,
+    specialistResult: {
+      action: "REFINE",
+      __dream_builder_compare_pending: "true",
+      statements: [
+        ...existingStatements,
+        "De waarden en identiteit van oprichters worden beter zichtbaar voor de buitenwereld.",
+      ],
+      __dream_builder_compare_current_items: [
+        "Bedrijven weerspiegelen steeds vaker de waarden en identiteit van hun oprichters.",
+        "De waarden en identiteit van oprichters worden beter zichtbaar voor de buitenwereld.",
+      ],
+      __dream_builder_compare_suggested_items: [
+        "Bedrijven weerspiegelen steeds vaker zichtbaarder de waarden en identiteit van hun oprichters.",
+      ],
+    } as any,
+    showSessionIntroUsed: "false",
+  });
+
+  assert.deepEqual((next as any).dream_builder_statements, existingStatements);
+});

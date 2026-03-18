@@ -798,3 +798,75 @@ test("feedback contract derives the grouped list compare family from grouped lis
     "Choose the version that fits best for the remaining difference."
   );
 });
+
+test("final response publishes a single server-owned pending interaction for wording choice", () => {
+  const response = finalizeResponseContractInternals(
+    {
+      ok: true,
+      current_step_id: "dream",
+      active_specialist: "Dream",
+      text: "",
+      prompt: "",
+      specialist: {
+        action: "ASK",
+        wording_choice_pending: "true",
+        wording_choice_mode: "text",
+        wording_choice_target_field: "dream",
+        wording_choice_user_normalized: "Mijn versie",
+        wording_choice_agent_current: "De suggestie",
+      },
+      state: {
+        started: "true",
+        current_step: "dream",
+        active_specialist: "Dream",
+        ui_action_wording_pick_user: "ACTION_WORDING_PICK_USER",
+        ui_action_wording_pick_suggestion: "ACTION_WORDING_PICK_SUGGESTION",
+        last_specialist_result: {
+          action: "ASK",
+          wording_choice_pending: "true",
+          wording_choice_mode: "text",
+          wording_choice_target_field: "dream",
+          wording_choice_user_normalized: "Mijn versie",
+          wording_choice_agent_current: "De suggestie",
+        },
+      } as any,
+      ui: {
+        contract_id: "dream:interactive:refine",
+        view: {
+          mode: "interactive",
+          variant: "wording_choice",
+        },
+        feedback_contract: {
+          kind: "single_value_compare",
+          mode: "text",
+          rationale: "Deze suggestie maakt de formulering scherper.",
+          current_label: "Dit is jouw input:",
+          suggested_label: "Dit zou mijn suggestie zijn:",
+          current_value: "Mijn versie",
+          suggested_value: "De suggestie",
+          instruction: "Klik alsjeblieft wat het beste bij je past.",
+        },
+      },
+    } as any,
+    {
+      applyUiClientActionContract: () => {},
+      parseMenuFromContractIdForStep: () => "",
+      labelKeysForMenuActionCodes: () => [],
+      onUiParityError: () => {},
+      attachRegistryPayload: (payload) => payload,
+    }
+  );
+
+  const pending = (((response.ui || {}) as Record<string, unknown>).pending_interaction || {}) as Record<string, unknown>;
+  assert.equal(String(pending.kind || ""), "wording_choice");
+  assert.equal(String(pending.status || ""), "pending");
+  assert.deepEqual(
+    ((pending.allowed_actions || []) as Array<Record<string, unknown>>).map((action) => String(action.id || "")),
+    ["pick_user", "pick_suggestion"]
+  );
+  assert.equal(String((response.state as any).__pending_interaction_id || ""), String(pending.id || ""));
+  assert.equal(
+    String((((response.state as any).last_specialist_result || {}).pending_interaction_id || "")),
+    String(pending.id || "")
+  );
+});

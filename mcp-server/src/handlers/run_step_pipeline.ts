@@ -157,6 +157,14 @@ function tokenizeDreamBuilderOverlapText(input: string): string[] {
   return comparable ? comparable.split(" ").filter(Boolean) : [];
 }
 
+function contentTokensForDreamBuilderOverlap(input: string): string[] {
+  return Array.from(
+    new Set(
+      tokenizeDreamBuilderOverlapText(input).filter((token) => token.length >= 7)
+    )
+  );
+}
+
 function dreamBuilderTokenJaccard(left: string, right: string): number {
   const leftSet = new Set(tokenizeDreamBuilderOverlapText(left));
   const rightSet = new Set(tokenizeDreamBuilderOverlapText(right));
@@ -167,6 +175,43 @@ function dreamBuilderTokenJaccard(left: string, right: string): number {
   }
   const union = leftSet.size + rightSet.size - overlap;
   return union > 0 ? overlap / union : 0;
+}
+
+function dreamBuilderContentCoverage(left: string, right: string): {
+  overlapCount: number;
+  coverage: number;
+} {
+  const leftSet = new Set(contentTokensForDreamBuilderOverlap(left));
+  const rightSet = new Set(contentTokensForDreamBuilderOverlap(right));
+  if (leftSet.size === 0 || rightSet.size === 0) {
+    return { overlapCount: 0, coverage: 0 };
+  }
+  let overlap = 0;
+  for (const token of leftSet) {
+    if (rightSet.has(token)) overlap += 1;
+  }
+  const coverage = overlap > 0 ? overlap / Math.min(leftSet.size, rightSet.size) : 0;
+  return { overlapCount: overlap, coverage };
+}
+
+function dreamBuilderOverlapRepairScore(left: string, right: string): number {
+  const leftComparable = canonicalizeDreamBuilderOverlapText(left);
+  const rightComparable = canonicalizeDreamBuilderOverlapText(right);
+  if (!leftComparable || !rightComparable) return 0;
+
+  const tokenScore = dreamBuilderTokenJaccard(left, right);
+  const containsScore =
+    leftComparable.includes(rightComparable) || rightComparable.includes(leftComparable)
+      ? 1
+      : 0;
+  const { overlapCount, coverage } = dreamBuilderContentCoverage(left, right);
+  const semanticCoverage =
+    overlapCount >= 3
+      ? coverage
+      : overlapCount >= 2 && coverage >= 0.95
+        ? coverage
+        : 0;
+  return Math.max(tokenScore, containsScore, semanticCoverage);
 }
 
 function findDreamBuilderOverlapRepairPair(params: {
@@ -192,14 +237,7 @@ function findDreamBuilderOverlapRepairPair(params: {
   let bestExisting = "";
   let bestScore = 0;
   for (const existing of previousStatements) {
-    const existingComparable = canonicalizeDreamBuilderOverlapText(existing);
-    if (!existingComparable) continue;
-    const tokenScore = dreamBuilderTokenJaccard(existing, incoming);
-    const containsScore =
-      existingComparable.includes(incomingComparable) || incomingComparable.includes(existingComparable)
-        ? 1
-        : 0;
-    const score = Math.max(tokenScore, containsScore);
+    const score = dreamBuilderOverlapRepairScore(existing, incoming);
     if (score > bestScore) {
       bestScore = score;
       bestExisting = existing;
@@ -225,8 +263,8 @@ function findDreamBuilderOverlapRepairPairFromUserInput(params: {
   for (let index = 0; index < previousStatements.length; index += 1) {
     const existing = previousStatements[index];
     const scores = [
-      dreamBuilderTokenJaccard(existing, incoming),
-      ...candidateParts.map((part) => dreamBuilderTokenJaccard(existing, part)),
+      dreamBuilderOverlapRepairScore(existing, incoming),
+      ...candidateParts.map((part) => dreamBuilderOverlapRepairScore(existing, part)),
     ];
     const score = Math.max(...scores);
     if (score > bestExistingScore) {

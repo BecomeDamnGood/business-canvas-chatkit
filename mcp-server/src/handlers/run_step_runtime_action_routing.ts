@@ -1516,6 +1516,50 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
   }
 
   let stateForWordingSelection = state;
+  const activePendingSpecialist =
+    (((stateForWordingSelection as Record<string, unknown>).last_specialist_result as Record<string, unknown>) ||
+      {}) as Record<string, unknown>;
+  const submittedPendingInteractionId = String(
+    (stateForWordingSelection as Record<string, unknown>).__submitted_pending_interaction_id || ""
+  ).trim();
+  const activePendingInteractionId = String(
+    (stateForWordingSelection as Record<string, unknown>).__pending_interaction_id ||
+    activePendingSpecialist.pending_interaction_id ||
+    ""
+  ).trim();
+  const hasSubmittedPendingInteractionMismatch =
+    runtime.wordingChoiceEnabled &&
+    wording.isWordingPickRouteToken(userMessage) &&
+    Boolean(submittedPendingInteractionId) &&
+    Boolean(activePendingInteractionId) &&
+    submittedPendingInteractionId !== activePendingInteractionId;
+  if (hasSubmittedPendingInteractionMismatch) {
+    stateForWordingSelection = await behavior.ensureUiStrings(stateForWordingSelection, userMessage);
+    state = stateForWordingSelection;
+    const pendingSpecialist =
+      ((stateForWordingSelection as Record<string, unknown>).last_specialist_result as Record<string, unknown>) || {};
+    const pendingChoice = wording.buildWordingChoiceFromPendingSpecialist(
+      pendingSpecialist,
+      stateForWordingSelection,
+      String((stateForWordingSelection as Record<string, unknown>).active_specialist || ""),
+      pendingSpecialist,
+      String(stateForWordingSelection.current_step || ""),
+      action.getDreamRuntimeMode(stateForWordingSelection)
+    );
+    console.warn("[pending_interaction_id_mismatch]", {
+      step: String(stateForWordingSelection.current_step || ""),
+      submitted_interaction_id: submittedPendingInteractionId,
+      active_interaction_id: activePendingInteractionId,
+      client_action_id: String((stateForWordingSelection as Record<string, unknown>).__client_action_id || ""),
+    });
+    if (pendingChoice && pendingChoice.enabled === true) {
+      return buildWidgetResponse({
+        nextState: stateForWordingSelection,
+        specialist: pendingSpecialist,
+        wordingChoice: pendingChoice,
+      });
+    }
+  }
   if (runtime.wordingChoiceEnabled && wording.isWordingPickRouteToken(userMessage)) {
     stateForWordingSelection = await behavior.ensureUiStrings(stateForWordingSelection, userMessage);
     state = stateForWordingSelection;

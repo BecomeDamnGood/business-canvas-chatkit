@@ -262,6 +262,7 @@ test("attachRegistryPayload emits explicit Dream Builder compare ownership contr
       current_items: ["I want my work to make a positive difference in people's lives."],
       suggested_items: ["Over 5 tot 10 jaar zal positieve impact op het leven van anderen belangrijker worden."],
       instruction: "Choose the version that fits best.",
+      committed_statements: ["Statement 1", "Statement 2"],
     },
   });
   assert.equal(payload.ui?.view?.variant, "dream_builder_collect");
@@ -590,6 +591,7 @@ test("attachRegistryPayload preserves compare rationale and retained items from 
       current_items: ["I want to help people solve a problem they truly care about."],
       suggested_items: ["Over 5 tot 10 jaar zullen meer mensen hulp zoeken voor problemen die er echt toe doen."],
       instruction: "Kies de versie die het beste past bij het resterende verschil.",
+      committed_statements: [],
     },
   });
   assert.equal("wording_choice" in (payload.ui || {}), false);
@@ -663,6 +665,10 @@ test("attachRegistryPayload does not duplicate committed Dream Builder statement
         "Over 5 tot 10 jaar zullen meer mensen problemen willen oplossen die er echt toe doen.",
       ],
       instruction: "Kies de versie die het beste past.",
+      committed_statements: [
+        "Over 5 tot 10 jaar zullen meer mensen streven naar werk dat een positieve impact heeft op het leven van anderen.",
+        "De samenleving zal meer waarde hechten aan initiatieven die generaties overstijgen en blijvende betekenis hebben.",
+      ],
     },
   });
   assert.equal("retained_heading" in ((payload.ui?.dream_builder_contract?.compare || {}) as Record<string, unknown>), false);

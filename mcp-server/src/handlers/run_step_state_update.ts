@@ -330,6 +330,8 @@ export function createRunStepStateUpdateHelpers(deps: RunStepStateUpdateDeps) {
       decision.specialist_to_call === deps.dreamExplainerSpecialist &&
       Array.isArray(specialistResult?.statements)
     ) {
+      const hasPendingDreamBuilderCompare =
+        String((specialistResult as Record<string, unknown>).__dream_builder_compare_pending || "").trim() === "true";
       const canonicalStatements = normalizeDreamBuilderStatements(specialistResult.statements);
       const previousCanonicalStatements = normalizeDreamBuilderStatements(
         Array.isArray((prevState as any)?.dream_builder_statements)
@@ -337,7 +339,11 @@ export function createRunStepStateUpdateHelpers(deps: RunStepStateUpdateDeps) {
           : []
       );
       (nextState as any).dream_builder_statements =
-        canonicalStatements.length > 0 ? canonicalStatements : previousCanonicalStatements;
+        hasPendingDreamBuilderCompare
+          ? previousCanonicalStatements
+          : canonicalStatements.length > 0
+            ? canonicalStatements
+            : previousCanonicalStatements;
     }
     if (
       decision.specialist_to_call === deps.dreamExplainerSpecialist &&
@@ -349,6 +355,7 @@ export function createRunStepStateUpdateHelpers(deps: RunStepStateUpdateDeps) {
       decision.specialist_to_call === deps.dreamExplainerSpecialist &&
       specialistResult &&
       Array.isArray(specialistResult.statements) &&
+      String((specialistResult as Record<string, unknown>).__dream_builder_compare_pending || "").trim() !== "true" &&
       specialistResult.statements.length >= 20
     ) {
       (nextState as any).dream_scoring_statements = normalizeDreamBuilderStatements(specialistResult.statements);

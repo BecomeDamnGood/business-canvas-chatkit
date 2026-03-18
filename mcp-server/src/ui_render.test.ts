@@ -37,34 +37,64 @@ import {
 } from "../ui/lib/ui_constants.js";
 import { STEP_REGISTRY_ORDER } from "./steps/step_registry.js";
 
+function buildPendingWordingChoiceUiPayload(overrides: Record<string, unknown> = {}) {
+  return {
+    pending_interaction: {
+      version: "2026-03-18.pending_interaction.v1",
+      id: "pi_wording_test",
+      kind: "wording_choice",
+      status: "pending",
+      source: "server_contract",
+      response_contract_id: "dream:interactive:refine",
+      allowed_actions: [
+        {
+          id: "pick_user",
+          action_code: "ACTION_WORDING_PICK_USER",
+          label: "Choose this version",
+          label_key: "wordingChoice.chooseVersion",
+          role: "wording_pick_user",
+          surface: "wording_choice",
+          primary: false,
+        },
+        {
+          id: "pick_suggestion",
+          action_code: "ACTION_WORDING_PICK_SUGGESTION",
+          label: "Choose this version",
+          label_key: "wordingChoice.chooseVersion",
+          role: "wording_pick_suggestion",
+          surface: "wording_choice",
+          primary: false,
+        },
+      ],
+      render_model: {
+        mode: "text",
+        variant: "default",
+        instruction: "Klik alsjeblieft wat het beste bij je past.",
+        feedback_reason_text: "Deze suggestie maakt de formulering scherper.",
+        user_label: "Dit is jouw input:",
+        suggestion_label: "Dit zou mijn suggestie zijn:",
+        user_text: "Mijn versie",
+        suggestion_text: "De suggestie",
+        user_items: [],
+        suggestion_items: [],
+        retained_heading: "",
+        retained_items: [],
+      },
+      ...overrides,
+    },
+  };
+}
+
 test("shouldSuppressMainCardForWordingChoice suppresses the main card for wording-choice view variants", () => {
   assert.equal(
-    shouldSuppressMainCardForWordingChoice({}, "wording_choice"),
+    shouldSuppressMainCardForWordingChoice(buildPendingWordingChoiceUiPayload(), "wording_choice"),
     true
   );
 });
 
 test("shouldSuppressMainCardForWordingChoice suppresses the main card for explicit picker payloads", () => {
   assert.equal(
-    shouldSuppressMainCardForWordingChoice(
-      {
-        wording_choice: {
-          enabled: true,
-        },
-      },
-      "default"
-    ),
-    true
-  );
-  assert.equal(
-    shouldSuppressMainCardForWordingChoice(
-      {
-        flags: {
-          require_wording_pick: true,
-        },
-      },
-      "default"
-    ),
+    shouldSuppressMainCardForWordingChoice(buildPendingWordingChoiceUiPayload(), "default"),
     true
   );
 });
@@ -177,12 +207,22 @@ test("strategy structured suggestion blocks get Strategy 1/2/3 headings in the w
 test("shouldSuppressMainCardForWordingChoice follows the feedback contract for compare families", () => {
   assert.equal(
     shouldSuppressMainCardForWordingChoice(
-      {
-        feedback_contract: {
-          kind: "grouped_list_compare",
+      buildPendingWordingChoiceUiPayload({
+        render_model: {
           mode: "list",
+          variant: "grouped_list_units",
+          instruction: "Kies de versie die het beste past.",
+          feedback_reason_text: "Deze suggestie maakt het resterende verschil scherper.",
+          user_label: "Jouw compacte formulering:",
+          suggestion_label: "Mijn suggestie:",
+          user_text: "Operationele eenvoud",
+          suggestion_text: "Operationele focus",
+          user_items: ["Operationele eenvoud"],
+          suggestion_items: ["Operationele focus"],
+          retained_heading: "Deze punten blijven al in de definitieve lijst:",
+          retained_items: ["Terugkerende omzet"],
         },
-      },
+      }),
       "default"
     ),
     true
@@ -252,6 +292,7 @@ test("readDreamBuilderContract normalizes explicit Dream Builder compare ownersh
         current_items: ["I want to create freedom in my time and choices."],
         suggested_items: ["Freedom in time and choices will become more important in working life."],
         instruction: "Choose the version that fits best.",
+        committed_statements: ["Statement 1", "Statement 2"],
       },
     },
   });
@@ -274,6 +315,7 @@ test("readDreamBuilderContract normalizes explicit Dream Builder compare ownersh
       retainedHeading: "",
       retainedItems: [],
       instruction: "Choose the version that fits best.",
+      committedStatements: ["Statement 1", "Statement 2"],
     },
     scoring: null,
   });
@@ -549,6 +591,18 @@ test("collectPendingScoresForContractAction returns null until all Dream Builder
 
   (globalThis as { __dreamScoringScores?: unknown[][] }).__dreamScoringScores = [["9", "8"], ["7"]];
   assert.deepEqual(collectPendingScoresForContractAction(), [[9, 8], [7]]);
+});
+
+test("collectPendingScoresForContractAction accepts a Dream Builder scoring matrix where the first two items are 9 and the rest are 3", () => {
+  (globalThis as { __dreamScoringScores?: unknown[][] }).__dreamScoringScores = [
+    ["9", "9"],
+    Array.from({ length: 19 }, () => "3"),
+  ];
+
+  assert.deepEqual(collectPendingScoresForContractAction(), [
+    [9, 9],
+    Array.from({ length: 19 }, () => 3),
+  ]);
 });
 
 test("readDreamBuilderContract exposes scoring submit action from the Dream Builder contract", () => {

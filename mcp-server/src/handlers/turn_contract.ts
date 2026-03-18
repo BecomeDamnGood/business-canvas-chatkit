@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import { ACTIONCODE_REGISTRY } from "../core/actioncode_registry.js";
 import { VIEW_CONTRACT_VERSION as LOCALE_START_VIEW_CONTRACT_VERSION } from "../core/bootstrap_runtime.js";
 import type { CanvasState } from "../core/state.js";
@@ -41,6 +43,31 @@ type UiActionSurface =
   | "text_input"
   | "wording_choice"
   | "auxiliary";
+
+type PendingInteractionAllowedAction = {
+  id: string;
+  action_code: string;
+  label: string;
+  label_key: string;
+  role: string;
+  surface: string;
+  primary: boolean;
+};
+
+type PendingInteractionWordingChoiceRenderModel = {
+  mode: "text" | "list";
+  variant: "default" | "clarify_dual" | "grouped_list_units";
+  instruction: string;
+  feedback_reason_text: string;
+  user_label: string;
+  suggestion_label: string;
+  user_text: string;
+  suggestion_text: string;
+  user_items: string[];
+  suggestion_items: string[];
+  retained_heading: string;
+  retained_items: string[];
+};
 
 type UiFeedbackKind =
   | "single_value_compare"
@@ -182,6 +209,169 @@ function normalizeUiActionSurface(rawSurface: unknown, fallback: UiActionSurface
   const normalized = String(rawSurface || "").trim();
   if (UI_ACTION_SURFACES.has(normalized as UiActionSurface)) return normalized as UiActionSurface;
   return fallback;
+}
+
+function normalizePendingInteractionAllowedAction(
+  actionRaw: Record<string, unknown> | null | undefined,
+  id: string
+): PendingInteractionAllowedAction | null {
+  const action = toRecord(actionRaw);
+  const actionCode = String(action.action_code || "").trim();
+  const label = String(action.label || "").trim();
+  const labelKey = String(action.label_key || "").trim();
+  const role = String(action.role || "").trim();
+  const surface = String(action.surface || "").trim();
+  if (!actionCode || !label || !labelKey || !role || !surface) return null;
+  return {
+    id,
+    action_code: actionCode,
+    label,
+    label_key: labelKey,
+    role,
+    surface,
+    primary: action.primary === true,
+  };
+}
+
+function normalizePendingInteractionVariant(raw: unknown): PendingInteractionWordingChoiceRenderModel["variant"] {
+  const value = String(raw || "").trim();
+  if (value === "clarify_dual" || value === "grouped_list_units") return value;
+  return "default";
+}
+
+function buildPendingInteractionRenderModel(
+  response: RunStepContractResponse
+): PendingInteractionWordingChoiceRenderModel | null {
+  const ui = toRecord(response.ui);
+  const feedback = toRecord(ui.feedback_contract);
+  const feedbackKind = String(feedback.kind || "").trim();
+  const dreamBuilder = toRecord(ui.dream_builder_contract);
+  const dreamBuilderPhase = String(dreamBuilder.phase || "").trim();
+  const dreamBuilderCompare = toRecord(dreamBuilder.compare);
+  if (
+    feedbackKind === "single_value_compare" ||
+    feedbackKind === "grouped_list_compare" ||
+    feedbackKind === "list_edit_compare" ||
+    feedbackKind === "list_duplicate_merge_compare"
+  ) {
+    const mode = String(feedback.mode || "").trim().toLowerCase() === "list" ? "list" : "text";
+    return {
+      mode,
+      variant:
+        feedbackKind === "grouped_list_compare" && mode === "list"
+          ? "grouped_list_units"
+          : normalizePendingInteractionVariant(feedback.variant),
+      instruction: String(feedback.instruction || "").trim(),
+      feedback_reason_text: String(feedback.rationale || "").trim(),
+      user_label: String(feedback.current_label || "").trim(),
+      suggestion_label: String(feedback.suggested_label || "").trim(),
+      user_text: String(feedback.current_value || "").trim(),
+      suggestion_text: String(feedback.suggested_value || "").trim(),
+      user_items: normalizeStringArray(feedback.current_items),
+      suggestion_items: normalizeStringArray(feedback.suggested_items),
+      retained_heading: String(feedback.retained_heading || "").trim(),
+      retained_items: normalizeStringArray(feedback.retained_items),
+    };
+  }
+  if (
+    dreamBuilderPhase === "compare" &&
+    (
+      String(dreamBuilderCompare.kind || "").trim() === "batch_rewrite_compare" ||
+      String(dreamBuilderCompare.kind || "").trim() === "overlap_merge_compare"
+    )
+  ) {
+    return {
+      mode: "list",
+      variant: "default",
+      instruction: String(dreamBuilderCompare.instruction || "").trim(),
+      feedback_reason_text: String(dreamBuilderCompare.rationale || "").trim(),
+      user_label: String(dreamBuilderCompare.current_label || "").trim(),
+      suggestion_label: String(dreamBuilderCompare.suggested_label || "").trim(),
+      user_text: String(dreamBuilderCompare.current_value || "").trim(),
+      suggestion_text: String(dreamBuilderCompare.suggested_value || "").trim(),
+      user_items: normalizeStringArray(dreamBuilderCompare.current_items),
+      suggestion_items: normalizeStringArray(dreamBuilderCompare.suggested_items),
+      retained_heading: String(dreamBuilderCompare.retained_heading || "").trim(),
+      retained_items: normalizeStringArray(dreamBuilderCompare.retained_items),
+    };
+  }
+  return null;
+}
+
+function wordingChoicePendingInteractionId(params: {
+  stepId: string;
+  contractId: string;
+  allowedActions: PendingInteractionAllowedAction[];
+  renderModel: PendingInteractionWordingChoiceRenderModel;
+}): string {
+  const fingerprint = createHash("sha1")
+    .update(JSON.stringify({
+      step_id: params.stepId,
+      contract_id: params.contractId,
+      allowed_actions: params.allowedActions.map((action) => ({
+        id: action.id,
+        action_code: action.action_code,
+        role: action.role,
+      })),
+      render_model: params.renderModel,
+    }))
+    .digest("hex")
+    .slice(0, 20);
+  return `pi_wording_${fingerprint}`;
+}
+
+function ensurePendingInteractionContract(response: RunStepContractResponse): void {
+  const ui = toRecord(response.ui);
+  const actionContract = toRecord(ui.action_contract);
+  const actions = Array.isArray(actionContract.actions) ? (actionContract.actions as Array<Record<string, unknown>>) : [];
+  const userPickAction = normalizePendingInteractionAllowedAction(
+    actions.find((action) => normalizeUiActionRole(action.role, "choice") === "wording_pick_user"),
+    "pick_user"
+  );
+  const suggestionPickAction = normalizePendingInteractionAllowedAction(
+    actions.find((action) => normalizeUiActionRole(action.role, "choice") === "wording_pick_suggestion"),
+    "pick_suggestion"
+  );
+  const renderModel = buildPendingInteractionRenderModel(response);
+  const state = toRecord(response.state);
+  const lastSpecialist = toRecord(state.last_specialist_result);
+  if (!userPickAction || !suggestionPickAction || !renderModel) {
+    delete ui.pending_interaction;
+    delete state.__pending_interaction_id;
+    if (Object.keys(lastSpecialist).length > 0 && Object.prototype.hasOwnProperty.call(lastSpecialist, "pending_interaction_id")) {
+      delete lastSpecialist.pending_interaction_id;
+      state.last_specialist_result = lastSpecialist;
+    }
+    response.ui = ui;
+    response.state = state as CanvasState;
+    return;
+  }
+
+  const stepId = String(response.current_step_id || state.current_step || STEP_0_ID).trim() || STEP_0_ID;
+  const contractId = String(ui.contract_id || "").trim();
+  const interactionId = wordingChoicePendingInteractionId({
+    stepId,
+    contractId,
+    allowedActions: [userPickAction, suggestionPickAction],
+    renderModel,
+  });
+  ui.pending_interaction = {
+    version: "2026-03-18.pending_interaction.v1",
+    id: interactionId,
+    kind: "wording_choice",
+    status: "pending",
+    source: "server_contract",
+    response_contract_id: contractId,
+    allowed_actions: [userPickAction, suggestionPickAction],
+    render_model: renderModel,
+  };
+  state.__pending_interaction_id = interactionId;
+  if (Object.keys(lastSpecialist).length > 0) {
+    lastSpecialist.pending_interaction_id = interactionId;
+    state.last_specialist_result = lastSpecialist;
+  }
+  response.ui = ui;
+  response.state = state as CanvasState;
 }
 
 function hasRenderableResponseContent(response: RunStepContractResponse): boolean {
@@ -785,6 +975,9 @@ export function finalizeResponseContractInternals<T extends RunStepContractRespo
   let finalResponse = stampResponseContentLocale(response) as RunStepContractResponse;
   const responseStateForCleanup = finalResponse?.state as CanvasState | undefined;
   if (responseStateForCleanup) {
+    if (Object.prototype.hasOwnProperty.call(responseStateForCleanup as any, "__submitted_pending_interaction_id")) {
+      delete (responseStateForCleanup as any).__submitted_pending_interaction_id;
+    }
     if (Object.prototype.hasOwnProperty.call(responseStateForCleanup as any, "__last_clicked_label_for_contract")) {
       delete (responseStateForCleanup as any).__last_clicked_label_for_contract;
     }
@@ -842,6 +1035,7 @@ export function finalizeResponseContractInternals<T extends RunStepContractRespo
   finalResponse.ui = finalUi;
   const canonicalViewDecision = applyCanonicalWidgetState(finalResponse);
   applyDeterministicUiActionRenderPolicy(finalResponse);
+  ensurePendingInteractionContract(finalResponse);
   (finalResponse as Record<string, unknown>).__canonical_view_decision = canonicalViewDecision;
 
   return finalResponse as T;

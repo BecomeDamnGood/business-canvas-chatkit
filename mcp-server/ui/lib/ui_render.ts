@@ -90,6 +90,7 @@ type NormalizedDreamBuilderCompareContract = {
   retainedHeading: string;
   retainedItems: string[];
   instruction: string;
+  committedStatements: string[];
 };
 
 type NormalizedDreamBuilderScoringContract = {
@@ -107,6 +108,35 @@ type NormalizedDreamBuilderContract = {
   question: string;
   compare: NormalizedDreamBuilderCompareContract | null;
   scoring: NormalizedDreamBuilderScoringContract | null;
+};
+
+type NormalizedPendingInteraction = {
+  id: string;
+  kind: "wording_choice";
+  status: "pending";
+  allowedActions: Array<{
+    id: string;
+    actionCode: string;
+    label: string;
+    labelKey: string;
+    role: string;
+    surface: string;
+    primary: boolean;
+  }>;
+  renderModel: {
+    mode: "text" | "list";
+    variant: "default" | "clarify_dual" | "grouped_list_units";
+    instruction: string;
+    feedbackReasonText: string;
+    userLabel: string;
+    suggestionLabel: string;
+    userText: string;
+    suggestionText: string;
+    userItems: string[];
+    suggestionItems: string[];
+    retainedHeading: string;
+    retainedItems: string[];
+  };
 };
 
 function normalizeStringArray(raw: unknown): string[] {
@@ -196,6 +226,7 @@ export function readDreamBuilderContract(
           retainedHeading: String(compareRaw.retained_heading || "").trim(),
           retainedItems: normalizeStringArray(compareRaw.retained_items),
           instruction: String(compareRaw.instruction || "").trim(),
+          committedStatements: normalizeStringArray(compareRaw.committed_statements),
         }
       : null;
   const scoringRaw = toRecord(contract.scoring);
@@ -329,28 +360,8 @@ export function shouldSuppressMainCardForWordingChoice(
   uiViewVariantRaw: string | null | undefined
 ): boolean {
   const uiPayload = uiPayloadRaw && typeof uiPayloadRaw === "object" ? uiPayloadRaw : {};
-  const feedbackContract = readFeedbackContract(uiPayload);
-  const dreamBuilderContract = readDreamBuilderContract(uiPayload);
-  const uiViewVariant = String(uiViewVariantRaw || "").trim();
-  const dreamBuilderContractPresent = Boolean(dreamBuilderContract?.phase);
-  const dreamBuilderCompareActive = dreamBuilderContract?.phase === "compare";
-  const wordingChoicePayload =
-    uiPayload && typeof uiPayload.wording_choice === "object" && uiPayload.wording_choice
-      ? (uiPayload.wording_choice as Record<string, unknown>)
-      : {};
-  const flags = toRecord(uiPayload.flags);
-  return (
-    feedbackContract?.kind === "single_value_compare" ||
-    feedbackContract?.kind === "grouped_list_compare" ||
-    feedbackContract?.kind === "list_edit_compare" ||
-    feedbackContract?.kind === "list_duplicate_merge_compare" ||
-    dreamBuilderCompareActive ||
-    (!dreamBuilderContractPresent && uiViewVariant === "wording_choice") ||
-    (!dreamBuilderContractPresent && wordingChoicePayload.enabled === true) ||
-    (!dreamBuilderContractPresent &&
-    String(flags.require_wording_pick || "").trim() === "true"
-    )
-  );
+  void uiViewVariantRaw;
+  return Boolean(readPendingInteraction(uiPayload));
 }
 
 export function shouldSuppressPromptForWordingChoice(params: {
@@ -444,6 +455,67 @@ function actionContractActionsForResult(resultData: Record<string, unknown>): Ar
     });
   }
   return [];
+}
+
+function readPendingInteraction(
+  uiPayloadRaw: Record<string, unknown> | null | undefined
+): NormalizedPendingInteraction | null {
+  const uiPayload = toRecord(uiPayloadRaw);
+  const pending = toRecord(uiPayload.pending_interaction);
+  const kind = String(pending.kind || "").trim();
+  const status = String(pending.status || "").trim();
+  if (kind !== "wording_choice" || status !== "pending") return null;
+  const renderModelRaw = toRecord(pending.render_model);
+  const mode = String(renderModelRaw.mode || "").trim().toLowerCase() === "list" ? "list" : "text";
+  const variantRaw = String(renderModelRaw.variant || "").trim();
+  const variant =
+    variantRaw === "clarify_dual" || variantRaw === "grouped_list_units"
+      ? variantRaw
+      : "default";
+  const allowedActions = Array.isArray(pending.allowed_actions)
+    ? (pending.allowed_actions as unknown[])
+      .map((entry) => {
+        const action = toRecord(entry);
+        const id = String(action.id || "").trim();
+        const actionCode = String(action.action_code || "").trim();
+        const label = String(action.label || "").trim();
+        const labelKey = String(action.label_key || "").trim();
+        const role = String(action.role || "").trim();
+        const surface = String(action.surface || "").trim();
+        if (!id || !actionCode || !label || !labelKey || !role || !surface) return null;
+        return {
+          id,
+          actionCode,
+          label,
+          labelKey,
+          role,
+          surface,
+          primary: action.primary === true,
+        };
+      })
+      .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry))
+    : [];
+  if (allowedActions.length === 0) return null;
+  return {
+    id: String(pending.id || "").trim(),
+    kind: "wording_choice",
+    status: "pending",
+    allowedActions,
+    renderModel: {
+      mode,
+      variant,
+      instruction: String(renderModelRaw.instruction || "").trim(),
+      feedbackReasonText: String(renderModelRaw.feedback_reason_text || "").trim(),
+      userLabel: String(renderModelRaw.user_label || "").trim(),
+      suggestionLabel: String(renderModelRaw.suggestion_label || "").trim(),
+      userText: String(renderModelRaw.user_text || "").trim(),
+      suggestionText: String(renderModelRaw.suggestion_text || "").trim(),
+      userItems: normalizeStringArray(renderModelRaw.user_items),
+      suggestionItems: normalizeStringArray(renderModelRaw.suggestion_items),
+      retainedHeading: String(renderModelRaw.retained_heading || "").trim(),
+      retainedItems: normalizeStringArray(renderModelRaw.retained_items),
+    },
+  };
 }
 
 type ActionDescriptor = {
@@ -1296,92 +1368,26 @@ function renderWordingChoicePanel(resultData: Record<string, unknown>, lang: str
     resultData && typeof resultData.ui === "object" && resultData.ui
       ? (resultData.ui as Record<string, unknown>)
       : {};
-  const feedbackContract = readFeedbackContract(uiPayload);
-  const dreamBuilderContract = readDreamBuilderContract(uiPayload);
-  const flags =
-    uiPayload && typeof uiPayload.flags === "object" && uiPayload.flags
-      ? (uiPayload.flags as Record<string, unknown>)
-      : {};
-  const wording =
-    uiPayload && typeof uiPayload.wording_choice === "object" && uiPayload.wording_choice
-      ? (uiPayload.wording_choice as Record<string, unknown>)
-      : {};
-  const requirePick = String(flags.require_wording_pick || "false") === "true";
-  const feedbackContractEnabled =
-    feedbackContract?.kind === "single_value_compare" ||
-    feedbackContract?.kind === "grouped_list_compare" ||
-    feedbackContract?.kind === "list_edit_compare" ||
-    feedbackContract?.kind === "list_duplicate_merge_compare";
-  const dreamBuilderCompareEnabled =
-    dreamBuilderContract?.phase === "compare" &&
-    (dreamBuilderContract.compare?.kind === "batch_rewrite_compare" ||
-      dreamBuilderContract.compare?.kind === "overlap_merge_compare");
-  const dreamBuilderContractPresent = Boolean(dreamBuilderContract?.phase);
-  const contractOwnedCompare = feedbackContractEnabled || dreamBuilderCompareEnabled;
-  const enabled =
-    contractOwnedCompare ||
-    (!dreamBuilderContractPresent && (requirePick || wording.enabled === true));
-  if (!enabled) {
+  const pendingInteraction = readPendingInteraction(uiPayload);
+  if (!pendingInteraction) {
     (wrap as HTMLElement).style.display = "none";
     return false;
   }
-
-  const legacyInstruction = String(wording.instruction || "").trim();
-  const legacyInstructionParts = parseWordingChoiceInstruction(legacyInstruction);
-  const mode = feedbackContract?.mode ||
-    (dreamBuilderCompareEnabled ? "list" : (String(wording.mode || "text") === "list" ? "list" : "text"));
-  const variant = String(wording.variant || "default").trim().toLowerCase();
-  const compareContract = feedbackContract?.kind === "grouped_list_compare"
-    ? feedbackContract
-    : dreamBuilderCompareEnabled
-      ? {
-          kind: "grouped_list_compare" as const,
-          mode: "list" as const,
-          rationale: String(dreamBuilderContract?.compare?.rationale || "").trim(),
-          heading: "",
-          supportText: "",
-          currentLabel: String(dreamBuilderContract?.compare?.currentLabel || "").trim(),
-          suggestedLabel: String(dreamBuilderContract?.compare?.suggestedLabel || "").trim(),
-          currentValue: String(dreamBuilderContract?.compare?.currentValue || "").trim(),
-          suggestedValue: String(dreamBuilderContract?.compare?.suggestedValue || "").trim(),
-          currentItems: dreamBuilderContract?.compare?.currentItems || [],
-          suggestedItems: dreamBuilderContract?.compare?.suggestedItems || [],
-          retainedHeading: String(dreamBuilderContract?.compare?.retainedHeading || "").trim(),
-          retainedItems: dreamBuilderContract?.compare?.retainedItems || [],
-          instruction: String(dreamBuilderContract?.compare?.instruction || "").trim(),
-        }
-      : feedbackContract;
-  const feedbackReasonText = contractOwnedCompare
-    ? String(compareContract?.rationale || "").trim()
-    : String(compareContract?.rationale || wording.feedback_reason_text || "").trim();
-  const userText = contractOwnedCompare
-    ? String(compareContract?.currentValue || "").trim()
-    : String(compareContract?.currentValue || wording.user_text || "").trim();
-  const suggestionText = contractOwnedCompare
-    ? String(compareContract?.suggestedValue || "").trim()
-    : String(compareContract?.suggestedValue || wording.suggestion_text || "").trim();
-  const userLabelFromPayload = contractOwnedCompare
-    ? String(compareContract?.currentLabel || "").trim()
-    : String(compareContract?.currentLabel || wording.user_label || "").trim();
-  const suggestionLabelFromPayload = contractOwnedCompare
-    ? String(compareContract?.suggestedLabel || "").trim()
-    : String(compareContract?.suggestedLabel || wording.suggestion_label || "").trim();
-  const userItems = contractOwnedCompare
-    ? (compareContract?.currentItems || [])
-    : (compareContract?.currentItems || (Array.isArray(wording.user_items) ? wording.user_items : []));
-  const suggestionItems = contractOwnedCompare
-    ? (compareContract?.suggestedItems || [])
-    : (compareContract?.suggestedItems || (Array.isArray(wording.suggestion_items) ? wording.suggestion_items : []));
-  const instruction = contractOwnedCompare
-    ? (compareContract?.instruction || t(lang, "wordingChoiceInstruction"))
-    : (compareContract?.instruction || legacyInstruction || t(lang, "wordingChoiceInstruction"));
-  const instructionParts = compareContract
-    ? {
-        retainedHeading: compareContract?.retainedHeading || "",
-        retainedItems: compareContract?.retainedItems || [],
-        instructionText: compareContract?.instruction || instruction,
-      }
-    : legacyInstructionParts;
+  const mode = pendingInteraction.renderModel.mode;
+  const variant = pendingInteraction.renderModel.variant;
+  const feedbackReasonText = pendingInteraction.renderModel.feedbackReasonText;
+  const userText = pendingInteraction.renderModel.userText;
+  const suggestionText = pendingInteraction.renderModel.suggestionText;
+  const userLabelFromPayload = pendingInteraction.renderModel.userLabel;
+  const suggestionLabelFromPayload = pendingInteraction.renderModel.suggestionLabel;
+  const userItems = pendingInteraction.renderModel.userItems;
+  const suggestionItems = pendingInteraction.renderModel.suggestionItems;
+  const instruction = pendingInteraction.renderModel.instruction || t(lang, "wordingChoiceInstruction");
+  const instructionParts = {
+    retainedHeading: pendingInteraction.renderModel.retainedHeading,
+    retainedItems: pendingInteraction.renderModel.retainedItems,
+    instructionText: instruction,
+  };
   const ensureLabelColon = (value: string): string => {
     const trimmed = String(value || "").trim();
     if (!trimmed) return "";
@@ -1453,7 +1459,7 @@ function renderWordingChoicePanel(resultData: Record<string, unknown>, lang: str
   userBtn.disabled = getIsLoading();
   suggestionBtn.disabled = getIsLoading();
   (wrap as HTMLElement).style.display = "flex";
-  return enabled;
+  return true;
 }
 
 export function render(overrideToolOutput?: unknown): void {
@@ -1916,11 +1922,16 @@ export function render(overrideToolOutput?: unknown): void {
     (state.dream_builder_statements as unknown[]).length > 0
       ? (state.dream_builder_statements as string[])
       : [];
-  let statementsArray = dreamBuilderContract?.statements && dreamBuilderContract.statements.length > 0
-    ? dreamBuilderContract.statements
-    : canonicalDreamStatements.length > 0
-      ? canonicalDreamStatements
-      : (Array.isArray(specialistStatements) ? (specialistStatements as string[]) : []);
+  let statementsArray =
+    dreamBuilderContract?.phase === "compare" &&
+    dreamBuilderContract.compare &&
+    dreamBuilderContract.compare.committedStatements.length > 0
+      ? dreamBuilderContract.compare.committedStatements
+      : dreamBuilderContract?.statements && dreamBuilderContract.statements.length > 0
+        ? dreamBuilderContract.statements
+        : canonicalDreamStatements.length > 0
+          ? canonicalDreamStatements
+          : (Array.isArray(specialistStatements) ? (specialistStatements as string[]) : []);
   const lastStatements = Array.isArray((lastSpecialist as { statements?: unknown[] }).statements)
     ? (lastSpecialist as { statements: unknown[] }).statements
     : [];

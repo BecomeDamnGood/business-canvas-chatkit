@@ -965,6 +965,222 @@ test("dream_submit_scores immediately transitions into Dream formulation with st
   assert.equal(ensureUiStringsInputs[0], "ACTION_DREAM_EXPLAINER_SUBMIT_SCORES");
 });
 
+test("dream_submit_scores formulates a Dream when the first two scores are 9 and all remaining scores are 3", async () => {
+  const calls: Array<{ state: Record<string, unknown>; userMessage: string }> = [];
+  const statements = Array.from({ length: 21 }, (_, index) => `Statement ${index + 1}`);
+  const submittedScores = [[9, 9], Array.from({ length: 19 }, () => 3)];
+  const ports: any = {
+    ids: {
+      step0Id: "step_0",
+      dreamStepId: "dream",
+      roleStepId: "role",
+      strategyStepId: "strategy",
+      presentationStepId: "presentation",
+      dreamSpecialist: "Dream",
+      dreamExplainerSpecialist: "DreamExplainer",
+      roleSpecialist: "Role",
+      presentationSpecialist: "Presentation",
+    },
+    tokens: {
+      dreamPickOneRouteToken: "__ROUTE__DREAM_PICK_ONE__",
+      roleChooseForMeRouteToken: "__ROUTE__ROLE_CHOOSE_FOR_ME__",
+      presentationMakeRouteToken: "__ROUTE__PRESENTATION_MAKE__",
+      switchToSelfDreamToken: "__SWITCH_TO_SELF_DREAM__",
+      dreamStartExerciseRouteToken: "__ROUTE__DREAM_START_EXERCISE__",
+    },
+    wording: {
+      wordingSelectionMessage: () => "",
+      pickPrompt: (specialist: Record<string, unknown>) => String(specialist.question || ""),
+      buildTextForWidget: ({ specialist }: { specialist: Record<string, unknown> }) => String(specialist.message || ""),
+    },
+    state: {
+      applyStateUpdate: ({ prev, specialistResult }: { prev: Record<string, unknown>; specialistResult: Record<string, unknown> }) => ({
+        ...prev,
+        last_specialist_result: specialistResult,
+      }),
+      applyPostSpecialistStateMutations: ({
+        prevState,
+        specialistResult,
+      }: {
+        prevState: Record<string, unknown>;
+        specialistResult: Record<string, unknown>;
+      }) => ({
+        ...prevState,
+        last_specialist_result: specialistResult,
+      }),
+      setDreamRuntimeMode: (state: Record<string, unknown>, mode: string) => {
+        state.__dream_runtime_mode = mode;
+      },
+      getDreamRuntimeMode: (state: Record<string, unknown>) => String(state.__dream_runtime_mode || "self"),
+      isUiStateHygieneSwitchV1Enabled: () => false,
+      clearStepInteractiveState: (state: Record<string, unknown>) => state,
+    },
+    contracts: {
+      renderFreeTextTurnPolicy: () => {
+        throw new Error("renderFreeTextTurnPolicy should not be called in this test");
+      },
+      validateRenderedContractOrRecover: () => {
+        throw new Error("validateRenderedContractOrRecover should not be called in this test");
+      },
+      applyUiPhaseByStep: () => {},
+      ensureUiStrings: async (state: Record<string, unknown>) => state as any,
+      buildContractId: () => "",
+    },
+    step0: {
+      ensureStartState: async () => {
+        throw new Error("ensureStartState should not be called in this test");
+      },
+      parseStep0Final: () => ({ name: "Mindd" }),
+      inferStep0SeedFromInitialMessage: () => "",
+      step0ReadinessQuestion: () => "",
+      step0CardDescForState: () => "",
+      step0QuestionForState: () => "",
+    },
+    presentation: {
+      generatePresentationAssets: () => {
+        throw new Error("generatePresentationAssets should not be called in this test");
+      },
+      uiStringFromStateMap: (_state: Record<string, unknown>, _key: string, fallback: string) => fallback,
+      uiDefaultString: (_key: string, fallback = "") => fallback,
+    },
+    specialist: {
+      callSpecialistStrictSafe: async ({ state, userMessage }: { state: Record<string, unknown>; userMessage: string }) => {
+        calls.push({ state: { ...state }, userMessage });
+        return {
+          ok: true,
+          value: {
+            specialistResult: {
+              action: "ASK",
+              message: "Gebaseerd op je scores heb ik een droom geformuleerd.",
+              question: "",
+              refined_formulation: "Mindd droomt van een wereld waarin vertrouwen de basis vormt voor keuzes en verbinding.",
+              dream: "Mindd droomt van een wereld waarin vertrouwen de basis vormt voor keuzes en verbinding.",
+              suggest_dreambuilder: "true",
+              statements: state.dream_builder_statements,
+              user_state: "ok",
+              wants_recap: false,
+              is_offtopic: false,
+              user_intent: "STEP_INPUT",
+              meta_topic: "NONE",
+              scoring_phase: "false",
+              clusters: [],
+            },
+            attempts: 1,
+          },
+        };
+      },
+      buildRoutingContext: () => ({}),
+      rememberLlmCall: () => {},
+    },
+    response: {
+      attachRegistryPayload: (payload: Record<string, unknown>) => payload,
+      finalizeResponse: (payload: Record<string, unknown>) => payload,
+      turnResponseEngine: {
+        renderValidateRecover: (params: { state: any; specialist: any }) => ({
+          ok: true,
+          value: {
+            state: params.state,
+            specialist: params.specialist,
+            renderedStatus: "incomplete_output",
+            actionCodes: [],
+            renderedActions: [],
+            contractMeta: {
+              contractId: "dream::incomplete_output::DREAM_MENU_INTRO",
+              contractVersion: "1",
+              textKeys: [],
+            },
+          },
+        }),
+        attachAndFinalize: (params: { state: any; specialist: any }) => ({
+          ok: true,
+          tool: "run_step",
+          specialist: params.specialist,
+          state: params.state,
+        }),
+        finalize: (payload: Record<string, unknown>) => payload,
+      },
+    },
+    suggestions: {
+      pickDreamSuggestionFromPreviousState: () => "",
+      pickDreamCandidateFromState: () => "",
+      pickRoleSuggestionFromPreviousState: () => "",
+    },
+    i18n: {
+      bumpUiI18nCounter: () => {},
+    },
+  };
+
+  const helpers = createRunStepRouteHelpers<any>(ports);
+  const context: any = {
+    routing: {
+      userMessage: "Formuleer mijn droom voor mij op basis van wat ik belangrijk vind.",
+      actionCodeRaw: "ACTION_DREAM_EXPLAINER_SUBMIT_SCORES",
+      responseUiFlags: null,
+      inputMode: "widget",
+      wordingChoiceEnabled: true,
+      languageResolvedThisTurn: true,
+      isBootstrapPollCall: false,
+      motivationQuotesEnabled: true,
+    },
+    rendering: {
+      uiI18nTelemetry: {},
+      lang: "nl",
+      ensureUiStrings: async (state: Record<string, unknown>) => state as any,
+    },
+    state: {
+      state: {
+        current_step: "dream",
+        active_specialist: "DreamExplainer",
+        __dream_runtime_mode: "builder_scoring",
+        dream_builder_statements: statements,
+        last_specialist_result: {
+          statements,
+          clusters: [
+            { theme: "Vertrouwen", statement_indices: [0, 1] },
+            { theme: "Overig", statement_indices: Array.from({ length: 19 }, (_, index) => index + 2) },
+          ],
+        },
+      },
+      transientPendingScores: submittedScores,
+      submittedUserText: "",
+      rawNormalized: "",
+      pristineAtEntry: false,
+    },
+    specialist: {
+      model: "gpt-test",
+      decideOrchestration: () => ({} as any),
+      rememberLlmCall: () => {},
+    },
+  };
+
+  const response = await helpers.handleSpecialRouteRegistry(context);
+  assert.ok(response, "expected dream_submit_scores route response");
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0]?.state.dream_scores, submittedScores);
+  assert.deepEqual(calls[0]?.state.dream_top_clusters, [{ theme: "Vertrouwen", average: 9 }]);
+  assert.deepEqual(calls[0]?.state.dream_top_cluster_details, [
+    {
+      theme: "Vertrouwen",
+      average: 9,
+      top_statement_indices: [0, 1],
+      top_statements: ["Statement 1", "Statement 2"],
+    },
+  ]);
+
+  const state = (response as Record<string, any>).state || {};
+  assert.equal(String(state.__dream_runtime_mode || ""), "builder_refine");
+  assert.equal(String(state.dream_awaiting_direction || ""), "false");
+  assert.deepEqual(state.dream_scores, submittedScores);
+  assert.equal(
+    String((state.last_specialist_result || {}).refined_formulation || ""),
+    "Mindd droomt van een wereld waarin vertrouwen de basis vormt voor keuzes en verbinding."
+  );
+  assert.equal(
+    String((state.last_specialist_result || {}).dream || ""),
+    "Mindd droomt van een wereld waarin vertrouwen de basis vormt voor keuzes en verbinding."
+  );
+});
+
 test("dream_submit_scores rejects incomplete score matrices before Dream formulation", async () => {
   const calls: Array<{ state: Record<string, unknown>; userMessage: string }> = [];
   const statements = Array.from({ length: 20 }, (_, index) => `Statement ${index + 1}`);

@@ -73,6 +73,34 @@ import { getIsLoading, setSessionStarted, setSessionWelcomeShown } from "./ui_st
     const resolved = resolveWidgetPayload(data);
     return resolved.result && typeof resolved.result === "object" ? resolved.result : {};
   }
+  function latestPendingInteraction() {
+    const result = latestWidgetResult();
+    const ui = result && typeof result.ui === "object" ? result.ui : {};
+    const pending = ui && typeof ui.pending_interaction === "object" ? ui.pending_interaction : {};
+    const kind = String(pending.kind || "").trim().toLowerCase();
+    const status = String(pending.status || "").trim().toLowerCase();
+    if (kind !== "wording_choice" || status !== "pending") return null;
+    const allowedActions = Array.isArray(pending.allowed_actions) ? pending.allowed_actions : [];
+    return {
+      id: String(pending.id || "").trim(),
+      allowedActions
+    };
+  }
+  function pendingInteractionAction(actionId) {
+    const pending = latestPendingInteraction();
+    if (!pending) return null;
+    for (const action of pending.allowedActions) {
+      if (!action || typeof action !== "object") continue;
+      if (String(action.id || "").trim() !== String(actionId || "").trim()) continue;
+      const actionCode = String(action.action_code || "").trim();
+      if (!actionCode) continue;
+      return {
+        interactionId: pending.id,
+        actionCode
+      };
+    }
+    return null;
+  }
   function actionRoleForStateKey(stateKey) {
     const normalized = String(stateKey || "").trim();
     const roleMap = {
@@ -313,30 +341,34 @@ import { getIsLoading, setSessionStarted, setSessionWelcomeShown } from "./ui_st
   if (wordingChoicePickUser) {
     wordingChoicePickUser.addEventListener("click", () => {
       if (getIsLoading()) return;
-      const actionCode = actionCodeFromState("ui_action_wording_pick_user");
-      if (!actionCode) {
-        console.warn("[ui_action_missing]", { state_key: "ui_action_wording_pick_user" });
+      const pendingAction = pendingInteractionAction("pick_user");
+      if (!pendingAction?.actionCode || !pendingAction?.interactionId) {
+        console.warn("[ui_pending_interaction_missing]", { action_id: "pick_user" });
         setInlineNotice(
           uiStringFromContract("error.contract.body")
         );
         return;
       }
-      callRunStep(actionCode);
+      callRunStep(pendingAction.actionCode, {
+        __submitted_pending_interaction_id: pendingAction.interactionId
+      });
     });
   }
   var wordingChoicePickSuggestion = document.getElementById("wordingChoicePickSuggestion");
   if (wordingChoicePickSuggestion) {
     wordingChoicePickSuggestion.addEventListener("click", () => {
       if (getIsLoading()) return;
-      const actionCode = actionCodeFromState("ui_action_wording_pick_suggestion");
-      if (!actionCode) {
-        console.warn("[ui_action_missing]", { state_key: "ui_action_wording_pick_suggestion" });
+      const pendingAction = pendingInteractionAction("pick_suggestion");
+      if (!pendingAction?.actionCode || !pendingAction?.interactionId) {
+        console.warn("[ui_pending_interaction_missing]", { action_id: "pick_suggestion" });
         setInlineNotice(
           uiStringFromContract("error.contract.body")
         );
         return;
       }
-      callRunStep(actionCode);
+      callRunStep(pendingAction.actionCode, {
+        __submitted_pending_interaction_id: pendingAction.interactionId
+      });
     });
   }
   var btnStart = document.getElementById("btnStart");

@@ -5,6 +5,42 @@ import type {
   WordingChoiceUiPayload,
 } from "./run_step_runtime_action_helpers.js";
 
+export type PendingInteractionAllowedAction = {
+  id: string;
+  action_code: string;
+  label: string;
+  label_key: string;
+  role: string;
+  surface: string;
+  primary: boolean;
+};
+
+export type PendingInteractionWordingChoiceRenderModel = {
+  mode: "text" | "list";
+  variant: "default" | "clarify_dual" | "grouped_list_units";
+  instruction: string;
+  feedback_reason_text: string;
+  user_label: string;
+  suggestion_label: string;
+  user_text: string;
+  suggestion_text: string;
+  user_items: string[];
+  suggestion_items: string[];
+  retained_heading: string;
+  retained_items: string[];
+};
+
+export type PendingInteractionPayload = {
+  version: string;
+  id: string;
+  kind: "wording_choice";
+  status: "pending";
+  source: "server_contract";
+  response_contract_id: string;
+  allowed_actions: PendingInteractionAllowedAction[];
+  render_model: PendingInteractionWordingChoiceRenderModel;
+};
+
 export type RunStepBase = {
   tool: "run_step";
   current_step_id: string;
@@ -27,6 +63,7 @@ export type RunStepBase = {
     view?: UiViewPayload;
     flags: Record<string, boolean | string>;
     wording_choice?: WordingChoiceUiPayload;
+    pending_interaction?: PendingInteractionPayload;
   };
   presentation_assets?: {
     pdf_url: string;
