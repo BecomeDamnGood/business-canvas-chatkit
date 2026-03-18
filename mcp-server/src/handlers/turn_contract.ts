@@ -124,7 +124,8 @@ function ensureUnifiedUiFeedbackContract(response: RunStepContractResponse): voi
   const uiContent = toRecord(ui.content);
   const synthesizedFromWordingChoice = synthesizeUiFeedbackContractFromWordingChoice(
     ui.wording_choice,
-    ui.flags
+    ui.flags,
+    response.specialist
   );
   if (synthesizedFromWordingChoice) {
     ui.feedback_contract = synthesizedFromWordingChoice;

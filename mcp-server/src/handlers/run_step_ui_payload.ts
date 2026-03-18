@@ -4,7 +4,10 @@ import { MENU_LABEL_DEFAULTS, labelKeyForMenuAction } from "../core/menu_contrac
 import { NEXT_MENU_BY_ACTIONCODE, UI_CONTRACT_VERSION } from "../core/ui_contract_matrix.js";
 import { parseUiContractMenuForStep, parseUiContractStatusForStep } from "../core/ui_contract_id.js";
 import { currentTurnSupportMode } from "../core/stuck_support.js";
-import { synthesizeUiFeedbackContractFromWordingChoice } from "../core/ui_feedback_contract.js";
+import {
+  resolveWordingChoiceFeedbackSource,
+  synthesizeUiFeedbackContractFromWordingChoice,
+} from "../core/ui_feedback_contract.js";
 import { DREAM_STEP_ID } from "../steps/dream.js";
 import type { RenderedAction, UiContentPayload } from "../contracts/ui_actions.js";
 import type { TurnOutputStatus } from "../core/turn_policy_renderer.js";
@@ -306,50 +309,6 @@ function normalizeUiFeedbackContract(raw: unknown): Record<string, unknown> | un
   };
 }
 
-function resolveWordingChoiceForFeedbackContract(params: {
-  wordingChoice: WordingChoiceUiPayload | null | undefined;
-  specialist: Record<string, unknown>;
-}): WordingChoiceUiPayload | null {
-  const wordingChoice = params.wordingChoice;
-  if (!wordingChoice || wordingChoice.enabled !== true) return wordingChoice || null;
-  const specialist = params.specialist || {};
-  const userText = String(
-    wordingChoice.user_text ||
-      specialist.wording_choice_user_normalized ||
-      specialist.wording_choice_user_raw ||
-      ""
-  ).trim();
-  const suggestionText = String(
-    wordingChoice.suggestion_text ||
-      specialist.wording_choice_agent_current ||
-      specialist.refined_formulation ||
-      ""
-  ).trim();
-  const userItems =
-    Array.isArray(wordingChoice.user_items) && wordingChoice.user_items.length > 0
-      ? wordingChoice.user_items
-      : (
-        Array.isArray(specialist.wording_choice_user_items)
-          ? (specialist.wording_choice_user_items as unknown[]).map((value) => String(value || "").trim()).filter(Boolean)
-          : []
-      );
-  const suggestionItems =
-    Array.isArray(wordingChoice.suggestion_items) && wordingChoice.suggestion_items.length > 0
-      ? wordingChoice.suggestion_items
-      : (
-        Array.isArray(specialist.wording_choice_suggestion_items)
-          ? (specialist.wording_choice_suggestion_items as unknown[]).map((value) => String(value || "").trim()).filter(Boolean)
-          : []
-      );
-  return {
-    ...wordingChoice,
-    user_text: userText,
-    suggestion_text: suggestionText,
-    user_items: userItems,
-    suggestion_items: suggestionItems,
-  };
-}
-
 function normalizeDreamBuilderCompareContractFromFeedback(raw: unknown): DreamBuilderCompareContractPayload | undefined {
   const feedback = normalizeUiFeedbackContract(raw);
   if (!feedback) return undefined;
@@ -412,11 +371,6 @@ function normalizeDreamBuilderCompareContractFromSpecialist(
   const segments = Array.isArray(specialist.__dream_builder_compare_segments)
     ? (specialist.__dream_builder_compare_segments as Array<Record<string, unknown>>)
     : [];
-  const retainedItems = segments.flatMap((segment) =>
-    String(segment?.kind || "").trim() === "retained" && Array.isArray(segment.items)
-      ? (segment.items as unknown[]).map((value) => String(value || "").trim()).filter(Boolean)
-      : []
-  );
   const normalized: DreamBuilderCompareContractPayload = {
     kind,
     current_items: currentItems,
@@ -427,15 +381,10 @@ function normalizeDreamBuilderCompareContractFromSpecialist(
   const rationale = String(specialist.__dream_builder_compare_rationale || "").trim();
   const currentLabel = String(specialist.__dream_builder_compare_current_label || "").trim();
   const suggestedLabel = String(specialist.__dream_builder_compare_suggested_label || "").trim();
-  const retainedHeading = String(specialist.__dream_builder_compare_retained_heading || "").trim();
   const instruction = String(specialist.__dream_builder_compare_instruction || "").trim();
   if (rationale) normalized.rationale = rationale;
   if (currentLabel) normalized.current_label = currentLabel;
   if (suggestedLabel) normalized.suggested_label = suggestedLabel;
-  if (retainedItems.length > 0) {
-    if (retainedHeading) normalized.retained_heading = retainedHeading;
-    normalized.retained_items = retainedItems;
-  }
   normalized.instruction = instruction || "Choose the version that fits best.";
   return normalized;
 }
@@ -852,10 +801,10 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
       effectiveStepId === DREAM_STEP_ID &&
       dreamBuilderFlowActive &&
       String((specialist as Record<string, unknown>).__dream_builder_compare_pending || "").trim() === "true";
-    const resolvedWordingChoiceForFeedbackContract = resolveWordingChoiceForFeedbackContract({
-      wordingChoice: wordingChoiceOverride,
-      specialist: (specialist || {}) as Record<string, unknown>,
-    });
+    const resolvedWordingChoiceForFeedbackContract = resolveWordingChoiceFeedbackSource(
+      wordingChoiceOverride,
+      (specialist || {}) as Record<string, unknown>
+    ) as WordingChoiceUiPayload | null;
     const explicitFeedbackContractPayload = normalizeUiFeedbackContract(
       (specialist as Record<string, unknown>)?.ui_feedback_contract
     );

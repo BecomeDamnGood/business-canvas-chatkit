@@ -522,6 +522,58 @@ test("feedback contract derives the single-value compare family from wording-cho
   );
 });
 
+test("final response feedback contract backfills current_value from specialist wording-choice state when legacy user_text is blank", () => {
+  const userInput = "Dit gaat over dat mensen het beu zijn om verkeerd voorgelicht te worden.";
+  const canonical =
+    "Mindd droomt van een wereld waarin mensen zich zeker voelen omdat ze eerlijk geinformeerd worden.";
+
+  const response = finalizeResponseContractInternals(
+    {
+      ok: true,
+      current_step_id: "dream",
+      text: "",
+      prompt: "",
+      specialist: {
+        wording_choice_user_normalized: userInput,
+        wording_choice_agent_current: canonical,
+      },
+      state: {
+        started: "true",
+        current_step: "dream",
+      } as any,
+      ui: {
+        view: {
+          mode: "interactive",
+          variant: "wording_choice",
+        },
+        wording_choice: {
+          enabled: true,
+          mode: "text",
+          feedback_reason_text:
+            "Je input benoemt het probleem van verkeerde voorlichting, maar een Droom vraagt om een positief toekomstbeeld met duidelijk menselijk effect.",
+          user_label: "Dit is jouw input",
+          suggestion_label: "Dit zou mijn suggestie zijn",
+          user_text: "",
+          suggestion_text: canonical,
+          instruction: "Klik alsjeblieft wat het beste bij je past.",
+        },
+      },
+    } as any,
+    {
+      applyUiClientActionContract: () => {},
+      parseMenuFromContractIdForStep: () => "",
+      labelKeysForMenuActionCodes: () => [],
+      onUiParityError: () => {},
+      attachRegistryPayload: (payload) => payload,
+    }
+  );
+
+  const feedbackContract = (((response.ui || {}) as Record<string, unknown>).feedback_contract || {}) as Record<string, unknown>;
+  assert.equal(String(feedbackContract.kind || ""), "single_value_compare");
+  assert.equal(String(feedbackContract.current_value || ""), userInput);
+  assert.equal(String(feedbackContract.suggested_value || ""), canonical);
+});
+
 test("feedback contract keeps the canonical single-value suggestion family when the server publishes it explicitly", () => {
   const response = finalizeResponseContractInternals(
     {

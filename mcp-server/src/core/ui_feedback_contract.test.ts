@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   parseRetainedInstruction,
+  resolveWordingChoiceFeedbackSource,
   synthesizeUiFeedbackContractFromWordingChoice,
 } from "./ui_feedback_contract.js";
 
@@ -60,4 +61,31 @@ test("synthesizeUiFeedbackContractFromWordingChoice prefers feedback_reason_text
     retained_items: ["Eerder punt 1", "Eerder punt 2"],
     instruction: "Kies de versie die het beste past bij het resterende verschil.",
   });
+});
+
+test("resolveWordingChoiceFeedbackSource backfills missing compare fields from specialist wording-choice state", () => {
+  const resolved = resolveWordingChoiceFeedbackSource(
+    {
+      enabled: true,
+      mode: "text",
+      user_text: "",
+      suggestion_text: "",
+      user_items: [],
+      suggestion_items: [],
+    },
+    {
+      wording_choice_user_normalized: "Dit gaat over dat mensen het beu zijn om verkeerd voorgelicht te worden.",
+      wording_choice_agent_current:
+        "Mindd droomt van een wereld waarin mensen zich zeker voelen omdat ze eerlijk geinformeerd worden.",
+    }
+  );
+
+  assert.equal(
+    String(resolved.user_text || ""),
+    "Dit gaat over dat mensen het beu zijn om verkeerd voorgelicht te worden."
+  );
+  assert.equal(
+    String(resolved.suggestion_text || ""),
+    "Mindd droomt van een wereld waarin mensen zich zeker voelen omdat ze eerlijk geinformeerd worden."
+  );
 });

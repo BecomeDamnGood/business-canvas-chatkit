@@ -888,7 +888,7 @@ test("dream_submit_scores immediately transitions into Dream formulation with st
   const helpers = createRunStepRouteHelpers<any>(ports);
   const context: any = {
     routing: {
-      userMessage: "ACTION_DREAM_EXPLAINER_SUBMIT_SCORES",
+      userMessage: "Formuleer mijn droom voor mij op basis van wat ik belangrijk vind.",
       actionCodeRaw: "ACTION_DREAM_EXPLAINER_SUBMIT_SCORES",
       responseUiFlags: null,
       inputMode: "widget",

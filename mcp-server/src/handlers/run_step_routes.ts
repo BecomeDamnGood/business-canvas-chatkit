@@ -105,14 +105,20 @@ const SubmitScoresPayloadSchema = z.object({
 
 function parseSubmitScoresPayload(
   userMessage: string,
-  transientPendingScores: number[][] | null
+  transientPendingScores: number[][] | null,
+  actionCodeRaw = ""
 ): number[][] | null {
-  if (!String(userMessage || "").trim()) return null;
-  if (userMessage === "ACTION_DREAM_EXPLAINER_SUBMIT_SCORES") {
+  const normalizedUserMessage = String(userMessage || "").trim();
+  const normalizedActionCode = String(actionCodeRaw || "").trim().toUpperCase();
+  if (
+    normalizedActionCode === "ACTION_DREAM_EXPLAINER_SUBMIT_SCORES" ||
+    normalizedUserMessage === "ACTION_DREAM_EXPLAINER_SUBMIT_SCORES"
+  ) {
     return Array.isArray(transientPendingScores) ? transientPendingScores : null;
   }
+  if (!normalizedUserMessage) return null;
   try {
-    const parsed = JSON.parse(userMessage) as unknown;
+    const parsed = JSON.parse(normalizedUserMessage) as unknown;
     const parsedPayload = SubmitScoresPayloadSchema.safeParse(parsed);
     if (!parsedPayload.success) return null;
     return parsedPayload.data.scores;
@@ -722,9 +728,20 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
       canHandle: (context) =>
         String((context.state as Record<string, unknown>).current_step || "") === deps.dreamStepId &&
         String((context.state as Record<string, unknown>).active_specialist || "") === deps.dreamExplainerSpecialist &&
-        String(context.userMessage || "").trim().length > 0,
+        (
+          String(context.actionCodeRaw || "").trim().toUpperCase() === "ACTION_DREAM_EXPLAINER_SUBMIT_SCORES" ||
+          parseSubmitScoresPayload(
+            context.userMessage,
+            context.transientPendingScores,
+            context.actionCodeRaw
+          ) !== null
+        ),
       handle: async (context) => {
-        const parsedScores = parseSubmitScoresPayload(context.userMessage, context.transientPendingScores);
+        const parsedScores = parseSubmitScoresPayload(
+          context.userMessage,
+          context.transientPendingScores,
+          context.actionCodeRaw
+        );
         if (!parsedScores || parsedScores.length === 0) return null;
 
         const lastResult = asRecord((context.state as Record<string, unknown>).last_specialist_result || {});

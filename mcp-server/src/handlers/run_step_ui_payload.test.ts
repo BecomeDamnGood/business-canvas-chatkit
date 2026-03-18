@@ -589,12 +589,84 @@ test("attachRegistryPayload preserves compare rationale and retained items from 
       suggested_value: "Over 5 tot 10 jaar zullen meer mensen hulp zoeken voor problemen die er echt toe doen.",
       current_items: ["I want to help people solve a problem they truly care about."],
       suggested_items: ["Over 5 tot 10 jaar zullen meer mensen hulp zoeken voor problemen die er echt toe doen."],
-      retained_heading: "Deze punten blijven al in de definitieve lijst:",
-      retained_items: ["Eerder punt 1", "Eerder punt 2"],
       instruction: "Kies de versie die het beste past bij het resterende verschil.",
     },
   });
   assert.equal("wording_choice" in (payload.ui || {}), false);
+});
+
+test("attachRegistryPayload does not duplicate committed Dream Builder statements inside compare contracts", () => {
+  const helpers = buildHelpers();
+  const payload = helpers.attachRegistryPayload(
+    {
+      text: "",
+      prompt: "",
+      current_step_id: "dream",
+      state: {
+        current_step: "dream",
+        active_specialist: "DreamExplainer",
+        __dream_runtime_mode: "builder_collect",
+        dream_builder_statements: [
+          "Over 5 tot 10 jaar zullen meer mensen streven naar werk dat een positieve impact heeft op het leven van anderen.",
+          "De samenleving zal meer waarde hechten aan initiatieven die generaties overstijgen en blijvende betekenis hebben.",
+        ],
+      } as any,
+    },
+    {
+      ui_contract_id: "dream:incomplete_output:DREAM_EXPLAINER_MENU_SWITCH_SELF:v1",
+      __dream_builder_compare_pending: "true",
+      __dream_builder_compare_kind: "batch_rewrite_compare",
+      __dream_builder_compare_rationale: "Dream Builder vraagt hier om een bredere maatschappelijke verschuiving.",
+      __dream_builder_compare_current_label: "Dit is jouw input",
+      __dream_builder_compare_suggested_label: "Dit zou mijn suggestie zijn",
+      __dream_builder_compare_retained_heading: "Deze punten blijven al in de definitieve lijst:",
+      __dream_builder_compare_current_items: [
+        "I want to help people solve a problem they truly care about.",
+      ],
+      __dream_builder_compare_suggested_items: [
+        "Over 5 tot 10 jaar zullen meer mensen problemen willen oplossen die er echt toe doen.",
+      ],
+      __dream_builder_compare_instruction: "Kies de versie die het beste past.",
+      __dream_builder_compare_segments: [
+        {
+          kind: "retained",
+          items: [
+            "Over 5 tot 10 jaar zullen meer mensen streven naar werk dat een positieve impact heeft op het leven van anderen.",
+            "De samenleving zal meer waarde hechten aan initiatieven die generaties overstijgen en blijvende betekenis hebben.",
+          ],
+        },
+        { kind: "unit", unit_id: "unit_1" },
+      ],
+    },
+    { require_wording_pick: true }
+  );
+
+  assert.deepEqual(payload.ui?.dream_builder_contract, {
+    version: "2026-03-17.dream_builder_contract.v2",
+    phase: "compare",
+    statements: [
+      "Over 5 tot 10 jaar zullen meer mensen streven naar werk dat een positieve impact heeft op het leven van anderen.",
+      "De samenleving zal meer waarde hechten aan initiatieven die generaties overstijgen en blijvende betekenis hebben.",
+    ],
+    statements_visible: true,
+    body_mode: "none",
+    compare: {
+      kind: "batch_rewrite_compare",
+      rationale: "Dream Builder vraagt hier om een bredere maatschappelijke verschuiving.",
+      current_label: "Dit is jouw input",
+      suggested_label: "Dit zou mijn suggestie zijn",
+      current_value: "I want to help people solve a problem they truly care about.",
+      suggested_value:
+        "Over 5 tot 10 jaar zullen meer mensen problemen willen oplossen die er echt toe doen.",
+      current_items: ["I want to help people solve a problem they truly care about."],
+      suggested_items: [
+        "Over 5 tot 10 jaar zullen meer mensen problemen willen oplossen die er echt toe doen.",
+      ],
+      instruction: "Kies de versie die het beste past.",
+    },
+  });
+  assert.equal("retained_heading" in ((payload.ui?.dream_builder_contract?.compare || {}) as Record<string, unknown>), false);
+  assert.equal("retained_items" in ((payload.ui?.dream_builder_contract?.compare || {}) as Record<string, unknown>), false);
 });
 
 test("attachRegistryPayload keeps Dream single-value ui.content when stale canonical wording-choice state is present", () => {

@@ -52,11 +52,50 @@ export function parseRetainedInstruction(rawInstruction: unknown): {
   return { retainedHeading, retainedItems, instructionText: instructionText || instruction };
 }
 
+export function resolveWordingChoiceFeedbackSource(
+  wordingChoiceRaw: unknown,
+  specialistRaw?: unknown
+): Record<string, unknown> {
+  const wordingChoice = toRecord(wordingChoiceRaw);
+  if (Object.keys(wordingChoice).length === 0) return wordingChoice;
+
+  const specialist = toRecord(specialistRaw);
+  const userText = String(
+    wordingChoice.user_text ||
+      specialist.wording_choice_user_normalized ||
+      specialist.wording_choice_user_raw ||
+      ""
+  ).trim();
+  const suggestionText = String(
+    wordingChoice.suggestion_text ||
+      specialist.wording_choice_agent_current ||
+      specialist.refined_formulation ||
+      ""
+  ).trim();
+  const userItems =
+    normalizeStringArray(wordingChoice.user_items).length > 0
+      ? normalizeStringArray(wordingChoice.user_items)
+      : normalizeStringArray(specialist.wording_choice_user_items);
+  const suggestionItems =
+    normalizeStringArray(wordingChoice.suggestion_items).length > 0
+      ? normalizeStringArray(wordingChoice.suggestion_items)
+      : normalizeStringArray(specialist.wording_choice_suggestion_items);
+
+  return {
+    ...wordingChoice,
+    user_text: userText,
+    suggestion_text: suggestionText,
+    user_items: userItems,
+    suggestion_items: suggestionItems,
+  };
+}
+
 export function synthesizeUiFeedbackContractFromWordingChoice(
   wordingChoiceRaw: unknown,
-  uiFlagsRaw?: unknown
+  uiFlagsRaw?: unknown,
+  specialistRaw?: unknown
 ): Record<string, unknown> | undefined {
-  const wordingChoice = toRecord(wordingChoiceRaw);
+  const wordingChoice = resolveWordingChoiceFeedbackSource(wordingChoiceRaw, specialistRaw);
   const uiFlags = toRecord(uiFlagsRaw);
   const wordingEnabled =
     wordingChoice.enabled === true ||
