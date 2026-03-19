@@ -182,7 +182,7 @@ export function createRunStepRuntimeStateHelpers(deps: CreateRunStepRuntimeState
     return base ? `${base}:` : "";
   }
 
-  function wordingStepLabelKey(stepId: string): string {
+  function compareStepLabelKey(stepId: string): string {
     if (stepId === deps.dreamStepId) return "offtopic.step.dream";
     if (stepId === deps.purposeStepId) return "offtopic.step.purpose";
     if (stepId === deps.bigwhyStepId) return "offtopic.step.bigwhy";
@@ -234,7 +234,7 @@ export function createRunStepRuntimeStateHelpers(deps: CreateRunStepRuntimeState
       const source = String(sourceRaw || "").trim();
       if (
         source === "user_input" ||
-        source === "wording_pick" ||
+        source === "compare_pick" ||
         source === "action_route" ||
         source === "system_generated"
       ) {
@@ -250,7 +250,7 @@ export function createRunStepRuntimeStateHelpers(deps: CreateRunStepRuntimeState
     const source = String(map[stepId] || "").trim();
     if (
       source === "user_input" ||
-      source === "wording_pick" ||
+      source === "compare_pick" ||
       source === "action_route" ||
       source === "system_generated"
     ) {
@@ -295,36 +295,36 @@ export function createRunStepRuntimeStateHelpers(deps: CreateRunStepRuntimeState
         ? { ...((next as any).last_specialist_result as Record<string, unknown>) }
         : null;
     if (!last) return next;
-    const targetField = String((last as any).wording_choice_target_field || "").trim();
+    const targetField = String((last as any).compare_target_field || "").trim();
     const currentStep = String((next as any).current_step || "").trim();
-    const shouldResetWordingState =
+    const shouldResetCompareState =
       targetField === stepId ||
       (targetField === "" && currentStep === stepId) ||
-      String((last as any).wording_choice_pending || "").trim() === "true";
-    if (!shouldResetWordingState) return next;
+      String((last as any).compare_pending || "").trim() === "true";
+    if (!shouldResetCompareState) return next;
     const resetLast = {
       ...last,
-      wording_choice_pending: "false",
-      wording_choice_selected: "",
-      wording_choice_user_raw: "",
-      wording_choice_user_normalized: "",
-      wording_choice_user_items: [],
-      wording_choice_suggestion_items: [],
-      wording_choice_base_items: [],
-      wording_choice_list_semantics: "delta",
-      wording_choice_agent_current: "",
-      wording_choice_mode: "",
-      wording_choice_target_field: "",
-      wording_choice_presentation: "",
-      wording_choice_variant: "",
-      wording_choice_user_label: "",
-      wording_choice_suggestion_label: "",
-      wording_choice_compare_mode: "",
-      wording_choice_compare_cursor: "",
-      wording_choice_compare_units: [],
-      wording_choice_compare_segments: [],
-      wording_choice_user_variant_semantics: "",
-      wording_choice_user_variant_stepworthy: "",
+      compare_pending: "false",
+      compare_selected: "",
+      compare_user_raw: "",
+      compare_user_normalized: "",
+      compare_user_items: [],
+      compare_suggestion_items: [],
+      compare_base_items: [],
+      compare_list_semantics: "delta",
+      compare_agent_current: "",
+      compare_mode: "",
+      compare_target_field: "",
+      compare_presentation: "",
+      compare_variant: "",
+      compare_user_label: "",
+      compare_suggestion_label: "",
+      compare_compare_mode: "",
+      compare_compare_cursor: "",
+      compare_compare_units: [],
+      compare_compare_segments: [],
+      compare_user_variant_semantics: "",
+      compare_user_variant_stepworthy: "",
       feedback_reason_key: "",
       feedback_reason_text: "",
       pending_suggestion_intent: "",
@@ -469,8 +469,8 @@ export function createRunStepRuntimeStateHelpers(deps: CreateRunStepRuntimeState
     return false;
   }
 
-  function wordingStepLabel(stepId: string, state?: CanvasState | null): string {
-    const key = wordingStepLabelKey(stepId);
+  function compareStepLabel(stepId: string, state?: CanvasState | null): string {
+    const key = compareStepLabelKey(stepId);
     if (key) {
       const fallback = deps.uiDefaultString(key);
       const localized = localizedUiString(state || null, key, fallback);
@@ -479,7 +479,7 @@ export function createRunStepRuntimeStateHelpers(deps: CreateRunStepRuntimeState
     return String(stepId || "").trim();
   }
 
-  function wordingCompanyName(state: CanvasState): string {
+  function compareCompanyName(state: CanvasState): string {
     const fromState = String((state as any)?.business_name || "").trim();
     if (fromState && fromState !== "TBD") return fromState;
 
@@ -497,7 +497,7 @@ export function createRunStepRuntimeStateHelpers(deps: CreateRunStepRuntimeState
     );
   }
 
-  function wordingSelectionValue(stepId: string, state: CanvasState, selectedValue = ""): string {
+  function compareSelectionValue(stepId: string, state: CanvasState, selectedValue = ""): string {
     const normalizeBulletConsistencySelectionValue = (rawValue: string): string => {
       const value = String(rawValue || "").trim();
       if (!value || !isBulletConsistencyStep(stepId)) return value;
@@ -520,7 +520,7 @@ export function createRunStepRuntimeStateHelpers(deps: CreateRunStepRuntimeState
     const field = fieldForStep(stepId);
     const fieldValue = field ? String(last[field] || "").trim() : "";
     const refined = String(last.refined_formulation || "").trim();
-    const wordingValue = String(last.wording_choice_agent_current || "").trim();
+    const wordingValue = String(last.compare_agent_current || "").trim();
     const provisional = provisionalValueForStep(state, stepId);
     const finalField = FINAL_FIELD_BY_STEP_ID[stepId] || "";
     const finalValue = finalField ? String((state as any)?.[finalField] || "").trim() : "";
@@ -529,7 +529,7 @@ export function createRunStepRuntimeStateHelpers(deps: CreateRunStepRuntimeState
     return normalizeBulletConsistencySelectionValue(resolved);
   }
 
-  function wordingSelectionMessage(
+  function compareSelectionMessage(
     stepId: string,
     state: CanvasState,
     activeSpecialist = "",
@@ -537,10 +537,10 @@ export function createRunStepRuntimeStateHelpers(deps: CreateRunStepRuntimeState
   ): string {
     const specialist = String(activeSpecialist || (state as any)?.active_specialist || "").trim();
     if (stepId === deps.dreamStepId && specialist === deps.dreamExplainerSpecialist) return "";
-    const currentValue = wordingSelectionValue(stepId, state, selectedValue);
+    const currentValue = compareSelectionValue(stepId, state, selectedValue);
     if (stepId === deps.productsservicesStepId) {
       const items = productsServicesItemsFromValue(currentValue);
-      const company = wordingCompanyName(state);
+      const company = compareCompanyName(state);
       const heading = productsServicesCurrentHeading(state, company, items);
       if (heading && items.length > 0) {
         return `${heading}\n${items.map((line) => `• ${line}`).join("\n")}`.trim();
@@ -553,7 +553,7 @@ export function createRunStepRuntimeStateHelpers(deps: CreateRunStepRuntimeState
       const items = deps.parseListItems(currentValue)
         .map((line) => String(line || "").trim())
         .filter(Boolean);
-      const company = wordingCompanyName(state);
+      const company = compareCompanyName(state);
       const heading = rulesOfTheGameCurrentHeading(state, company);
       if (heading && items.length > 0) {
         return `${heading}\n${items.map((line) => `• ${line}`).join("\n")}`.trim();
@@ -568,8 +568,8 @@ export function createRunStepRuntimeStateHelpers(deps: CreateRunStepRuntimeState
       deps.uiDefaultString("offtopic.current.template")
     );
     const headingRaw = String(template || "")
-      .replace(/\{0\}/g, wordingStepLabel(stepId, state))
-      .replace(/\{1\}/g, wordingCompanyName(state))
+      .replace(/\{0\}/g, compareStepLabel(stepId, state))
+      .replace(/\{1\}/g, compareCompanyName(state))
       .trim();
     const headingBase = headingRaw.replace(/[.!?]+$/g, "").replace(/\s*:\s*$/g, "").trim();
     const heading = headingBase ? `${headingBase}:` : headingRaw;
@@ -692,7 +692,7 @@ export function createRunStepRuntimeStateHelpers(deps: CreateRunStepRuntimeState
             "- For rulesofthegame, if block_reason_codes is not empty: do NOT open a new suggestion or picker flow unless the user explicitly asked for one.",
             "- Explain clearly why proceed is blocked based on the reason codes and the current visible rules.",
             "- Ask only for the missing correction needed to make proceed possible.",
-            "- Reason code meanings: rules_min_count=fewer than 3 valid rules; rules_max_count=more than 5 rules; rules_pending_choice=an unresolved wording choice exists; rules_missing_accepted_output=visible rules are not yet accepted as the current set.",
+            "- Reason code meanings: rules_min_count=fewer than 3 valid rules; rules_max_count=more than 5 rules; rules_pending_choice=an unresolved compare choice exists; rules_missing_accepted_output=visible rules are not yet accepted as the current set.",
           ].join("\n")
         : "";
     const currentStepId = String((state as any).current_step || "").trim();
@@ -753,9 +753,9 @@ ${stuckSupportLines}
     clearStepSupportState,
     informationalActionMutatesProgress,
     fieldForStep,
-    wordingStepLabel,
-    wordingCompanyName,
-    wordingSelectionMessage,
+    compareStepLabel,
+    compareCompanyName,
+    compareSelectionMessage,
     looksLikeMetaInstruction,
     extractUserMessageFromWrappedInput,
     isPristineStateForStart,

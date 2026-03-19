@@ -527,7 +527,7 @@ Onderstaande punten ontbraken nog in dit rapport en zijn nu toegevoegd met hard 
    - Controlepunt: old-only ID’s en current-only ID’s expliciet vergelijken.
    - Resultaat:
      - old-only: `btnOk`
-     - current-only: `actions`, `inputForm`, `inputText`, `inputSend`, `meta`, `wordingChoice*` (meerdere).
+     - current-only: `actions`, `inputForm`, `inputText`, `inputSend`, `meta`, `compare*` (meerdere).
 
 3. Wiring-check op aanwezige controls.
    - Controlepunt: element bestaat in HTML, maar heeft runtime wiring?

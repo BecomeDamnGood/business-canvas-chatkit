@@ -40,7 +40,7 @@ import {
   formatStepSectionTitle,
   getChooseForMeRegistryEntryForMenu,
   hasGroupedCompareListSemantics,
-  isSingleValueWordingStep,
+  isSingleValueCompareStep,
   STEP_REGISTRY_ORDER,
 } from "../steps/step_registry.js";
 import { deriveStructuredSuggestionsContent } from "./structured_suggestions.js";
@@ -125,7 +125,7 @@ function provisionalSourceForStep(state: CanvasState, stepId: string): string {
   const source = String(raw[stepId] || "").trim();
   if (
     source === "user_input" ||
-    source === "wording_pick" ||
+    source === "compare_pick" ||
     source === "action_route" ||
     source === "system_generated"
   ) {
@@ -147,7 +147,7 @@ function isAcceptedProvisional(state: CanvasState, stepId: string): boolean {
   if (!provisional) return false;
   if (!isRenderableAcceptedValue(stepId, provisional)) return false;
   const source = provisionalSourceForStep(state, stepId);
-  return source === "user_input" || source === "wording_pick" || source === "action_route";
+  return source === "user_input" || source === "compare_pick" || source === "action_route";
 }
 
 function isAcceptedOutput(stepId: string, state: CanvasState): boolean {
@@ -202,10 +202,10 @@ function normalizeChoiceLine(value: string): string {
 function stripStructuredChoiceLinesForPrompt(promptRaw: string, state: CanvasState): string {
   const blockedSet = new Set(
     [
-      uiStringFromState(state, "wordingChoiceInstruction", ""),
+      uiStringFromState(state, "compareInstruction", ""),
       uiStringFromState(state, "invariant.prompt.ask.default", ""),
       uiStringFromState(state, "generic.choicePrompt.shareOrOption", ""),
-      uiStringFromState(state, "wording.choice.context.default", ""),
+      uiStringFromState(state, "compare.choice.context.default", ""),
     ]
       .map((line) => normalizeChoiceLine(line))
       .filter(Boolean)
@@ -255,7 +255,7 @@ function shouldEnforceSingleValueConfirmVisibility(params: {
   specialist: Record<string, unknown>;
 }): boolean {
   const { stepId, state, specialist } = params;
-  if (!isSingleValueWordingStep(stepId)) return false;
+  if (!isSingleValueCompareStep(stepId)) return false;
   if (String(stepId || "").trim() !== "dream") return true;
   if (dreamRuntimeModeFromState(state) !== "self") return false;
   const activeSpecialist = String((state as any).active_specialist || "").trim();
@@ -265,7 +265,7 @@ function shouldEnforceSingleValueConfirmVisibility(params: {
   return !specialistMenuId.startsWith("DREAM_EXPLAINER_MENU_");
 }
 
-function shouldClearStaleDreamSelfWordingChoice(params: {
+function shouldClearStaleDreamSelfCompare(params: {
   stepId: string;
   state: CanvasState;
   specialist: Record<string, unknown>;
@@ -273,26 +273,26 @@ function shouldClearStaleDreamSelfWordingChoice(params: {
   const { stepId, state, specialist } = params;
   if (stepId !== "dream") return false;
   if (!shouldEnforceSingleValueConfirmVisibility({ stepId, state, specialist })) return false;
-  if (String((specialist as any).wording_choice_pending || "").trim().toLowerCase() !== "true") return false;
-  const targetField = String((specialist as any).wording_choice_target_field || "").trim();
+  if (String((specialist as any).compare_pending || "").trim().toLowerCase() !== "true") return false;
+  const targetField = String((specialist as any).compare_target_field || "").trim();
   if (targetField && targetField !== stepId) return true;
-  const presentation = String((specialist as any).wording_choice_presentation || "").trim().toLowerCase();
-  const mode = String((specialist as any).wording_choice_mode || "text").trim().toLowerCase() === "list" ? "list" : "text";
+  const presentation = String((specialist as any).compare_presentation || "").trim().toLowerCase();
+  const mode = String((specialist as any).compare_mode || "text").trim().toLowerCase() === "list" ? "list" : "text";
   const suggestionText = String(
-    (specialist as any).wording_choice_agent_current || (specialist as any).refined_formulation || ""
+    (specialist as any).compare_agent_current || (specialist as any).refined_formulation || ""
   ).trim();
   if (presentation === "canonical") {
     return !isRenderableAcceptedValue(stepId, suggestionText);
   }
   if (mode === "list") return true;
   const userVariant = String(
-    (specialist as any).wording_choice_user_normalized || (specialist as any).wording_choice_user_raw || ""
+    (specialist as any).compare_user_normalized || (specialist as any).compare_user_raw || ""
   ).trim();
   return !(Boolean(userVariant) && isRenderableAcceptedValue(stepId, suggestionText));
 }
 
 function hasSingleValueStructuredContent(stepId: string): boolean {
-  return isSingleValueWordingStep(stepId);
+  return isSingleValueCompareStep(stepId);
 }
 
 const PURPOSE_INTRO_VIDEO_MENU_IDS = new Set([
@@ -312,10 +312,10 @@ function isSemanticPurposeIntroVisibleState(params: {
   stepId: string;
   status: TurnOutputStatus;
   menuId: string;
-  wordingPending: boolean;
+  comparePending: boolean;
 }): boolean {
   if (params.stepId !== "purpose") return false;
-  if (params.wordingPending) return false;
+  if (params.comparePending) return false;
   if (params.status === "valid_output") return false;
   return PURPOSE_INTRO_VIDEO_MENU_IDS.has(String(params.menuId || "").trim());
 }
@@ -341,8 +341,8 @@ function resolveDreamSelfViewVariant(params: {
   state: CanvasState;
   specialist: Record<string, unknown>;
   status: TurnOutputStatus;
-  wordingPending: boolean;
-  wordingPresentation: "picker" | "canonical";
+  comparePending: boolean;
+  comparePresentation: "picker" | "canonical";
   currentValueRefinementPending: boolean;
 }): DreamSelfViewVariant {
   if (params.stepId !== "dream") return "default";
@@ -350,9 +350,9 @@ function resolveDreamSelfViewVariant(params: {
 
   const explicitStuck = String(params.specialist.step_support_state || "").trim().toLowerCase() === "stuck";
   if (explicitStuck) return "stuck_support";
-  if (params.wordingPending && params.wordingPresentation === "picker") return "picker";
+  if (params.comparePending && params.comparePresentation === "picker") return "picker";
   if (
-    params.wordingPending ||
+    params.comparePending ||
     params.currentValueRefinementPending ||
     params.status === "valid_output"
   ) {
@@ -505,7 +505,7 @@ function hasCommittedAcceptedValue(stepId: string, state: CanvasState): boolean 
 
 function shouldUseCurrentValueHeading(stepId: string, state: CanvasState): boolean {
   if (hasCommittedAcceptedValue(stepId, state)) return true;
-  return provisionalSourceForStep(state, stepId) === "wording_pick";
+  return provisionalSourceForStep(state, stepId) === "compare_pick";
 }
 
 function singleValueConfirmHeading(stepId: string, state: CanvasState): string {
@@ -1189,7 +1189,7 @@ function rulesOfTheGameRecapBlock(state: CanvasState, recapText: string): string
     acceptedValue: "",
     visibleValue: recapText,
     statements: [],
-    wordingChoicePending: false,
+    comparePending: false,
   }).items;
   if (items.length === 0) return String(recapText || "").trim();
   const rendered = formatStepSectionTitle({
@@ -1244,7 +1244,7 @@ function rulesOfTheGameContextBlock(
     acceptedValue: "",
     visibleValue: recapText,
     statements: [],
-    wordingChoicePending: false,
+    comparePending: false,
   }).items;
   if (items.length === 0) return { items: [], block: String(recapText || "").trim() };
   const parts = [
@@ -1428,8 +1428,8 @@ function computeStatus(
   }
 
   if (stepId === "rulesofthegame") {
-    const wordingChoicePending =
-      String((specialist as any).wording_choice_pending || (prev as any).wording_choice_pending || "").trim() === "true";
+    const comparePending =
+      String((specialist as any).compare_pending || (prev as any).compare_pending || "").trim() === "true";
     const rulesGate = evaluateRulesRuntimeGate({
       acceptedOutput,
       acceptedValue,
@@ -1437,7 +1437,7 @@ function computeStatus(
       statements: Array.isArray((specialist as any).statements) && (specialist as any).statements.length > 0
         ? (specialist as any).statements
         : (prev as any).statements,
-      wordingChoicePending,
+      comparePending,
     });
     const rulesBullets = rulesGate.items.map((line) => `• ${line}`).join("\n");
     if (rulesGate.canConfirm) {
@@ -1776,24 +1776,24 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
   }
 
   const specialistForDisplay: Record<string, unknown> = { ...specialist };
-  if (shouldClearStaleDreamSelfWordingChoice({ stepId, state, specialist: specialistForDisplay })) {
+  if (shouldClearStaleDreamSelfCompare({ stepId, state, specialist: specialistForDisplay })) {
     Object.assign(specialistForDisplay, {
-      wording_choice_pending: "false",
-      wording_choice_selected: "",
-      wording_choice_mode: "",
-      wording_choice_target_field: "",
-      wording_choice_agent_current: "",
-      wording_choice_presentation: "",
-      wording_choice_variant: "",
-      wording_choice_compare_mode: "",
-      wording_choice_user_raw: "",
-      wording_choice_user_normalized: "",
-      wording_choice_user_items: [],
-      wording_choice_suggestion_items: [],
+      compare_pending: "false",
+      compare_selected: "",
+      compare_mode: "",
+      compare_target_field: "",
+      compare_agent_current: "",
+      compare_presentation: "",
+      compare_variant: "",
+      compare_compare_mode: "",
+      compare_user_raw: "",
+      compare_user_normalized: "",
+      compare_user_items: [],
+      compare_suggestion_items: [],
     });
   }
   const recapRequested = isRecapRequestedSpecialist(specialistForDisplay);
-  const wordingPending = String((specialistForDisplay as any).wording_choice_pending || "").trim() === "true";
+  const comparePending = String((specialistForDisplay as any).compare_pending || "").trim() === "true";
   if (isOfftopic && stepId !== "step_0") {
     const field = stepId === "rulesofthegame" ? "rulesofthegame" : stepId;
     const finalField = getFinalFieldForStepId(stepId);
@@ -1853,11 +1853,11 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
   const strategyStatements =
     stepId === "strategy" ? strategyStatementsFromSources(state, statusSource, prev, { provisionalForStep }) : [];
   const strategyContextBlock =
-    !isOfftopic && stepId === "strategy" && strategyStatements.length > 0 && !wordingPending
+    !isOfftopic && stepId === "strategy" && strategyStatements.length > 0 && !comparePending
       ? buildStrategyContextBlock(state, strategyStatements, { uiStringFromState, companyNameForPrompt })
       : "";
   const rulesContext =
-    !isOfftopic && stepId === "rulesofthegame" && recapText && !wordingPending
+    !isOfftopic && stepId === "rulesofthegame" && recapText && !comparePending
       ? rulesOfTheGameContextBlock(state, recapText)
       : { items: [], block: "" };
   const message = (() => {
@@ -2001,8 +2001,8 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
 
   const specialistForMenu = specialistForDisplay;
   const prevForMenu = prev;
-  const rawWordingPresentation =
-    String((specialistForDisplay as any).wording_choice_presentation || "").trim() === "canonical"
+  const rawComparePresentation =
+    String((specialistForDisplay as any).compare_presentation || "").trim() === "canonical"
       ? "canonical"
       : "picker";
   const rawCurrentValueRefinementPending =
@@ -2013,8 +2013,8 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     state,
     specialist: specialistForDisplay,
     status: effectiveStatus,
-    wordingPending,
-    wordingPresentation: rawWordingPresentation,
+    comparePending,
+    comparePresentation: rawComparePresentation,
     currentValueRefinementPending: rawCurrentValueRefinementPending,
   });
   const renderModeOverride =
@@ -2023,8 +2023,8 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
       : dreamSelfViewVariant === "picker" || dreamSelfViewVariant === "canonical_refine"
         ? "menu"
         : undefined;
-  const normalizedWordingPending =
-    dreamSelfViewVariant === "stuck_support" ? false : wordingPending;
+  const normalizedComparePending =
+    dreamSelfViewVariant === "stuck_support" ? false : comparePending;
 
   const resolved = resolveMenuContract({
     stepId,
@@ -2053,13 +2053,13 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     safeLabels = retainedIndices.map((idx) => safeLabels[idx]);
     safeLabelKeys = retainedIndices.map((idx) => safeLabelKeys[idx]);
   }
-  const wordingChoiceSelected = String((specialistForDisplay as any).wording_choice_selected || "").trim();
-  const wordingPresentation =
+  const compareSelected = String((specialistForDisplay as any).compare_selected || "").trim();
+  const comparePresentation =
     dreamSelfViewVariant === "picker"
       ? "picker"
       : dreamSelfViewVariant === "stuck_support"
         ? "canonical"
-        : rawWordingPresentation;
+        : rawComparePresentation;
   const currentValueRefinementPending =
     dreamSelfViewVariant === "stuck_support" ? false : rawCurrentValueRefinementPending;
   const currentValueRefinementCanonicalValue =
@@ -2074,7 +2074,7 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
         stepId,
         status: effectiveStatus,
         menuId,
-        wordingPending: normalizedWordingPending,
+        comparePending: normalizedComparePending,
       }) || legacyShowStepIntroChrome
       : legacyShowStepIntroChrome;
   const headline = contractHeadlineForState({
@@ -2106,15 +2106,15 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
   let question =
     dreamSelfViewVariant === "stuck_support"
       ? ""
-      : normalizedWordingPending && wordingPresentation === "picker"
+      : normalizedComparePending && comparePresentation === "picker"
       ? ""
       : stripStructuredChoiceLinesForPrompt(dreamExplainerPrompt || headline || fallbackPrompt, state);
   let effectiveUiStatus: TurnOutputStatus = effectiveStatus;
   let contractId = buildContractId(stepId, effectiveUiStatus, menuId);
   let textKeys = buildContractTextKeys({ stepId, status: effectiveUiStatus, menuId });
   const pendingCanonicalValue =
-    normalizedWordingPending && wordingPresentation === "canonical"
-      ? String((specialistForDisplay as any).wording_choice_agent_current || specialistForDisplay.refined_formulation || "")
+    normalizedComparePending && comparePresentation === "canonical"
+      ? String((specialistForDisplay as any).compare_agent_current || specialistForDisplay.refined_formulation || "")
         .trim()
       : "";
   const explicitFeedbackReasonForDisplay =
@@ -2124,11 +2124,11 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     rawReason: explicitFeedbackReasonForDisplay,
     resolveString: (key, fallback = "") => uiStringFromState(state, key, uiDefaultString(key, fallback)),
   });
-  const isUserPickedWording =
-    String((specialistForDisplay as any).wording_choice_selected || "").trim() === "user";
+  const isUserPickedCompare =
+    String((specialistForDisplay as any).compare_selected || "").trim() === "user";
   const rawFeedbackReasonForDisplay = sanitizedExplicitFeedbackReasonForDisplay;
   const feedbackReasonForDisplay =
-    isUserPickedWording
+    isUserPickedCompare
       ? formatUserPickFeedbackForDisplay({
           stepId,
           rawReason: rawFeedbackReasonForDisplay,
@@ -2164,7 +2164,7 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
       return currentValueRefinementCanonicalValue;
     }
     if (
-      !normalizedWordingPending &&
+      !normalizedComparePending &&
       effectiveStatus === "valid_output" &&
       hasSingleValueStructuredContent(stepId)
     ) {
@@ -2181,30 +2181,30 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     (
       currentValueRefinementPending ||
       (
-        !normalizedWordingPending &&
+        !normalizedComparePending &&
         effectiveStatus === "valid_output" &&
         !shouldUseCurrentValueHeading(stepId, state)
       )
     );
   let messageForDisplay =
     isSemanticInvariantsV1Enabled() &&
-    normalizedWordingPending &&
-    wordingPresentation === "picker" &&
+    normalizedComparePending &&
+    comparePresentation === "picker" &&
     !String(message || "").trim()
       ? uiStringFromState(
           state,
-      "wording.choice.context.default",
+      "compare.choice.context.default",
       ""
     )
       : message;
-  if (wordingChoiceSelected === "user") {
+  if (compareSelected === "user") {
     messageForDisplay = stripSuggestionFramingForUserPick({
       stepId,
       state,
       message: messageForDisplay,
     });
   }
-  if (normalizedWordingPending && wordingPresentation === "canonical" && pendingCanonicalValue) {
+  if (normalizedComparePending && comparePresentation === "canonical" && pendingCanonicalValue) {
     messageForDisplay = singleValueSupportText({
       message: messageForDisplay,
       heading: singleValueConfirmHeading(stepId, state),
@@ -2226,7 +2226,7 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     Boolean(canonicalAcceptedValue) &&
     effectiveStatus === "valid_output" &&
     !isOfftopic &&
-    !normalizedWordingPending &&
+    !normalizedComparePending &&
     !currentValueRefinementPending &&
     !recapRequested;
   if (useSingleValueConfirmSsot && !shouldPublishCanonicalSuggestionFeedbackContract) {
@@ -2237,7 +2237,7 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
   } else if (
     shouldEnforceConfirmVisibility &&
     canonicalAcceptedValue &&
-    !normalizedWordingPending &&
+    !normalizedComparePending &&
     !shouldPublishCanonicalSuggestionFeedbackContract
   ) {
     messageForDisplay = ensureCanonicalContextBlockInMessage({
@@ -2310,7 +2310,7 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
         ? interactiveAskPromptFallback(state, stepId)
         : "";
     question =
-      normalizedWordingPending && wordingPresentation === "picker"
+      normalizedComparePending && comparePresentation === "picker"
         ? ""
         : stripStructuredChoiceLinesForPrompt(normalizedHeadline || normalizedFallbackPrompt, state);
   }

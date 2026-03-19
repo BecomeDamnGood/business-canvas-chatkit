@@ -51,7 +51,7 @@ const DreamTopClusterDetailZod = z.object({
 });
 export const PROVISIONAL_SOURCES = [
   "user_input",
-  "wording_pick",
+  "compare_pick",
   "action_route",
   "system_generated",
 ] as const;
@@ -339,7 +339,7 @@ export const CanvasStateZod = z.object({
     source: z.string(),
   }),
 
-  // staged per-step value (chosen wording before explicit next-step confirm)
+  // staged per-step value (chosen compare result before explicit next-step confirm)
   provisional_by_step: z.record(z.string(), z.string()),
   provisional_source_by_step: z.record(z.string(), ProvisionalSourceZod),
   suggestion_state_by_step: z.record(z.string(), SuggestionStateEntryZod),
@@ -649,7 +649,7 @@ export function normalizeState(raw: unknown): CanvasState {
         const source = String(v || "").trim();
         if (
           source !== "user_input" &&
-          source !== "wording_pick" &&
+          source !== "compare_pick" &&
           source !== "action_route" &&
           source !== "system_generated"
         ) {
@@ -657,7 +657,7 @@ export function normalizeState(raw: unknown): CanvasState {
         }
         return [String(k), source] as const;
       })
-      .filter((entry): entry is readonly [string, "user_input" | "wording_pick" | "action_route" | "system_generated"] => Boolean(entry))
+      .filter((entry): entry is readonly [string, "user_input" | "compare_pick" | "action_route" | "system_generated"] => Boolean(entry))
   );
   const suggestion_state_raw =
     typeof r.suggestion_state_by_step === "object" && r.suggestion_state_by_step !== null
@@ -1032,7 +1032,7 @@ export function migrateState(raw: unknown): CanvasState {
       const existing = String(existingSources[stepId] || "").trim();
       if (
         existing === "user_input" ||
-        existing === "wording_pick" ||
+        existing === "compare_pick" ||
         existing === "action_route" ||
         existing === "system_generated"
       ) {

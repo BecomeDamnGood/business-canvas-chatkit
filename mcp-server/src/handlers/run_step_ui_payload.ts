@@ -6,26 +6,24 @@ import { parseUiContractMenuForStep, parseUiContractStatusForStep } from "../cor
 import { currentTurnSupportMode } from "../core/stuck_support.js";
 import {
   normalizeUiFeedbackContractSource,
-  resolveWordingChoiceFeedbackSource,
-  synthesizeUiFeedbackContractFromWordingChoice,
 } from "../core/ui_feedback_contract.js";
 import { DREAM_STEP_ID } from "../steps/dream.js";
 import type { RenderedAction, UiContentPayload } from "../contracts/ui_actions.js";
 import type { TurnOutputStatus } from "../core/turn_policy_renderer.js";
-import { isPickerPresentation, isSingleValueTextPickerState } from "./run_step_wording_picker_contract.js";
+import { isSingleValueTextPickerState } from "./run_step_compare_picker_contract.js";
 
-type WordingChoiceMode = "text" | "list";
-type WordingChoiceVariant = "default" | "clarify_dual" | "grouped_list_units";
+type CompareMode = "text" | "list";
+type CompareVariant = "default" | "clarify_dual" | "grouped_list_units";
 
-export type WordingChoiceCompareFeedbackUiPayload = {
+export type CompareCompareFeedbackUiPayload = {
   text: string;
 };
 
-export type WordingChoiceUiPayload = {
+export type CompareUiPayload = {
   enabled: boolean;
-  mode: WordingChoiceMode;
-  variant?: WordingChoiceVariant;
-  compare_feedback?: WordingChoiceCompareFeedbackUiPayload;
+  mode: CompareMode;
+  variant?: CompareVariant;
+  compare_feedback?: CompareCompareFeedbackUiPayload;
   user_text: string;
   suggestion_text: string;
   user_label?: string;
@@ -251,46 +249,22 @@ function normalizeUiFeedbackContract(
   return normalizeUiFeedbackContractSource(raw, specialistRaw);
 }
 
-function normalizeDreamBuilderCompareContractFromFeedback(raw: unknown): DreamBuilderCompareContractPayload | undefined {
+function normalizeLegacyCanonicalSuggestionContent(raw: unknown): UiContentPayload | undefined {
   const feedback = normalizeUiFeedbackContract(raw);
   if (!feedback) return undefined;
-  if (String(feedback.kind || "").trim() !== "grouped_list_compare") return undefined;
-
-  const normalized: DreamBuilderCompareContractPayload = {
-    kind: "batch_rewrite_compare",
+  if (String(feedback.kind || "").trim() !== "single_value_canonical_suggestion") return undefined;
+  const heading = String(feedback.heading || "").trim();
+  const canonicalText = String(feedback.suggested_value || "").trim();
+  const supportText = String(feedback.support_text || "").trim();
+  const feedbackReasonText = String(feedback.rationale || "").trim();
+  if (!heading && !canonicalText && !supportText && !feedbackReasonText) return undefined;
+  return {
+    kind: "single_value",
+    ...(heading ? { heading } : {}),
+    ...(canonicalText ? { canonical_text: canonicalText } : {}),
+    ...(supportText ? { support_text: supportText } : {}),
+    ...(feedbackReasonText ? { feedback_reason_text: feedbackReasonText } : {}),
   };
-  const rationale = String(feedback.rationale || "").trim();
-  const currentLabel = String(feedback.current_label || "").trim();
-  const suggestedLabel = String(feedback.suggested_label || "").trim();
-  const currentValue = String(feedback.current_value || "").trim();
-  const suggestedValue = String(feedback.suggested_value || "").trim();
-  const retainedHeading = String(feedback.retained_heading || "").trim();
-  const instruction = String(feedback.instruction || "").trim();
-  const currentItems = Array.isArray(feedback.current_items)
-    ? (feedback.current_items as unknown[]).map((value) => String(value || "").trim()).filter(Boolean)
-    : [];
-  const suggestedItems = Array.isArray(feedback.suggested_items)
-    ? (feedback.suggested_items as unknown[]).map((value) => String(value || "").trim()).filter(Boolean)
-    : [];
-  const retainedItems = Array.isArray(feedback.retained_items)
-    ? (feedback.retained_items as unknown[]).map((value) => String(value || "").trim()).filter(Boolean)
-    : [];
-  const committedStatements = Array.isArray(feedback.committed_statements)
-    ? (feedback.committed_statements as unknown[]).map((value) => String(value || "").trim()).filter(Boolean)
-    : [];
-
-  if (rationale) normalized.rationale = rationale;
-  if (currentLabel) normalized.current_label = currentLabel;
-  if (suggestedLabel) normalized.suggested_label = suggestedLabel;
-  if (currentValue) normalized.current_value = currentValue;
-  if (suggestedValue) normalized.suggested_value = suggestedValue;
-  if (currentItems.length > 0) normalized.current_items = currentItems;
-  if (suggestedItems.length > 0) normalized.suggested_items = suggestedItems;
-  if (retainedHeading) normalized.retained_heading = retainedHeading;
-  if (retainedItems.length > 0) normalized.retained_items = retainedItems;
-  if (instruction) normalized.instruction = instruction;
-  if (committedStatements.length > 0) normalized.committed_statements = committedStatements;
-  return normalized;
 }
 
 function normalizeDreamBuilderCompareContractFromSpecialist(
@@ -404,13 +378,10 @@ function buildDreamBuilderContract(params: {
   statementsVisible: boolean;
   specialist: Record<string, unknown>;
   state: CanvasState | null;
-  feedbackContractPayload?: Record<string, unknown>;
 }): DreamBuilderContractPayload | undefined {
   if (params.stepId !== DREAM_STEP_ID) return undefined;
-  void params.feedbackContractPayload;
-  const compareFromFeedback = normalizeDreamBuilderCompareContractFromFeedback(params.feedbackContractPayload);
   const compareFromSpecialist = normalizeDreamBuilderCompareContractFromSpecialist(params.specialist);
-  const compareContract = compareFromFeedback || compareFromSpecialist;
+  const compareContract = compareFromSpecialist;
   const scoringFromSpecialist = normalizeDreamBuilderScoringContract({
     specialist: params.specialist,
     state: params.state,
@@ -612,7 +583,7 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
     flagsOverride?: Record<string, boolean | string> | null,
     actionCodesOverride?: string[] | null,
     renderedActionsOverride?: RenderedAction[] | null,
-    wordingChoiceOverride?: WordingChoiceUiPayload | null,
+    compareOverride?: CompareUiPayload | null,
     stateOverride?: CanvasState | null,
     stepIdOverride?: string,
     contractMetaOverride?: UiContractMeta | null,
@@ -623,13 +594,11 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
     actions?: RenderedAction[];
     questionText?: string;
     content?: UiContentPayload;
-    feedback_contract?: Record<string, unknown>;
     contract_id?: string;
     contract_version?: string;
     text_keys?: string[];
     view?: UiViewPayload;
     flags: Record<string, boolean | string>;
-    wording_choice?: WordingChoiceUiPayload;
   } | undefined {
     const localDev = deps.shouldLogLocalDevDiagnostics();
     const flags: Record<string, boolean | string> = { ...(flagsOverride || {}) };
@@ -721,10 +690,6 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
     const hasClusters =
       Array.isArray((specialist as any)?.clusters) &&
       ((specialist as any).clusters as unknown[]).length > 0;
-    const wordingPickPending =
-      Boolean(wordingChoiceOverride?.enabled) ||
-      String((specialist as any)?.wording_choice_pending || "").trim() === "true" ||
-      Boolean((flagsOverride || {}).require_wording_pick);
     const suggestDreamBuilder = String((specialist as any)?.suggest_dreambuilder || "").trim() === "true";
     const persistedDreamScores =
       Array.isArray((effectiveState as any)?.dream_scores) &&
@@ -761,27 +726,10 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
       effectiveStepId === DREAM_STEP_ID &&
       dreamBuilderFlowActive &&
       String((specialist as Record<string, unknown>).__dream_builder_compare_pending || "").trim() === "true";
-    const resolvedWordingChoiceForFeedbackContract = resolveWordingChoiceFeedbackSource(
-      wordingChoiceOverride,
-      (specialist || {}) as Record<string, unknown>
-    ) as WordingChoiceUiPayload | null;
     const explicitFeedbackContractPayload = normalizeUiFeedbackContract(
       (specialist as Record<string, unknown>)?.ui_feedback_contract,
       specialist as Record<string, unknown>
     );
-    const comparePickerActive =
-      wordingPickPending &&
-      !dreamBuilderFlowActive &&
-      isPickerPresentation((specialist as Record<string, unknown>)?.wording_choice_presentation);
-    const rawFeedbackContractPayload =
-      dreamBuilderFlowActive
-        ? undefined
-        : (
-          explicitFeedbackContractPayload ||
-          (comparePickerActive
-            ? synthesizeUiFeedbackContractFromWordingChoice(resolvedWordingChoiceForFeedbackContract, flags)
-            : undefined)
-        );
     let viewVariant: UiViewVariant = "default";
     if (
       effectiveStepId === DREAM_STEP_ID &&
@@ -795,21 +743,21 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
         forceDreamBuilderRefine || contractMenuId === "DREAM_EXPLAINER_MENU_REFINE"
           ? "dream_builder_refine"
           : "dream_builder_collect";
-    } else if (comparePickerActive) {
-      viewVariant = "text_compare";
     }
-    const questionTextPayload =
-      viewVariant === "text_compare" && !dreamBuilderCompareActive
-        ? {}
-        : (questionText ? { questionText } : {});
+    const questionTextPayload = questionText ? { questionText } : {};
     const rawContentPayload = normalizeUiContentPayload((specialist as Record<string, unknown>)?.ui_content);
+    const legacyCanonicalSuggestionContent = normalizeLegacyCanonicalSuggestionContent(
+      explicitFeedbackContractPayload
+    );
     const shouldSuppressSingleValueContent =
       Boolean(rawContentPayload) &&
       isSingleValueTextPickerState({
         specialist: specialist as Record<string, unknown>,
         stepIdHint: effectiveStepId,
       });
-    const contentPayload = shouldSuppressSingleValueContent ? undefined : rawContentPayload;
+    const contentPayload = shouldSuppressSingleValueContent
+      ? undefined
+      : (rawContentPayload || legacyCanonicalSuggestionContent);
     const view = deps.deriveUiViewPayload(viewVariant);
     const dreamBuilderStatementsVisible =
       dreamBuilderFlowActive &&
@@ -852,18 +800,8 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
       statementsVisible: dreamBuilderStatementsVisible,
       specialist: (specialist || {}) as Record<string, unknown>,
       state: effectiveState,
-      feedbackContractPayload: rawFeedbackContractPayload,
     });
-    const shouldExposeLegacyWordingChoice =
-      Boolean(wordingChoiceOverride) &&
-      effectiveStepId !== DREAM_STEP_ID &&
-      !(effectiveStepId === DREAM_STEP_ID && dreamBuilderFlowActive) &&
-      !rawFeedbackContractPayload &&
-      !dreamBuilderCompareActive &&
-      !(effectiveStepId === DREAM_STEP_ID && dreamBuilderContractPayload);
-    const legacyWordingChoicePayload = shouldExposeLegacyWordingChoice
-      ? (wordingChoiceOverride || undefined)
-      : undefined;
+    void compareOverride;
     if (Array.isArray(actionCodesOverride)) {
       const safeOverrideCodes = deps.sanitizeWidgetActionCodes(
         actionCodesOverride.map((code) => String(code || "").trim()).filter(Boolean)
@@ -879,35 +817,29 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
           ...(renderedActions.length > 0 ? { actions: renderedActions } : {}),
           ...questionTextPayload,
           ...(contentPayload ? { content: contentPayload } : {}),
-          ...(rawFeedbackContractPayload ? { feedback_contract: rawFeedbackContractPayload } : {}),
           ...(dreamBuilderContractPayload ? { dream_builder_contract: dreamBuilderContractPayload } : {}),
           ...(contractMeta.contractId ? { contract_id: contractMeta.contractId } : {}),
           ...(contractMeta.contractVersion ? { contract_version: contractMeta.contractVersion } : {}),
           ...(contractMeta.textKeys && contractMeta.textKeys.length > 0 ? { text_keys: contractMeta.textKeys } : {}),
           ...(viewPayload ? { view: viewPayload } : {}),
           flags,
-          ...(legacyWordingChoicePayload ? { wording_choice: legacyWordingChoicePayload } : {}),
         };
       }
       if (
         Object.keys(flags).length > 0 ||
-        shouldExposeLegacyWordingChoice ||
         contractMeta.contractId ||
         viewPayload ||
-        contentPayload ||
-        rawFeedbackContractPayload
+        contentPayload
       ) {
         return {
           ...questionTextPayload,
           ...(contentPayload ? { content: contentPayload } : {}),
-          ...(rawFeedbackContractPayload ? { feedback_contract: rawFeedbackContractPayload } : {}),
           ...(dreamBuilderContractPayload ? { dream_builder_contract: dreamBuilderContractPayload } : {}),
           ...(contractMeta.contractId ? { contract_id: contractMeta.contractId } : {}),
           ...(contractMeta.contractVersion ? { contract_version: contractMeta.contractVersion } : {}),
           ...(contractMeta.textKeys && contractMeta.textKeys.length > 0 ? { text_keys: contractMeta.textKeys } : {}),
           ...(viewPayload ? { view: viewPayload } : {}),
           flags,
-          ...(legacyWordingChoicePayload ? { wording_choice: legacyWordingChoicePayload } : {}),
         };
       }
       return undefined;
@@ -918,21 +850,17 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
         if (localDev) flags.escape_menu_suppressed = true;
         if (
           Object.keys(flags).length > 0 ||
-          shouldExposeLegacyWordingChoice ||
           contractMeta.contractId ||
-          contentPayload ||
-          rawFeedbackContractPayload
+          contentPayload
         ) {
           return {
             ...questionTextPayload,
             ...(contentPayload ? { content: contentPayload } : {}),
-            ...(rawFeedbackContractPayload ? { feedback_contract: rawFeedbackContractPayload } : {}),
             ...(dreamBuilderContractPayload ? { dream_builder_contract: dreamBuilderContractPayload } : {}),
             ...(contractMeta.contractId ? { contract_id: contractMeta.contractId } : {}),
             ...(contractMeta.contractVersion ? { contract_version: contractMeta.contractVersion } : {}),
             ...(contractMeta.textKeys && contractMeta.textKeys.length > 0 ? { text_keys: contractMeta.textKeys } : {}),
             flags,
-            ...(legacyWordingChoicePayload ? { wording_choice: legacyWordingChoicePayload } : {}),
           };
         }
         return undefined;
@@ -948,23 +876,19 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
         if (safeCodes.length === 0) {
           if (
             Object.keys(flags).length > 0 ||
-            shouldExposeLegacyWordingChoice ||
             contractMeta.contractId ||
             viewPayload ||
-            contentPayload ||
-            rawFeedbackContractPayload
+            contentPayload
           ) {
             return {
               ...questionTextPayload,
               ...(contentPayload ? { content: contentPayload } : {}),
-              ...(rawFeedbackContractPayload ? { feedback_contract: rawFeedbackContractPayload } : {}),
               ...(dreamBuilderContractPayload ? { dream_builder_contract: dreamBuilderContractPayload } : {}),
               ...(contractMeta.contractId ? { contract_id: contractMeta.contractId } : {}),
               ...(contractMeta.contractVersion ? { contract_version: contractMeta.contractVersion } : {}),
               ...(contractMeta.textKeys && contractMeta.textKeys.length > 0 ? { text_keys: contractMeta.textKeys } : {}),
               ...(viewPayload ? { view: viewPayload } : {}),
               flags,
-              ...(legacyWordingChoicePayload ? { wording_choice: legacyWordingChoicePayload } : {}),
             };
           }
           return undefined;
@@ -976,36 +900,30 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
           ...(renderedActions.length > 0 ? { actions: renderedActions } : {}),
           ...questionTextPayload,
           ...(contentPayload ? { content: contentPayload } : {}),
-          ...(rawFeedbackContractPayload ? { feedback_contract: rawFeedbackContractPayload } : {}),
           ...(dreamBuilderContractPayload ? { dream_builder_contract: dreamBuilderContractPayload } : {}),
           ...(contractMeta.contractId ? { contract_id: contractMeta.contractId } : {}),
           ...(contractMeta.contractVersion ? { contract_version: contractMeta.contractVersion } : {}),
           ...(contractMeta.textKeys && contractMeta.textKeys.length > 0 ? { text_keys: contractMeta.textKeys } : {}),
           ...(viewPayload ? { view: viewPayload } : {}),
           flags,
-          ...(legacyWordingChoicePayload ? { wording_choice: legacyWordingChoicePayload } : {}),
         };
       }
     }
     if (
       Object.keys(flags).length > 0 ||
-      shouldExposeLegacyWordingChoice ||
       contractMeta.contractId ||
       viewPayload ||
-      contentPayload ||
-      rawFeedbackContractPayload
+      contentPayload
     ) {
       return {
         ...questionTextPayload,
         ...(contentPayload ? { content: contentPayload } : {}),
-        ...(rawFeedbackContractPayload ? { feedback_contract: rawFeedbackContractPayload } : {}),
         ...(dreamBuilderContractPayload ? { dream_builder_contract: dreamBuilderContractPayload } : {}),
         ...(contractMeta.contractId ? { contract_id: contractMeta.contractId } : {}),
         ...(contractMeta.contractVersion ? { contract_version: contractMeta.contractVersion } : {}),
         ...(contractMeta.textKeys && contractMeta.textKeys.length > 0 ? { text_keys: contractMeta.textKeys } : {}),
         ...(viewPayload ? { view: viewPayload } : {}),
         flags,
-        ...(legacyWordingChoicePayload ? { wording_choice: legacyWordingChoicePayload } : {}),
       };
     }
     return undefined;
@@ -1017,7 +935,7 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
     flagsOverride?: Record<string, boolean | string> | null,
     actionCodesOverride?: string[] | null,
     renderedActionsOverride?: RenderedAction[] | null,
-    wordingChoiceOverride?: WordingChoiceUiPayload | null,
+    compareOverride?: CompareUiPayload | null,
     contractMetaOverride?: UiContractMeta | null
   ): T & { registry_version: string; ui?: ReturnType<typeof buildUiPayload> } {
     let safeSpecialist = deps.sanitizeEscapeInWidget(specialist);
@@ -1052,7 +970,7 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
       flagsOverride,
       actionCodesOverride,
       renderedActionsOverride,
-      wordingChoiceOverride,
+      compareOverride,
       payloadState,
       payloadStepId,
       effectiveContractOverride
@@ -1073,7 +991,7 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
       flagsOverride,
       actionCodesOverride,
       renderedActionsOverride,
-      wordingChoiceOverride,
+      compareOverride,
       payloadState,
       payloadStepId,
       effectiveContractOverride,

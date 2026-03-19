@@ -601,7 +601,7 @@ export interface RulesOfTheGamePostProcessResult {
 }
 
 /**
- * Normalizes a rule text for comparison, without changing the original user-facing wording.
+ * Normalizes a rule text for comparison, without changing the original user-facing compare.
  * The goal is to detect (near) duplicates in a deterministic way.
  */
 export function normalizeRuleText(rule: string): string {

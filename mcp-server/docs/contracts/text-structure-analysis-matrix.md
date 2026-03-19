@@ -34,7 +34,7 @@ This matrix defines how `cardDesc` body content is rendered consistently per ste
 | `entity` | refine context | live report 19-02 lines 132-134 | short narrative | `paragraph` |
 | `entity` | examples/definition context | run_step finals fixtures | short list-like examples | `bullet_list` or `ordered_list` when explicitly numbered |
 | `strategy` | intro/explain | run_step finals fixtures | narrative + optional list bullets | `paragraph` + `bullet_list` when list markers exist |
-| `strategy` | wording-choice context | `ui_render.test.ts` wording list mode | list items stay in wording panel, not card body | `cardDesc` unchanged; wording panel controls list |
+| `strategy` | compare context | `ui_render.test.ts` wording list mode | list items stay in compare panel, not card body | `cardDesc` unchanged; compare panel controls list |
 | `targetgroup` | intro/explain | run_step finals fixtures | narrative + optional examples | `paragraph` + `bullet_list` when list markers exist |
 | `productsservices` | intro/explain | run_step finals fixtures | list-like offer points | `bullet_list` when bullet markers, else `paragraph` |
 | `rulesofthegame` | intro/explain | run_step finals fixtures | rule enumeration | `ordered_list` when numbered, `bullet_list` for bullets |

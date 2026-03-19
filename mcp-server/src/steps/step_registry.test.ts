@@ -32,14 +32,14 @@ test("step registry order indexes and families stay internally consistent", () =
     }
     if (stepId === "step_0" || stepId === "presentation") {
       assert.equal(entry.supportFamily, "none", `special flow ${stepId} must not be interactive support`);
-      assert.equal(entry.wordingFamily, "none", `special flow ${stepId} must not be in wording family`);
+      assert.equal(entry.compareFamily, "none", `special flow ${stepId} must not be in wording family`);
       continue;
     }
     assert.equal(entry.supportFamily, "interactive_step", `wrong support family for ${stepId}`);
     if (entry.stepKind === "list_value") {
-      assert.equal(entry.wordingFamily, "grouped_list", `wrong wording family for ${stepId}`);
+      assert.equal(entry.compareFamily, "grouped_list", `wrong wording family for ${stepId}`);
     } else {
-      assert.equal(entry.wordingFamily, "single_value", `wrong wording family for ${stepId}`);
+      assert.equal(entry.compareFamily, "single_value", `wrong wording family for ${stepId}`);
     }
   }
 });

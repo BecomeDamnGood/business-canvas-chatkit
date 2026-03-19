@@ -68,7 +68,7 @@ type SemanticViolationReason =
   | "missing_prompt_for_interactive_ask"
   | "confirm_present_without_accepted_evidence"
   | "intro_mode_must_not_expose_confirm"
-  | "wording_choice_mode_requires_instruction_or_context"
+  | "compare_mode_requires_instruction_or_context"
   | "rules_confirm_policy_violation"
   | "dream_no_buttons_requires_explicit_stuck_support"
   | "user_facing_markup_detected";
@@ -77,7 +77,7 @@ const SEMANTIC_VIOLATION_REASONS = new Set<SemanticViolationReason>([
   "missing_prompt_for_interactive_ask",
   "confirm_present_without_accepted_evidence",
   "intro_mode_must_not_expose_confirm",
-  "wording_choice_mode_requires_instruction_or_context",
+  "compare_mode_requires_instruction_or_context",
   "rules_confirm_policy_violation",
   "dream_no_buttons_requires_explicit_stuck_support",
   "user_facing_markup_detected",
@@ -111,7 +111,7 @@ export function createRunStepRuntimeSemanticHelpers(deps: CreateRunStepRuntimeSe
     if (!provisional) return false;
     if (stepId === "productsservices") return true;
     const source = deps.provisionalSourceForStep(state, stepId);
-    return source === "user_input" || source === "wording_pick" || source === "action_route";
+    return source === "user_input" || source === "compare_pick" || source === "action_route";
   }
 
   function acceptedValueForStep(state: CanvasState, stepId: string): string {
@@ -122,7 +122,7 @@ export function createRunStepRuntimeSemanticHelpers(deps: CreateRunStepRuntimeSe
     if (!provisional) return "";
     if (stepId === "productsservices") return provisional;
     const source = deps.provisionalSourceForStep(state, stepId);
-    if (source === "user_input" || source === "wording_pick" || source === "action_route") {
+    if (source === "user_input" || source === "compare_pick" || source === "action_route") {
       return provisional;
     }
     return "";
@@ -151,19 +151,19 @@ export function createRunStepRuntimeSemanticHelpers(deps: CreateRunStepRuntimeSe
       String((specialist as Record<string, unknown>).message || ""),
       String((specialist as Record<string, unknown>).question || ""),
       String((specialist as Record<string, unknown>).refined_formulation || ""),
-      String((specialist as Record<string, unknown>).wording_choice_user_raw || ""),
-      String((specialist as Record<string, unknown>).wording_choice_user_normalized || ""),
-      String((specialist as Record<string, unknown>).wording_choice_agent_current || ""),
+      String((specialist as Record<string, unknown>).compare_user_raw || ""),
+      String((specialist as Record<string, unknown>).compare_user_normalized || ""),
+      String((specialist as Record<string, unknown>).compare_agent_current || ""),
     ];
     const userFacingListCandidates: string[] = [
-      ...(Array.isArray((specialist as Record<string, unknown>).wording_choice_user_items)
-        ? ((specialist as Record<string, unknown>).wording_choice_user_items as unknown[]).map((item) => String(item || ""))
+      ...(Array.isArray((specialist as Record<string, unknown>).compare_user_items)
+        ? ((specialist as Record<string, unknown>).compare_user_items as unknown[]).map((item) => String(item || ""))
         : []),
-      ...(Array.isArray((specialist as Record<string, unknown>).wording_choice_suggestion_items)
-        ? ((specialist as Record<string, unknown>).wording_choice_suggestion_items as unknown[]).map((item) => String(item || ""))
+      ...(Array.isArray((specialist as Record<string, unknown>).compare_suggestion_items)
+        ? ((specialist as Record<string, unknown>).compare_suggestion_items as unknown[]).map((item) => String(item || ""))
         : []),
-      ...(Array.isArray((specialist as Record<string, unknown>).wording_choice_compare_units)
-        ? ((specialist as Record<string, unknown>).wording_choice_compare_units as unknown[]).flatMap((entry) => {
+      ...(Array.isArray((specialist as Record<string, unknown>).compare_compare_units)
+        ? ((specialist as Record<string, unknown>).compare_compare_units as unknown[]).flatMap((entry) => {
             const record = entry && typeof entry === "object" && !Array.isArray(entry)
               ? (entry as Record<string, unknown>)
               : {};
@@ -242,7 +242,7 @@ export function createRunStepRuntimeSemanticHelpers(deps: CreateRunStepRuntimeSe
       return "confirm_present_without_accepted_evidence";
     }
     if (stepId === "rulesofthegame" && state && hasConfirmAction) {
-      const wordingChoicePending = String((specialist as Record<string, unknown>).wording_choice_pending || "").trim() === "true";
+      const comparePending = String((specialist as Record<string, unknown>).compare_pending || "").trim() === "true";
       const acceptedOutput = hasAcceptedOutputEvidence(state, stepId);
       const acceptedValue = acceptedValueForStep(state, stepId);
       const visibleValue =
@@ -254,7 +254,7 @@ export function createRunStepRuntimeSemanticHelpers(deps: CreateRunStepRuntimeSe
         acceptedValue,
         visibleValue,
         statements: (specialist as Record<string, unknown>).statements,
-        wordingChoicePending,
+        comparePending,
       });
       if (!rulesGate.canConfirm) return "rules_confirm_policy_violation";
     }
@@ -268,18 +268,18 @@ export function createRunStepRuntimeSemanticHelpers(deps: CreateRunStepRuntimeSe
         return "missing_prompt_for_interactive_ask";
       }
     }
-    if (String((specialist as Record<string, unknown>).wording_choice_pending || "").trim() === "true") {
-      const hasWordingContext =
+    if (String((specialist as Record<string, unknown>).compare_pending || "").trim() === "true") {
+      const hasCompareContext =
         Boolean(String((specialist as Record<string, unknown>).message || "").trim()) ||
         Boolean(question) ||
-        Boolean(String((specialist as Record<string, unknown>).wording_choice_user_raw || "").trim()) ||
-        Boolean(String((specialist as Record<string, unknown>).wording_choice_user_normalized || "").trim()) ||
-        Boolean(String((specialist as Record<string, unknown>).wording_choice_agent_current || "").trim()) ||
-        (Array.isArray((specialist as Record<string, unknown>).wording_choice_user_items) &&
-          ((specialist as Record<string, unknown>).wording_choice_user_items as unknown[]).length > 0) ||
-        (Array.isArray((specialist as Record<string, unknown>).wording_choice_suggestion_items) &&
-          ((specialist as Record<string, unknown>).wording_choice_suggestion_items as unknown[]).length > 0);
-      if (!hasWordingContext) return "wording_choice_mode_requires_instruction_or_context";
+        Boolean(String((specialist as Record<string, unknown>).compare_user_raw || "").trim()) ||
+        Boolean(String((specialist as Record<string, unknown>).compare_user_normalized || "").trim()) ||
+        Boolean(String((specialist as Record<string, unknown>).compare_agent_current || "").trim()) ||
+        (Array.isArray((specialist as Record<string, unknown>).compare_user_items) &&
+          ((specialist as Record<string, unknown>).compare_user_items as unknown[]).length > 0) ||
+        (Array.isArray((specialist as Record<string, unknown>).compare_suggestion_items) &&
+          ((specialist as Record<string, unknown>).compare_suggestion_items as unknown[]).length > 0);
+      if (!hasCompareContext) return "compare_mode_requires_instruction_or_context";
     }
 
     if (stepId !== deps.step0Id && rendered.status === "valid_output") {
@@ -335,13 +335,13 @@ export function createRunStepRuntimeSemanticHelpers(deps: CreateRunStepRuntimeSe
     if (reason === "missing_prompt_for_interactive_ask") {
       (next as Record<string, unknown>).question = deps.promptFallbackForInteractiveAsk(state, stepId);
     }
-    if (reason === "wording_choice_mode_requires_instruction_or_context") {
+    if (reason === "compare_mode_requires_instruction_or_context") {
       const existingMessage = String((next as Record<string, unknown>).message || "").trim();
       if (!existingMessage) {
         (next as Record<string, unknown>).message = deps.uiStringFromStateMap(
           state,
-          "wording.choice.context.default",
-          deps.uiDefaultString("wording.choice.context.default")
+          "compare.choice.context.default",
+          deps.uiDefaultString("compare.choice.context.default")
         );
       }
     }
@@ -363,28 +363,28 @@ export function createRunStepRuntimeSemanticHelpers(deps: CreateRunStepRuntimeSe
       (next as Record<string, unknown>).refined_formulation = stripMarkupPreserveLines(
         String((next as Record<string, unknown>).refined_formulation || "")
       );
-      (next as Record<string, unknown>).wording_choice_user_raw = stripMarkupPreserveLines(
-        String((next as Record<string, unknown>).wording_choice_user_raw || "")
+      (next as Record<string, unknown>).compare_user_raw = stripMarkupPreserveLines(
+        String((next as Record<string, unknown>).compare_user_raw || "")
       );
-      (next as Record<string, unknown>).wording_choice_user_normalized = stripMarkupPreserveLines(
-        String((next as Record<string, unknown>).wording_choice_user_normalized || "")
+      (next as Record<string, unknown>).compare_user_normalized = stripMarkupPreserveLines(
+        String((next as Record<string, unknown>).compare_user_normalized || "")
       );
-      (next as Record<string, unknown>).wording_choice_agent_current = stripMarkupPreserveLines(
-        String((next as Record<string, unknown>).wording_choice_agent_current || "")
+      (next as Record<string, unknown>).compare_agent_current = stripMarkupPreserveLines(
+        String((next as Record<string, unknown>).compare_agent_current || "")
       );
-      if (Array.isArray((next as Record<string, unknown>).wording_choice_user_items)) {
-        (next as Record<string, unknown>).wording_choice_user_items = (
-          (next as Record<string, unknown>).wording_choice_user_items as unknown[]
+      if (Array.isArray((next as Record<string, unknown>).compare_user_items)) {
+        (next as Record<string, unknown>).compare_user_items = (
+          (next as Record<string, unknown>).compare_user_items as unknown[]
         ).map((item) => stripMarkupPreserveLines(String(item || ""))).filter(Boolean);
       }
-      if (Array.isArray((next as Record<string, unknown>).wording_choice_suggestion_items)) {
-        (next as Record<string, unknown>).wording_choice_suggestion_items = (
-          (next as Record<string, unknown>).wording_choice_suggestion_items as unknown[]
+      if (Array.isArray((next as Record<string, unknown>).compare_suggestion_items)) {
+        (next as Record<string, unknown>).compare_suggestion_items = (
+          (next as Record<string, unknown>).compare_suggestion_items as unknown[]
         ).map((item) => stripMarkupPreserveLines(String(item || ""))).filter(Boolean);
       }
-      if (Array.isArray((next as Record<string, unknown>).wording_choice_compare_units)) {
-        (next as Record<string, unknown>).wording_choice_compare_units = (
-          (next as Record<string, unknown>).wording_choice_compare_units as unknown[]
+      if (Array.isArray((next as Record<string, unknown>).compare_compare_units)) {
+        (next as Record<string, unknown>).compare_compare_units = (
+          (next as Record<string, unknown>).compare_compare_units as unknown[]
         ).map((entry, index) => {
           const record: Record<string, unknown> = entry && typeof entry === "object" && !Array.isArray(entry)
             ? { ...(entry as Record<string, unknown>) }

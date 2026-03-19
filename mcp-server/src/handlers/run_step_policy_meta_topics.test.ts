@@ -6,7 +6,7 @@ import { createRunStepPolicyMetaHelpers } from "./run_step_policy_meta.js";
 function buildHelpers() {
   return createRunStepPolicyMetaHelpers({
     fieldForStep: () => "dream",
-    wordingStepLabel: () => "Dream",
+    compareStepLabel: () => "Dream",
     finalFieldByStepId: {},
     provisionalValueForStep: () => "",
     parseStep0Final: () => ({ venture: "", name: "", status: "" }),

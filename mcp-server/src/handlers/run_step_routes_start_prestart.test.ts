@@ -27,8 +27,8 @@ test("start_prestart prestart gate hydrates canonical step0_bootstrap from the L
       switchToSelfDreamToken: "__SWITCH_TO_SELF_DREAM__",
       dreamStartExerciseRouteToken: "__ROUTE__DREAM_START_EXERCISE__",
     },
-    wording: {
-      wordingSelectionMessage: () => "",
+    compare: {
+      compareSelectionMessage: () => "",
       pickPrompt: (specialist: Record<string, unknown>) => String(specialist.question || ""),
       buildTextForWidget: ({ specialist }: { specialist: Record<string, unknown> }) =>
         String(specialist.message || ""),
@@ -147,7 +147,7 @@ test("start_prestart prestart gate hydrates canonical step0_bootstrap from the L
       actionCodeRaw: "",
       responseUiFlags: null,
       inputMode: "chat",
-      wordingChoiceEnabled: true,
+      compareEnabled: true,
       languageResolvedThisTurn: true,
       isBootstrapPollCall: false,
       motivationQuotesEnabled: true,
@@ -217,8 +217,8 @@ test("start_prestart ACTION_START seeds step_0_final from the step-0 specialist 
       switchToSelfDreamToken: "__SWITCH_TO_SELF_DREAM__",
       dreamStartExerciseRouteToken: "__ROUTE__DREAM_START_EXERCISE__",
     },
-    wording: {
-      wordingSelectionMessage: () => "",
+    compare: {
+      compareSelectionMessage: () => "",
       pickPrompt: (specialist: Record<string, unknown>) => String(specialist.question || ""),
       buildTextForWidget: ({ specialist }: { specialist: Record<string, unknown> }) =>
         String(specialist.message || ""),
@@ -331,7 +331,7 @@ test("start_prestart ACTION_START seeds step_0_final from the step-0 specialist 
       actionCodeRaw: "ACTION_START",
       responseUiFlags: null,
       inputMode: "widget",
-      wordingChoiceEnabled: true,
+      compareEnabled: true,
       languageResolvedThisTurn: true,
       isBootstrapPollCall: false,
       motivationQuotesEnabled: true,
@@ -395,8 +395,8 @@ test("start_prestart ACTION_START uses step-0 specialist bootstrap for natural o
       switchToSelfDreamToken: "__SWITCH_TO_SELF_DREAM__",
       dreamStartExerciseRouteToken: "__ROUTE__DREAM_START_EXERCISE__",
     },
-    wording: {
-      wordingSelectionMessage: () => "",
+    compare: {
+      compareSelectionMessage: () => "",
       pickPrompt: (specialist: Record<string, unknown>) => String(specialist.question || ""),
       buildTextForWidget: ({ specialist }: { specialist: Record<string, unknown> }) =>
         String(specialist.message || ""),
@@ -503,7 +503,7 @@ test("start_prestart ACTION_START uses step-0 specialist bootstrap for natural o
       actionCodeRaw: "ACTION_START",
       responseUiFlags: null,
       inputMode: "widget",
-      wordingChoiceEnabled: true,
+      compareEnabled: true,
       languageResolvedThisTurn: true,
       isBootstrapPollCall: false,
       motivationQuotesEnabled: true,
@@ -562,8 +562,8 @@ test("start_prestart ACTION_START shows canonical LLM bootstrap for multiword ve
       switchToSelfDreamToken: "__SWITCH_TO_SELF_DREAM__",
       dreamStartExerciseRouteToken: "__ROUTE__DREAM_START_EXERCISE__",
     },
-    wording: {
-      wordingSelectionMessage: () => "",
+    compare: {
+      compareSelectionMessage: () => "",
       pickPrompt: (specialist: Record<string, unknown>) => String(specialist.question || ""),
       buildTextForWidget: ({ specialist }: { specialist: Record<string, unknown> }) =>
         String(specialist.message || ""),
@@ -670,7 +670,7 @@ test("start_prestart ACTION_START shows canonical LLM bootstrap for multiword ve
       actionCodeRaw: "ACTION_START",
       responseUiFlags: null,
       inputMode: "widget",
-      wordingChoiceEnabled: true,
+      compareEnabled: true,
       languageResolvedThisTurn: true,
       isBootstrapPollCall: false,
       motivationQuotesEnabled: true,
@@ -738,8 +738,8 @@ test("start_prestart ACTION_START accepts canonical LLM bootstrap for venture-fi
       switchToSelfDreamToken: "__SWITCH_TO_SELF_DREAM__",
       dreamStartExerciseRouteToken: "__ROUTE__DREAM_START_EXERCISE__",
     },
-    wording: {
-      wordingSelectionMessage: () => "",
+    compare: {
+      compareSelectionMessage: () => "",
       pickPrompt: (specialist: Record<string, unknown>) => String(specialist.question || ""),
       buildTextForWidget: ({ specialist }: { specialist: Record<string, unknown> }) =>
         String(specialist.message || ""),
@@ -846,7 +846,7 @@ test("start_prestart ACTION_START accepts canonical LLM bootstrap for venture-fi
       actionCodeRaw: "ACTION_START",
       responseUiFlags: null,
       inputMode: "widget",
-      wordingChoiceEnabled: true,
+      compareEnabled: true,
       languageResolvedThisTurn: true,
       isBootstrapPollCall: false,
       motivationQuotesEnabled: true,
@@ -914,8 +914,8 @@ test("start_prestart ACTION_START prefers canonical step0_bootstrap over reparsi
       switchToSelfDreamToken: "__SWITCH_TO_SELF_DREAM__",
       dreamStartExerciseRouteToken: "__ROUTE__DREAM_START_EXERCISE__",
     },
-    wording: {
-      wordingSelectionMessage: () => "",
+    compare: {
+      compareSelectionMessage: () => "",
       pickPrompt: (specialist: Record<string, unknown>) => String(specialist.question || ""),
       buildTextForWidget: ({ specialist }: { specialist: Record<string, unknown> }) =>
         String(specialist.message || ""),
@@ -1022,7 +1022,7 @@ test("start_prestart ACTION_START prefers canonical step0_bootstrap over reparsi
       actionCodeRaw: "ACTION_START",
       responseUiFlags: null,
       inputMode: "widget",
-      wordingChoiceEnabled: true,
+      compareEnabled: true,
       languageResolvedThisTurn: true,
       isBootstrapPollCall: false,
       motivationQuotesEnabled: true,
@@ -1087,8 +1087,8 @@ test("start_prestart ACTION_START uses non-empty fallback copy when no seed is a
       switchToSelfDreamToken: "__SWITCH_TO_SELF_DREAM__",
       dreamStartExerciseRouteToken: "__ROUTE__DREAM_START_EXERCISE__",
     },
-    wording: {
-      wordingSelectionMessage: () => "",
+    compare: {
+      compareSelectionMessage: () => "",
       pickPrompt: (specialist: Record<string, unknown>) => String(specialist.question || ""),
       buildTextForWidget: ({ specialist }: { specialist: Record<string, unknown> }) =>
         String(specialist.message || ""),
@@ -1197,7 +1197,7 @@ test("start_prestart ACTION_START uses non-empty fallback copy when no seed is a
       actionCodeRaw: "ACTION_START",
       responseUiFlags: null,
       inputMode: "widget",
-      wordingChoiceEnabled: true,
+      compareEnabled: true,
       languageResolvedThisTurn: true,
       isBootstrapPollCall: false,
       motivationQuotesEnabled: true,

@@ -174,7 +174,7 @@ async function main() {
 
   const unhealableLegacy = await run_step({
     current_step_id: "purpose",
-    user_message: "ACTION_WORDING_PICK_USER",
+    user_message: "ACTION_COMPARE_PICK_USER",
     input_mode: "widget",
     state: {
       ...getDefaultState(),
@@ -435,26 +435,26 @@ async function main() {
       current_step_id: "dream",
       text: "",
       prompt: "",
-      specialist: {},
+      specialist: {
+        compare_pending: "true",
+        compare_mode: "text",
+        compare_presentation: "picker",
+        feedback_reason_text: "Deze suggestie maakt de droom scherper.",
+        compare_user_normalized: "Wij willen bedrijven helpen groeien.",
+        compare_agent_current: "Mindd droomt van bedrijven die vanuit betekenis echte verandering brengen.",
+        compare_instruction: "Choose the version that fits best.",
+      },
       state: {
         ...getDefaultState(),
         started: "true",
         current_step: "dream",
-        ui_action_wording_pick_user: "ACTION_WORDING_PICK_USER",
-        ui_action_wording_pick_suggestion: "ACTION_WORDING_PICK_SUGGESTION",
+        ui_action_compare_pick_user: "ACTION_COMPARE_PICK_USER",
+        ui_action_compare_pick_suggestion: "ACTION_COMPARE_PICK_SUGGESTION",
       },
       ui: {
         contract_id: "dream:interactive:refine",
         view: {
           mode: "interactive",
-          variant: "text_compare",
-        },
-        feedback_contract: {
-          kind: "single_value_compare",
-          mode: "text",
-          current_value: "Wij willen bedrijven helpen groeien.",
-          suggested_value: "Mindd droomt van bedrijven die vanuit betekenis echte verandering brengen.",
-          instruction: "Choose the version that fits best.",
         },
       },
     },
@@ -479,7 +479,15 @@ async function main() {
       current_step_id: "dream",
       text: "",
       prompt: "",
-      specialist: {},
+      specialist: {
+        compare_pending: "true",
+        compare_mode: "text",
+        compare_presentation: "picker",
+        feedback_reason_text: "Deze suggestie maakt de droom scherper.",
+        compare_user_normalized: "Wij willen bedrijven helpen groeien.",
+        compare_agent_current: "Mindd droomt van bedrijven die vanuit betekenis echte verandering brengen.",
+        compare_instruction: "Choose the version that fits best.",
+      },
       state: {
         ...getDefaultState(),
         started: "true",
@@ -491,13 +499,6 @@ async function main() {
           mode: "interactive",
           variant: "text_compare",
         },
-        feedback_contract: {
-          kind: "single_value_compare",
-          mode: "text",
-          current_value: "Wij willen bedrijven helpen groeien.",
-          suggested_value: "Mindd droomt van bedrijven die vanuit betekenis echte verandering brengen.",
-          instruction: "Choose the version that fits best.",
-        },
       },
     },
     {
@@ -508,11 +509,11 @@ async function main() {
       attachRegistryPayload: (payload) => payload,
     }
   );
-  assert.equal(compareFailClosed.ok, false, "compare_smoke_fail_closed: malformed compare must fail closed");
+  assert.equal(compareFailClosed.ok, true, "compare_smoke_self_heal: malformed compare should self-heal");
   assert.equal(
-    String(compareFailClosed?.state?.reason_code || ""),
-    "ui_pending_interaction_missing_for_compare",
-    "compare_smoke_fail_closed: missing pending_interaction must be explicit"
+    String(compareFailClosed?.ui?.view?.variant || ""),
+    "",
+    "compare_smoke_self_heal: stale compare variant must be removed when no pending_interaction survives"
   );
 
   console.log("[contract_smoke] PASS", {

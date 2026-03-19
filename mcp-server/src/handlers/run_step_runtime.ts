@@ -72,7 +72,7 @@ import {
 } from "./specialist_dispatch.js";
 import {
   createRunStepUiPayloadHelpers,
-  createRunStepWordingHelpers,
+  createRunStepCompareHelpers,
   createRunStepStateUpdateHelpers,
   createRunStepPolicyMetaHelpers,
   createRunStepStep0DisplayHelpers,
@@ -86,7 +86,7 @@ import {
   runStepRuntimeSpecialRoutesLayer,
   runStepRuntimePostPipelineLayer,
 } from "./run_step_modules.js";
-import { pickDualChoiceSuggestion } from "./run_step_wording_heuristics_defaults.js";
+import { pickDualChoiceSuggestion } from "./run_step_compare_heuristics_defaults.js";
 import {
   createRunStepI18nRuntimeHelpers,
   type UiI18nTelemetryCounters,
@@ -113,10 +113,10 @@ import {
   parseListItems,
   splitSentenceItems,
   canonicalizeComparableText,
-  areEquivalentWordingVariants,
-  resolvePendingWordingChoiceIntent,
-  classifyPendingWordingChoiceTextIntent,
-} from "./run_step_wording_heuristics.js";
+  areEquivalentCompareVariants,
+  resolvePendingCompareIntent,
+  classifyPendingCompareTextIntent,
+} from "./run_step_compare_heuristics.js";
 import {
   LANGUAGE_LOCK_INSTRUCTION,
   UNIVERSAL_META_OFFTOPIC_POLICY,
@@ -170,9 +170,9 @@ import {
   isUiStrictNonEnPendingV1Enabled,
   isUiTranslationFastModelV1Enabled,
   isUiWaitShellV2Enabled,
-  isUiWordingFeedbackKeyedV1Enabled,
-  isWordingChoiceIntentV1Enabled,
-  isWordingPanelCleanBodyV1Enabled,
+  isUiCompareFeedbackKeyedV1Enabled,
+  isCompareIntentV1Enabled,
+  isComparePanelCleanBodyV1Enabled,
   normalizeDreamRuntimeMode,
   normalizeUsage,
   registerTurnLlmCall,
@@ -191,7 +191,7 @@ import {
 } from "./run_step_runtime_state_helpers.js";
 import {
   createRunStepRuntimeActionHelpers,
-  type WordingChoiceUiPayload,
+  type CompareUiPayload,
   type UiViewPayload,
 } from "./run_step_runtime_action_helpers.js";
 import { createRunStepRuntimeDreamHelpers } from "./run_step_runtime_dream_helpers.js";
@@ -237,8 +237,8 @@ const {
   clearStepInteractiveState,
   clearStepSupportState,
   fieldForStep,
-  wordingStepLabel,
-  wordingSelectionMessage,
+  compareStepLabel,
+  compareSelectionMessage,
   looksLikeMetaInstruction,
   extractUserMessageFromWrappedInput,
   isPristineStateForStart,
@@ -389,18 +389,18 @@ function sanitizeEscapeInWidget(specialist: unknown): Record<string, unknown> {
       .join("\n")
       .trim();
   }
-  safe.wording_choice_pending = "false";
-  safe.wording_choice_selected = "";
-  safe.wording_choice_list_semantics = "delta";
-  safe.wording_choice_variant = "";
-  safe.wording_choice_user_label = "";
-  safe.wording_choice_suggestion_label = "";
-  safe.wording_choice_compare_mode = "";
-  safe.wording_choice_compare_cursor = "";
-  safe.wording_choice_compare_units = [];
-  safe.wording_choice_compare_segments = [];
-  safe.wording_choice_user_variant_semantics = "";
-  safe.wording_choice_user_variant_stepworthy = "";
+  safe.compare_pending = "false";
+  safe.compare_selected = "";
+  safe.compare_list_semantics = "delta";
+  safe.compare_variant = "";
+  safe.compare_user_label = "";
+  safe.compare_suggestion_label = "";
+  safe.compare_compare_mode = "";
+  safe.compare_compare_cursor = "";
+  safe.compare_compare_units = [];
+  safe.compare_compare_segments = [];
+  safe.compare_user_variant_semantics = "";
+  safe.compare_user_variant_stepworthy = "";
   safe.feedback_mode = "none";
   safe.feedback_reason_key = "";
   safe.feedback_reason_text = "";
@@ -470,17 +470,17 @@ const runtimeTextHelpers = createRunStepRuntimeTextHelpers({
   parseMenuFromContractIdForStep: (contractIdRaw, stepId) =>
     parseMenuFromContractIdForStep(contractIdRaw, stepId),
   canonicalizeComparableText,
-  wordingSelectionMessage,
+  compareSelectionMessage,
   mergeListItems: (userItems, suggestionItems) => mergeListItems(userItems, suggestionItems),
   splitSentenceItems,
   sanitizePendingListMessage: (message, fallbackItems, stateForSanitize, specialistForSanitize) =>
     sanitizePendingListMessage(message, fallbackItems, stateForSanitize || null, specialistForSanitize || null),
-  isWordingPanelCleanBodyV1Enabled,
+  isComparePanelCleanBodyV1Enabled,
   fieldForStep,
   stripUnsupportedReformulationClaims: (message) =>
     stripUnsupportedReformulationClaims(message),
   tokenizeWords,
-  compactWordingPanelBody,
+  compactComparePanelBody,
 });
 
 export const buildTextForWidget = runtimeTextHelpers.buildTextForWidget;
@@ -507,18 +507,18 @@ function normalizeNoiseComparable(value: string): string {
     .toLowerCase();
 }
 
-function wordingPanelNoiseComparables(state: CanvasState | null | undefined): Set<string> {
+function comparePanelNoiseComparables(state: CanvasState | null | undefined): Set<string> {
   const keys = [
-    "wordingChoiceHeading",
-    "wordingChoiceGroupedCompareUserLabel",
-    "wordingChoiceSuggestionLabel",
-    "wordingChoiceGroupedCompareSuggestionLabel",
-    "wordingChoiceInstruction",
-    "wordingChoiceGroupedCompareInstruction",
-    "wordingChoiceGroupedCompareRetainedHeading",
-    "wording.choice.context.default",
-    "wordingChoice.chooseVersion",
-    "wordingChoice.useInputFallback",
+    "compareHeading",
+    "compareGroupedUserLabel",
+    "compareSuggestionLabel",
+    "compareGroupedCompareSuggestionLabel",
+    "compareInstruction",
+    "compareGroupedCompareInstruction",
+    "compareGroupedCompareRetainedHeading",
+    "compare.choice.context.default",
+    "compare.chooseVersion",
+    "compare.useInputFallback",
   ];
   const comparables = new Set<string>();
   for (const key of keys) {
@@ -530,10 +530,10 @@ function wordingPanelNoiseComparables(state: CanvasState | null | undefined): Se
   return comparables;
 }
 
-function compactWordingPanelBody(messageRaw: string, state?: CanvasState | null): string {
+function compactComparePanelBody(messageRaw: string, state?: CanvasState | null): string {
   const message = String(messageRaw || "").replace(/\r/g, "\n").trim();
   if (!message) return "";
-  const blockedComparables = wordingPanelNoiseComparables(state || null);
+  const blockedComparables = comparePanelNoiseComparables(state || null);
   const lines = message
     .split("\n")
     .map((line) => String(line || "").replace(/<[^>]+>/g, " ").trim())
@@ -556,7 +556,7 @@ function compactWordingPanelBody(messageRaw: string, state?: CanvasState | null)
 
 const policyMetaHelpers = createRunStepPolicyMetaHelpers({
   fieldForStep,
-  wordingStepLabel,
+  compareStepLabel,
   finalFieldByStepId: FINAL_FIELD_BY_STEP_ID,
   provisionalValueForStep,
   parseStep0Final,
@@ -703,7 +703,7 @@ function syncDreamRuntimeMode(state: CanvasState): void {
   });
 }
 
-const wordingHelpers = createRunStepWordingHelpers({
+const wordingHelpers = createRunStepCompareHelpers({
   step0Id: STEP_0_ID,
   presentationStepId: PRESENTATION_STEP_ID,
   dreamStepId: DREAM_STEP_ID,
@@ -727,45 +727,45 @@ const wordingHelpers = createRunStepWordingHelpers({
   isMaterialRewriteCandidate,
   shouldTreatAsStepContributingInput,
   pickDualChoiceSuggestion,
-  areEquivalentWordingVariants,
+  areEquivalentCompareVariants: areEquivalentCompareVariants,
   normalizeEntityPhrase,
   withProvisionalValue,
   renderFreeTextTurnPolicy,
   applyUiPhaseByStep,
-  isUiWordingFeedbackKeyedV1Enabled,
-  isWordingChoiceIntentV1Enabled,
+  isUiCompareFeedbackKeyedV1Enabled,
+  isCompareIntentV1Enabled,
   bumpUiI18nCounter: (telemetry, key, amount) =>
     bumpUiI18nCounter(
       telemetry as UiI18nTelemetryCounters | null | undefined,
       key as keyof UiI18nTelemetryCounters,
       amount
     ),
-  wordingSelectionMessage,
+  compareSelectionMessage,
 });
 
 const {
   mergeListItems,
   sanitizePendingListMessage,
-  copyPendingWordingChoiceState,
-  pickWordingAgentBase,
+  copyPendingCompareState,
+  pickCompareAgentBase,
   isRefineAdjustRouteToken,
-  isWordingPickRouteToken,
-  applyWordingPickSelection,
-  buildWordingChoiceFromPendingSpecialist,
+  isComparePickRouteToken,
+  applyComparePickSelection,
+  buildCompareFromPendingSpecialist,
 } = wordingHelpers;
 
-export const isWordingChoiceEligibleStep = wordingHelpers.isWordingChoiceEligibleStep;
-export const isWordingChoiceEligibleContext = wordingHelpers.isWordingChoiceEligibleContext;
+export const isCompareEligibleStep = wordingHelpers.isCompareEligibleStep;
+export const isCompareEligibleContext = wordingHelpers.isCompareEligibleContext;
 export const isListChoiceScope = wordingHelpers.isListChoiceScope;
 export const stripUnsupportedReformulationClaims = wordingHelpers.stripUnsupportedReformulationClaims;
-export const buildWordingChoiceFromTurn = wordingHelpers.buildWordingChoiceFromTurn;
+export const buildCompareFromTurn = wordingHelpers.buildCompareFromTurn;
 export {
   isMaterialRewriteCandidate,
-  areEquivalentWordingVariants,
+  areEquivalentCompareVariants,
   isClearlyGeneralOfftopicInput,
   shouldTreatAsStepContributingInput,
-  resolvePendingWordingChoiceIntent,
-  classifyPendingWordingChoiceTextIntent,
+  resolvePendingCompareIntent,
+  classifyPendingCompareTextIntent,
 };
 
 const resolveActionCodeMenuTransition = uiPayloadHelpers.resolveActionCodeMenuTransition;
@@ -951,7 +951,7 @@ type RunStepBase = {
     text_keys?: string[];
     view?: UiViewPayload;
     flags: Record<string, boolean | string>;
-    wording_choice?: WordingChoiceUiPayload;
+    compare?: CompareUiPayload;
   };
   presentation_assets?: {
     pdf_url: string;
@@ -984,16 +984,16 @@ const runStepRuntimeExecuteDeps = {
   NEXT_MENU_BY_ACTIONCODE, DREAM_START_EXERCISE_ACTION_CODES, resolveActionCodeTransition,
   setUiRenderModeByStep, buildContractId, processActionCode, firstConfirmActionCodeForMenu, firstGuidanceActionCodeForMenu, shouldPretransitionActionCode, setDreamRuntimeMode, provisionalValueForStep,
   clearProvisionalValue, clearStepInteractiveState, isUiStateHygieneSwitchV1Enabled,
-  isClearlyGeneralOfftopicInput, isWordingChoiceEligibleContext, buildWordingChoiceFromPendingSpecialist,
-  applyWordingPickSelection, isWordingPickRouteToken, isRefineAdjustRouteToken, buildWordingChoiceFromTurn,
-  pickWordingAgentBase, copyPendingWordingChoiceState, normalizeNonStep0OfftopicSpecialist,
+  isClearlyGeneralOfftopicInput, isCompareEligibleContext, buildCompareFromPendingSpecialist,
+  applyComparePickSelection, isComparePickRouteToken, isRefineAdjustRouteToken, buildCompareFromTurn,
+  pickCompareAgentBase, copyPendingCompareState, normalizeNonStep0OfftopicSpecialist,
   uiStringFromStateMap, uiDefaultString, attachRegistryPayload, langFromState, UI_CONTRACT_VERSION,
   DREAM_FORCE_REFINE_ROUTE_PREFIX, DREAM_EXPLAINER_OVERLAP_REPAIR_ROUTE_PREFIX, DREAM_EXPLAINER_MULTI_REWRITE_REPAIR_ROUTE_PREFIX, STRATEGY_CONSOLIDATE_ROUTE_TOKEN, DREAM_SPECIALIST, PURPOSE_SPECIALIST, BIGWHY_SPECIALIST, ENTITY_SPECIALIST, STRATEGY_SPECIALIST,
   callSpecialistStrictSafe, normalizeLocalizedConceptTerms, normalizeEntitySpecialistResult, applyCentralMetaTopicRouter,
   normalizeStep0AskDisplayContract, hasValidStep0Final, applyPostSpecialistStateMutations,
-  isMetaOfftopicFallbackTurn, shouldTreatAsStepContributingInput, resolvePendingWordingChoiceIntent, hasDreamSpecialistCandidate,
+  isMetaOfftopicFallbackTurn, shouldTreatAsStepContributingInput, resolvePendingCompareIntent, hasDreamSpecialistCandidate,
   buildDreamRefineFallbackSpecialist, strategyStatementsForConsolidateGuard, enforceDreamBuilderQuestionProgress,
-  applyMotivationQuotesContractV11, wordingSelectionMessage, applyStateUpdate, parseStep0Final,
+  applyMotivationQuotesContractV11, compareSelectionMessage, applyStateUpdate, parseStep0Final,
   inferStep0SeedFromInitialMessage, step0ReadinessQuestion, step0CardDescForState, step0QuestionForState, generatePresentationAssets,
   pickDreamCandidateFromState,
   runStepRuntimeSpecialRoutesLayer, runStepRuntimePostPipelineLayer,

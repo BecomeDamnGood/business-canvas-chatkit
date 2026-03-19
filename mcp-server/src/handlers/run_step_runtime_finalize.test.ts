@@ -6,7 +6,7 @@ import {
   createRunStepRuntimeTextHelpers,
 } from "./run_step_runtime_finalize.js";
 
-function buildTextHelpers(wordingSelectionMessage: (
+function buildTextHelpers(compareSelectionMessage: (
   stepId: string,
   _state: any,
   _activeSpecialist?: string,
@@ -25,7 +25,7 @@ function buildTextHelpers(wordingSelectionMessage: (
         .replace(/[^a-z0-9\s]/gi, " ")
         .replace(/\s+/g, " ")
         .trim(),
-    wordingSelectionMessage,
+    compareSelectionMessage,
     mergeListItems: (userItems: string[], suggestionItems: string[]) => [...userItems, ...suggestionItems],
     splitSentenceItems: (text: string) =>
       String(text || "")
@@ -33,7 +33,7 @@ function buildTextHelpers(wordingSelectionMessage: (
         .map((line) => line.trim())
         .filter(Boolean),
     sanitizePendingListMessage: (message: string) => String(message || ""),
-    isWordingPanelCleanBodyV1Enabled: () => false,
+    isComparePanelCleanBodyV1Enabled: () => false,
     fieldForStep: (stepId: string) => {
       if (stepId === "bigwhy") return "bigwhy";
       if (stepId === "strategy") return "strategy";
@@ -47,7 +47,7 @@ function buildTextHelpers(wordingSelectionMessage: (
         .split(/\s+/)
         .map((token) => token.trim())
         .filter(Boolean),
-    compactWordingPanelBody: (message: string) => String(message || ""),
+    compactComparePanelBody: (message: string) => String(message || ""),
   });
 }
 
@@ -1049,7 +1049,7 @@ test("buildTextForWidget keeps dream-builder rendering canonical-only and skips 
   assert.equal(output, "Ga verder met de Droom-oefening.");
 });
 
-test("buildTextForWidget includes canonical pending suggestion text when wording-choice is pending", () => {
+test("buildTextForWidget includes canonical pending suggestion text when compare is pending", () => {
   const helpers = buildTextHelpers(() => "");
   const suggestion =
     "Mindd droomt van een wereld waarin mensen dankzij AI beter geinformeerde keuzes maken en meer rust ervaren bij aankopen.";
@@ -1057,10 +1057,10 @@ test("buildTextForWidget includes canonical pending suggestion text when wording
     specialist: {
       ui_contract_id: "dream:ASK:DREAM_MENU_REFINE:v1",
       message: "Dat is een interessant uitgangspunt.",
-      wording_choice_pending: "true",
-      wording_choice_mode: "text",
-      wording_choice_presentation: "canonical",
-      wording_choice_agent_current: suggestion,
+      compare_pending: "true",
+      compare_mode: "text",
+      compare_presentation: "canonical",
+      compare_agent_current: suggestion,
       refined_formulation: "",
       dream: "",
     },
@@ -1068,7 +1068,7 @@ test("buildTextForWidget includes canonical pending suggestion text when wording
       active_specialist: "Dream",
       current_step: "dream",
       ui_strings: {
-        wordingChoiceSuggestionLabel: "Dit zou mijn suggestie zijn:",
+        compareSuggestionLabel: "Dit zou mijn suggestie zijn:",
       },
     } as any,
   });
@@ -1100,10 +1100,10 @@ test("buildTextForWidget keeps canonical pending suggestion visible across singl
       specialist: {
         ui_contract_id: scenario.contract,
         message: "Heldere richting helpt je keuzes verscherpen.",
-        wording_choice_pending: "true",
-        wording_choice_mode: "text",
-        wording_choice_presentation: "canonical",
-        wording_choice_agent_current: scenario.suggestion,
+        compare_pending: "true",
+        compare_mode: "text",
+        compare_presentation: "canonical",
+        compare_agent_current: scenario.suggestion,
         refined_formulation: "",
       },
       state: {
@@ -1116,7 +1116,7 @@ test("buildTextForWidget keeps canonical pending suggestion visible across singl
   }
 });
 
-test("buildTextForWidget suppresses standalone body text for single-value wording-choice picker states", () => {
+test("buildTextForWidget suppresses standalone body text for single-value compare picker states", () => {
   const helpers = buildTextHelpers((stepId) => {
     if (stepId === "purpose") {
       return [
@@ -1149,12 +1149,12 @@ test("buildTextForWidget suppresses standalone body text for single-value wordin
         ui_contract_id: scenario.contract,
         message: scenario.message,
         refined_formulation: scenario.suggestion,
-        wording_choice_pending: "true",
-        wording_choice_mode: "text",
-        wording_choice_presentation: "picker",
-        wording_choice_target_field: scenario.stepId,
-        wording_choice_user_normalized: "Originele input",
-        wording_choice_agent_current: scenario.suggestion,
+        compare_pending: "true",
+        compare_mode: "text",
+        compare_presentation: "picker",
+        compare_target_field: scenario.stepId,
+        compare_user_normalized: "Originele input",
+        compare_agent_current: scenario.suggestion,
       },
       state: {
         active_specialist: scenario.stepId,
@@ -1166,7 +1166,7 @@ test("buildTextForWidget suppresses standalone body text for single-value wordin
   }
 });
 
-test("buildTextForWidget keeps Dream single-value body visible even when stale canonical wording-choice state is present", () => {
+test("buildTextForWidget keeps Dream single-value body visible even when stale canonical compare state is present", () => {
   const helpers = buildTextHelpers((stepId) => {
     if (stepId !== "dream") return "";
     return [
@@ -1187,12 +1187,12 @@ test("buildTextForWidget keeps Dream single-value body visible even when stale c
         "Mindd droomt van een wereld waarin ondernemers rust ervaren in hun keuzes.",
       ].join("\n"),
       refined_formulation: "Mindd droomt van een wereld waarin ondernemers rust ervaren in hun keuzes.",
-      wording_choice_pending: "true",
-      wording_choice_mode: "text",
-      wording_choice_presentation: "canonical",
-      wording_choice_target_field: "dream",
-      wording_choice_user_normalized: "Originele input",
-      wording_choice_agent_current: "Mindd droomt van een wereld waarin ondernemers rust ervaren in hun keuzes.",
+      compare_pending: "true",
+      compare_mode: "text",
+      compare_presentation: "canonical",
+      compare_target_field: "dream",
+      compare_user_normalized: "Originele input",
+      compare_agent_current: "Mindd droomt van een wereld waarin ondernemers rust ervaren in hun keuzes.",
     },
     state: {
       active_specialist: "Dream",
@@ -1205,7 +1205,7 @@ test("buildTextForWidget keeps Dream single-value body visible even when stale c
   assert.match(output, /Mindd droomt van een wereld waarin ondernemers rust ervaren in hun keuzes\./);
 });
 
-test("buildTextForWidget suppresses Dream standalone body while an active wording-choice compare is present", () => {
+test("buildTextForWidget suppresses Dream standalone body while an active compare compare is present", () => {
   const helpers = buildTextHelpers((stepId) => {
     if (stepId !== "dream") return "";
     return [
@@ -1226,12 +1226,12 @@ test("buildTextForWidget suppresses Dream standalone body while an active wordin
         "Mindd droomt van een wereld waarin ondernemers rust ervaren in hun keuzes.",
       ].join("\n"),
       refined_formulation: "Mindd droomt van een wereld waarin ondernemers rust ervaren in hun keuzes.",
-      wording_choice_pending: "true",
-      wording_choice_mode: "text",
-      wording_choice_presentation: "picker",
-      wording_choice_target_field: "dream",
-      wording_choice_user_normalized: "Dit gaat over dat mensen het beu zijn om verkeerd voorgelicht te worden.",
-      wording_choice_agent_current: "Mindd droomt van een wereld waarin ondernemers rust ervaren in hun keuzes.",
+      compare_pending: "true",
+      compare_mode: "text",
+      compare_presentation: "picker",
+      compare_target_field: "dream",
+      compare_user_normalized: "Dit gaat over dat mensen het beu zijn om verkeerd voorgelicht te worden.",
+      compare_agent_current: "Mindd droomt van een wereld waarin ondernemers rust ervaren in hun keuzes.",
     },
     state: {
       active_specialist: "Dream",
@@ -1263,7 +1263,7 @@ test("buildTextForWidget strips raw HTML tags from user-facing text", () => {
   assert.match(output, /Doelgroep blijft zichtbaar\./);
 });
 
-test("finalizeResponse keeps Dream self wording-choice actions when builder compare is not active", () => {
+test("finalizeResponse keeps Dream self compare actions when builder compare is not active", () => {
   const helpers = buildFinalizeLayer();
   const state = {
     current_step: "dream",
@@ -1271,12 +1271,12 @@ test("finalizeResponse keeps Dream self wording-choice actions when builder comp
     started: "true",
     last_specialist_result: {
       ui_contract_id: "dream:ASK:DREAM_MENU_REFINE:v1",
-      wording_choice_pending: "true",
-      wording_choice_mode: "text",
-      wording_choice_presentation: "picker",
-      wording_choice_target_field: "dream",
-      wording_choice_user_normalized: "Mijn ruwe droom",
-      wording_choice_agent_current: "Mindd droomt van een wereld waarin keuzes rust geven.",
+      compare_pending: "true",
+      compare_mode: "text",
+      compare_presentation: "picker",
+      compare_target_field: "dream",
+      compare_user_normalized: "Mijn ruwe droom",
+      compare_agent_current: "Mindd droomt van een wereld waarin keuzes rust geven.",
       __dream_builder_compare_pending: "false",
     },
   } satisfies Record<string, unknown>;
@@ -1296,14 +1296,14 @@ test("finalizeResponse keeps Dream self wording-choice actions when builder comp
     ui: {
       view: {
         mode: "interactive",
-        variant: "wording_choice",
+        variant: "text_compare",
       },
     },
   });
 
   const finalState = (response.state || {}) as Record<string, unknown>;
-  assert.equal(String(finalState.ui_action_wording_pick_user || ""), "ACTION_WORDING_PICK_USER");
-  assert.equal(String(finalState.ui_action_wording_pick_suggestion || ""), "ACTION_WORDING_PICK_SUGGESTION");
+  assert.equal(String(finalState.ui_action_compare_pick_user || ""), "ACTION_COMPARE_PICK_USER");
+  assert.equal(String(finalState.ui_action_compare_pick_suggestion || ""), "ACTION_COMPARE_PICK_SUGGESTION");
 });
 
 test("buildTextForWidget keeps single-value confirm fallback text stable without duplicating canonical output", () => {

@@ -2,7 +2,7 @@
   "id": "runtime_blocked_golden",
   "path": "blocked",
   "input": {
-    "user_message": "ACTION_WORDING_PICK_USER",
+    "user_message": "ACTION_COMPARE_PICK_USER",
     "input_mode": "widget",
     "state": {
       "current_step": "role",
@@ -18,12 +18,12 @@
         "message": "I think I understand what you mean.",
         "role": "Mindd sets standards for purpose-driven business.",
         "refined_formulation": "Mindd sets standards for purpose-driven business.",
-        "wording_choice_pending": "true",
-        "wording_choice_user_raw": "We offer the best quality.",
-        "wording_choice_user_normalized": "We offer the best quality.",
-        "wording_choice_agent_current": "Mindd sets standards for purpose-driven business.",
-        "wording_choice_mode": "text",
-        "wording_choice_target_field": "role"
+        "compare_pending": "true",
+        "compare_user_raw": "We offer the best quality.",
+        "compare_user_normalized": "We offer the best quality.",
+        "compare_agent_current": "Mindd sets standards for purpose-driven business.",
+        "compare_mode": "text",
+        "compare_target_field": "role"
       }
     }
   },

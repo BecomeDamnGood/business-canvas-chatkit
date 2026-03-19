@@ -131,7 +131,7 @@ export function evaluateRulesRuntimeGate(params: {
   acceptedValue: unknown;
   visibleValue: unknown;
   statements: unknown;
-  wordingChoicePending: boolean;
+  comparePending: boolean;
 }): RulesRuntimeGateResult {
   const items = parseItemsFromPrioritySources({
     statements: params.statements,
@@ -143,7 +143,7 @@ export function evaluateRulesRuntimeGate(params: {
   const hasExternalRule = items.some((line) => looksExternalRule(line));
   const canConfirm =
     params.acceptedOutput &&
-    !params.wordingChoicePending &&
+    !params.comparePending &&
     count >= RULESOFTHEGAME_MIN_RULES &&
     count <= RULESOFTHEGAME_MAX_RULES;
   return {
@@ -237,20 +237,20 @@ export function applyRulesRuntimePolicy(params: {
       refined_formulation: "",
       rulesofthegame: "",
       statements: userItems,
-      wording_choice_pending: "true",
-      wording_choice_selected: "",
-      wording_choice_mode: "list",
-      wording_choice_target_field: "rulesofthegame",
-      wording_choice_list_semantics: "full",
-      wording_choice_user_raw: userBullets,
-      wording_choice_user_normalized: userBullets,
-      wording_choice_user_items: userItems,
-      wording_choice_suggestion_items: suggestionItems,
-      wording_choice_base_items: [],
-      wording_choice_agent_current: suggestionBullets,
-      wording_choice_variant: "",
-      wording_choice_user_label: "",
-      wording_choice_suggestion_label: "",
+      compare_pending: "true",
+      compare_selected: "",
+      compare_mode: "list",
+      compare_target_field: "rulesofthegame",
+      compare_list_semantics: "full",
+      compare_user_raw: userBullets,
+      compare_user_normalized: userBullets,
+      compare_user_items: userItems,
+      compare_suggestion_items: suggestionItems,
+      compare_base_items: [],
+      compare_agent_current: suggestionBullets,
+      compare_variant: "",
+      compare_user_label: "",
+      compare_suggestion_label: "",
       feedback_reason_key: "",
       feedback_reason_text: rationale,
       __rules_policy_applied: "true",
@@ -274,20 +274,20 @@ export function applyRulesRuntimePolicy(params: {
     statements: finalItems,
     refined_formulation: bullets,
     rulesofthegame: bullets,
-    wording_choice_pending: "false",
-    wording_choice_selected: "",
-    wording_choice_mode: "",
-    wording_choice_target_field: "",
-    wording_choice_list_semantics: "delta",
-    wording_choice_user_raw: "",
-    wording_choice_user_normalized: "",
-    wording_choice_user_items: [],
-    wording_choice_suggestion_items: [],
-    wording_choice_base_items: [],
-    wording_choice_agent_current: "",
-    wording_choice_variant: "",
-    wording_choice_user_label: "",
-    wording_choice_suggestion_label: "",
+    compare_pending: "false",
+    compare_selected: "",
+    compare_mode: "",
+    compare_target_field: "",
+    compare_list_semantics: "delta",
+    compare_user_raw: "",
+    compare_user_normalized: "",
+    compare_user_items: [],
+    compare_suggestion_items: [],
+    compare_base_items: [],
+    compare_agent_current: "",
+    compare_variant: "",
+    compare_user_label: "",
+    compare_suggestion_label: "",
     feedback_reason_key: "",
     feedback_reason_text: "",
     __rules_policy_applied: "true",

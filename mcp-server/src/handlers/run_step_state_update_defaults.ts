@@ -16,7 +16,7 @@ import { applyRulesRuntimePolicy } from "../steps/rulesofthegame_runtime_policy.
 import { applyDreamRuntimePolicy } from "../steps/dream_runtime_policy.js";
 import { PRESENTATION_STEP_ID } from "../steps/presentation.js";
 import { createRunStepStateUpdateHelpers } from "./run_step_state_update.js";
-import { parseListItems } from "./run_step_wording_heuristics.js";
+import { parseListItems } from "./run_step_compare_heuristics.js";
 
 type DreamRuntimeMode = "self" | "builder_collect" | "builder_scoring" | "builder_refine";
 
@@ -42,7 +42,7 @@ function normalizedProvisionalSourceByStep(state: any): Record<string, Provision
     const source = String(sourceRaw || "").trim();
     if (
       source === "user_input" ||
-      source === "wording_pick" ||
+      source === "compare_pick" ||
       source === "action_route" ||
       source === "system_generated"
     ) {

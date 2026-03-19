@@ -205,10 +205,10 @@ export function createRunStepRuntimeTextUiHelpers(deps: CreateRunStepRuntimeText
         .trim();
     const blockedSet = new Set(
       [
-        deps.uiDefaultString("wordingChoiceInstruction"),
+        deps.uiDefaultString("compareInstruction"),
         deps.uiDefaultString("invariant.prompt.ask.default"),
         deps.uiDefaultString("generic.choicePrompt.shareOrOption"),
-        deps.uiDefaultString("wording.choice.context.default"),
+        deps.uiDefaultString("compare.choice.context.default"),
       ]
         .map((line) => normalizeLine(line))
         .filter(Boolean)
@@ -274,16 +274,16 @@ export function createRunStepRuntimeTextUiHelpers(deps: CreateRunStepRuntimeText
 
     const currentQuestion = String((specialist as Record<string, unknown>).question || "").trim();
     const currentMessage = String((specialist as Record<string, unknown>).message || "").trim();
-    const wordingPending = String((specialist as Record<string, unknown>).wording_choice_pending || "").trim() === "true";
+    const comparePending = String((specialist as Record<string, unknown>).compare_pending || "").trim() === "true";
     const next = { ...specialist };
     if (!currentQuestion) {
       (next as Record<string, unknown>).question = promptFallbackForInteractiveAsk(context.state, stepId);
     }
-    if (wordingPending && !currentMessage) {
+    if (comparePending && !currentMessage) {
       (next as Record<string, unknown>).message = uiStringFromStateMap(
         context.state,
-        "wording.choice.context.default",
-        deps.uiDefaultString("wording.choice.context.default")
+        "compare.choice.context.default",
+        deps.uiDefaultString("compare.choice.context.default")
       );
     }
     return next;

@@ -70,7 +70,7 @@ Geen specifieke bold teksten gedefinieerd in Dream instructies.
 
 **REFINE menu (DREAM_EXPLAINER_MENU_REFINE):**
 1) `I'm happy with this wording, please continue to step 3 Purpose`
-2) `Please refine the wording.`
+2) `Please refine the compare.`
 
 ### Bold Tekst Varianten
 
@@ -449,7 +449,7 @@ Deze sectie groepeert inconsistente button teksten per patroon, met exacte refer
 - **Bestand:** `mcp-server/src/steps/purpose.ts`
 - **Regel:** ~514
 
-**Variant B:** `Please refine the wording.`
+**Variant B:** `Please refine the compare.`
 - **Stap:** Dream Explainer (Exercise)
 - **Menu:** REFINE (DREAM_EXPLAINER_MENU_REFINE)
 - **Bestand:** `mcp-server/src/steps/dream_explainer.ts`

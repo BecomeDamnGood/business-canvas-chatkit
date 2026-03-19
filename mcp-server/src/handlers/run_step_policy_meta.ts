@@ -87,7 +87,7 @@ export const META_TOPIC_CONTRACT_INSTRUCTION = `META_TOPIC CONTRACT (HARD)
 
 type RunStepPolicyMetaDeps = {
   fieldForStep: (stepId: string) => string;
-  wordingStepLabel: (stepId: string) => string;
+  compareStepLabel: (stepId: string) => string;
   finalFieldByStepId: Record<string, string>;
   provisionalValueForStep: (state: CanvasState, stepId: string) => string;
   parseStep0Final: (step0Final: string, fallbackName: string) => { venture: string; name: string; status: string };
@@ -239,7 +239,7 @@ type MotivationPolicyApplyParams = {
   specialistResult: Record<string, unknown>;
   previousSpecialist: Record<string, unknown>;
   state: CanvasState;
-  requireWordingPick: boolean;
+  requireComparePick: boolean;
 };
 
 type MotivationPolicyApplyResult = {
@@ -341,8 +341,8 @@ export function createRunStepPolicyMetaHelpers(deps: RunStepPolicyMetaDeps) {
 
   function offTopicStepLabel(stepId: string, state: CanvasState): string {
     const key = OFFTOPIC_STEP_LABEL_UI_KEY_BY_STEP[stepId] || "";
-    if (!key) return deps.wordingStepLabel(stepId);
-    return uiStringFromState(state, key, deps.wordingStepLabel(stepId));
+    if (!key) return deps.compareStepLabel(stepId);
+    return uiStringFromState(state, key, deps.compareStepLabel(stepId));
   }
 
   function offTopicCompanyName(state: CanvasState): string {
@@ -655,14 +655,14 @@ export function createRunStepPolicyMetaHelpers(deps: RunStepPolicyMetaDeps) {
         ...base,
         __suppress_refined_append: "true",
         refined_formulation: "",
-        wording_choice_agent_current: "",
-        wording_choice_pending: "false",
-        wording_choice_selected: "",
-        wording_choice_list_semantics: "delta",
-        wording_choice_compare_mode: "",
-        wording_choice_compare_cursor: "",
-        wording_choice_compare_units: [],
-        wording_choice_compare_segments: [],
+        compare_agent_current: "",
+        compare_pending: "false",
+        compare_selected: "",
+        compare_list_semantics: "delta",
+        compare_compare_mode: "",
+        compare_compare_cursor: "",
+        compare_compare_units: [],
+        compare_compare_segments: [],
         ...(stepField ? { [stepField]: "" } : {}),
         message: buildBenProfileMessage(params.state),
       };
@@ -810,13 +810,13 @@ export function createRunStepPolicyMetaHelpers(deps: RunStepPolicyMetaDeps) {
         message: buildBenProfileMessage(params.state),
         __suppress_refined_append: "true",
         __offtopic_meta_passthrough: "true",
-        wording_choice_pending: "false",
-        wording_choice_selected: "",
-        wording_choice_list_semantics: "delta",
-        wording_choice_compare_mode: "",
-        wording_choice_compare_cursor: "",
-        wording_choice_compare_units: [],
-        wording_choice_compare_segments: [],
+        compare_pending: "false",
+        compare_selected: "",
+        compare_list_semantics: "delta",
+        compare_compare_mode: "",
+        compare_compare_cursor: "",
+        compare_compare_units: [],
+        compare_compare_segments: [],
         feedback_reason_key: "",
         feedback_reason_text: "",
       };
@@ -844,13 +844,13 @@ export function createRunStepPolicyMetaHelpers(deps: RunStepPolicyMetaDeps) {
       action: "ASK",
       message,
       __offtopic_meta_passthrough: "false",
-      wording_choice_pending: "false",
-      wording_choice_selected: "",
-      wording_choice_list_semantics: "delta",
-      wording_choice_compare_mode: "",
-      wording_choice_compare_cursor: "",
-      wording_choice_compare_units: [],
-      wording_choice_compare_segments: [],
+      compare_pending: "false",
+      compare_selected: "",
+      compare_list_semantics: "delta",
+      compare_compare_mode: "",
+      compare_compare_cursor: "",
+      compare_compare_units: [],
+      compare_compare_segments: [],
       feedback_reason_key: "",
       feedback_reason_text: "",
     } as Record<string, unknown>;

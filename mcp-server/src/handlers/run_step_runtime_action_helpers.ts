@@ -21,18 +21,18 @@ type CreateRunStepRuntimeActionHelpersDeps = {
   }) => void;
 };
 
-export type WordingChoiceMode = "text" | "list";
-export type WordingChoiceVariant = "default" | "clarify_dual" | "grouped_list_units";
+export type CompareMode = "text" | "list";
+export type CompareVariant = "default" | "clarify_dual" | "grouped_list_units";
 
-export type WordingChoiceCompareFeedbackUiPayload = {
+export type CompareCompareFeedbackUiPayload = {
   text: string;
 };
 
-export type WordingChoiceUiPayload = {
+export type CompareUiPayload = {
   enabled: boolean;
-  mode: WordingChoiceMode;
-  variant?: WordingChoiceVariant;
-  compare_feedback?: WordingChoiceCompareFeedbackUiPayload;
+  mode: CompareMode;
+  variant?: CompareVariant;
+  compare_feedback?: CompareCompareFeedbackUiPayload;
   user_text: string;
   suggestion_text: string;
   user_label?: string;

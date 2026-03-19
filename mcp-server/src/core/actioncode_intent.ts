@@ -24,11 +24,11 @@ export function actionCodeToIntent(params: {
   if (actionCode === "ACTION_TEXT_SUBMIT") {
     return { type: "SUBMIT_TEXT", text: "", context: "free_text" };
   }
-  if (actionCode === "ACTION_WORDING_PICK_USER") {
-    return { type: "WORDING_PICK", choice: "user" };
+  if (actionCode === "ACTION_COMPARE_PICK_USER") {
+    return { type: "COMPARE_PICK", choice: "user" };
   }
-  if (actionCode === "ACTION_WORDING_PICK_SUGGESTION") {
-    return { type: "WORDING_PICK", choice: "suggestion" };
+  if (actionCode === "ACTION_COMPARE_PICK_SUGGESTION") {
+    return { type: "COMPARE_PICK", choice: "suggestion" };
   }
   if (actionCode === "ACTION_DREAM_EXPLAINER_SUBMIT_SCORES") {
     return { type: "SUBMIT_SCORES", scores: [] };

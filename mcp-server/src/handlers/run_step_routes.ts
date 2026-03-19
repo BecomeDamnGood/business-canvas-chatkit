@@ -35,7 +35,7 @@ export type RouteRegistryContext = RunStepRouteRegistryRequest;
 type RunStepRouteFlatPorts<TResponse> =
   & RunStepRoutePorts<TResponse>["ids"]
   & RunStepRoutePorts<TResponse>["tokens"]
-  & RunStepRoutePorts<TResponse>["wording"]
+  & RunStepRoutePorts<TResponse>["compare"]
   & RunStepRoutePorts<TResponse>["state"]
   & RunStepRoutePorts<TResponse>["contracts"]
   & RunStepRoutePorts<TResponse>["step0"]
@@ -68,7 +68,7 @@ function flattenRunStepRoutePorts<TResponse>(ports: RunStepRoutePorts<TResponse>
   return {
     ...ports.ids,
     ...ports.tokens,
-    ...ports.wording,
+    ...ports.compare,
     ...ports.state,
     ...ports.contracts,
     ...ports.step0,
@@ -509,7 +509,7 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
 
         const specialist: Record<string, unknown> = {
           action: "ASK",
-          message: deps.wordingSelectionMessage(
+          message: deps.compareSelectionMessage(
             config.stepId,
             stateWithUi,
             String((stateWithUi as Record<string, unknown>).active_specialist || ""),

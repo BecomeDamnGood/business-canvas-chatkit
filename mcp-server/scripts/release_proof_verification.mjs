@@ -341,7 +341,7 @@ async function runMainPhase() {
       harness.baseUrl,
       {
         current_step_id: "purpose",
-        user_message: "ACTION_WORDING_PICK_USER",
+        user_message: "ACTION_COMPARE_PICK_USER",
         input_mode: "widget",
         state: {
           state_version: "9999",

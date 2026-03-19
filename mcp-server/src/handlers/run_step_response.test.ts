@@ -55,7 +55,7 @@ function buildTokenLoggingHelpers() {
   });
 }
 
-test("finalizeResponse logs wording-choice render decisions with compare and prompt fields", () => {
+test("finalizeResponse logs compare render decisions with compare and prompt fields", () => {
   const helpers = buildHelpers();
   const captured: string[] = [];
   const originalConsoleLog = console.log;
@@ -79,34 +79,38 @@ test("finalizeResponse logs wording-choice render decisions with compare and pro
         active_specialist: "Strategy",
         bootstrap_session_id: "bs_test",
         last_specialist_result: {
-          wording_choice_pending: "true",
-          wording_choice_mode: "list",
-          wording_choice_presentation: "picker",
-          wording_choice_variant: "",
-          wording_choice_compare_mode: "",
-          wording_choice_compare_cursor: "",
-          wording_choice_compare_units: [],
-          wording_choice_compare_segments: [],
-          wording_choice_selected: "",
-          wording_choice_user_label: "Zo heb ik je input geinterpreteerd:",
-          wording_choice_suggestion_label: "Dit zou mijn suggestie zijn:",
-          wording_choice_user_items: ["Punt 1", "Punt 2", "Punt 3"],
-          wording_choice_suggestion_items: ["Punt A", "Punt B", "Punt C", "Punt D"],
+          compare_pending: "true",
+          compare_mode: "list",
+          compare_presentation: "picker",
+          compare_variant: "",
+          compare_compare_mode: "",
+          compare_compare_cursor: "",
+          compare_compare_units: [],
+          compare_compare_segments: [],
+          compare_selected: "",
+          compare_user_label: "Zo heb ik je input geinterpreteerd:",
+          compare_suggestion_label: "Dit zou mijn suggestie zijn:",
+          compare_user_items: ["Punt 1", "Punt 2", "Punt 3"],
+          compare_suggestion_items: ["Punt A", "Punt B", "Punt C", "Punt D"],
         },
       } as any,
       ui: {
         view: {
           mode: "interactive",
-          variant: "wording_choice",
+          variant: "text_compare",
         },
-        wording_choice: {
-          enabled: true,
-          mode: "list",
-          user_label: "Zo heb ik je input geinterpreteerd:",
-          suggestion_label: "Dit zou mijn suggestie zijn:",
-          instruction: "Klik alsjeblieft wat het beste bij je past.",
-          user_items: ["Punt 1", "Punt 2", "Punt 3"],
-          suggestion_items: ["Punt A", "Punt B", "Punt C", "Punt D"],
+        pending_interaction: {
+          kind: "list_compare",
+          status: "pending",
+          render_model: {
+            mode: "list",
+            variant: "grouped_list_units",
+            user_label: "Zo heb ik je input geinterpreteerd:",
+            suggestion_label: "Dit zou mijn suggestie zijn:",
+            instruction: "Klik alsjeblieft wat het beste bij je past.",
+            user_items: ["Punt 1", "Punt 2", "Punt 3"],
+            suggestion_items: ["Punt A", "Punt B", "Punt C", "Punt D"],
+          },
         },
       },
     });
@@ -120,38 +124,38 @@ test("finalizeResponse logs wording-choice render decisions with compare and pro
 
   assert.ok(event);
   assert.equal(event.step_id, "strategy");
-  assert.equal(event.ui_view_variant, "wording_choice");
+  assert.equal(event.ui_view_variant, "text_compare");
   assert.equal(event.prompt_text, "Waar focus je nog meer op binnen je strategie?");
   assert.equal(event.prompt_present, "true");
   assert.equal(event.question_text, "");
   assert.equal(event.question_present, "false");
-  assert.equal(event.wording_choice_enabled, "true");
-  assert.equal(event.wording_choice_pending, "true");
-  assert.equal(event.wording_choice_mode, "list");
-  assert.equal(event.wording_choice_presentation, "picker");
-  assert.equal(event.wording_choice_compare_mode, "");
-  assert.equal(event.wording_choice_user_label, "Zo heb ik je input geinterpreteerd:");
-  assert.equal(event.wording_choice_suggestion_label, "Dit zou mijn suggestie zijn:");
-  assert.equal(event.wording_choice_user_items_count, 3);
-  assert.equal(event.wording_choice_suggestion_items_count, 4);
+  assert.equal(event.compare_enabled, "true");
+  assert.equal(event.compare_pending, "true");
+  assert.equal(event.compare_mode, "list");
+  assert.equal(event.compare_presentation, "picker");
+  assert.equal(event.compare_compare_mode, "");
+  assert.equal(event.compare_user_label, "Zo heb ik je input geinterpreteerd:");
+  assert.equal(event.compare_suggestion_label, "Dit zou mijn suggestie zijn:");
+  assert.equal(event.compare_user_items_count, 3);
+  assert.equal(event.compare_suggestion_items_count, 4);
 
   const usageEvents = captured.map((line) => JSON.parse(line));
   const stepViewed = usageEvents.find((entry) => entry.event === "app_usage_step_viewed");
-  const wordingShown = usageEvents.find((entry) => entry.event === "app_usage_wording_choice_shown");
+  const wordingShown = usageEvents.find((entry) => entry.event === "app_usage_compare_shown");
 
   assert.ok(stepViewed);
   assert.equal(stepViewed.analytics_schema, "bsc_app_usage_v1");
   assert.equal(stepViewed.step_id, "strategy");
-  assert.equal(stepViewed.wording_choice_enabled, "true");
-  assert.equal(stepViewed.ui_view_variant, "wording_choice");
+  assert.equal(stepViewed.compare_enabled, "true");
+  assert.equal(stepViewed.ui_view_variant, "text_compare");
 
   assert.ok(wordingShown);
-  assert.equal(wordingShown.wording_choice_mode, "list");
-  assert.equal(wordingShown.wording_choice_target_field, "");
-  assert.equal(wordingShown.wording_choice_presentation, "picker");
+  assert.equal(wordingShown.compare_mode, "list");
+  assert.equal(wordingShown.compare_target_field, "");
+  assert.equal(wordingShown.compare_presentation, "picker");
 });
 
-test("finalizeResponse logs wording-choice analytics from feedback_contract when the legacy ui shadow is removed", () => {
+test("finalizeResponse logs compare analytics from pending_interaction when legacy shadows are absent", () => {
   const helpers = buildHelpers();
   const captured: string[] = [];
   const originalConsoleLog = console.log;
@@ -175,27 +179,31 @@ test("finalizeResponse logs wording-choice analytics from feedback_contract when
         active_specialist: "Strategy",
         bootstrap_session_id: "bs_feedback_contract",
         last_specialist_result: {
-          wording_choice_pending: "true",
-          wording_choice_mode: "list",
-          wording_choice_presentation: "picker",
-          wording_choice_variant: "grouped_list_units",
-          wording_choice_target_field: "strategy",
-          wording_choice_selected: "",
+          compare_pending: "true",
+          compare_mode: "list",
+          compare_presentation: "picker",
+          compare_variant: "grouped_list_units",
+          compare_target_field: "strategy",
+          compare_selected: "",
         },
       } as any,
       ui: {
         view: {
           mode: "interactive",
-          variant: "wording_choice",
+          variant: "text_compare",
         },
-        feedback_contract: {
-          kind: "grouped_list_compare",
-          mode: "list",
-          current_label: "Jouw input",
-          suggested_label: "Mijn suggestie",
-          current_items: ["Punt 1", "Punt 2"],
-          suggested_items: ["Punt A"],
-          instruction: "Kies wat het beste past.",
+        pending_interaction: {
+          kind: "list_compare",
+          status: "pending",
+          render_model: {
+            mode: "list",
+            variant: "grouped_list_units",
+            user_label: "Jouw input",
+            suggestion_label: "Mijn suggestie",
+            user_items: ["Punt 1", "Punt 2"],
+            suggestion_items: ["Punt A"],
+            instruction: "Kies wat het beste past.",
+          },
         },
       },
     });
@@ -208,13 +216,13 @@ test("finalizeResponse logs wording-choice analytics from feedback_contract when
     .find((entry) => entry.event === "run_step_ui_render_decision");
 
   assert.ok(event);
-  assert.equal(event.wording_choice_enabled, "true");
-  assert.equal(event.wording_choice_mode, "list");
-  assert.equal(event.wording_choice_variant, "grouped_list_units");
-  assert.equal(event.wording_choice_user_label, "Jouw input");
-  assert.equal(event.wording_choice_suggestion_label, "Mijn suggestie");
-  assert.equal(event.wording_choice_user_items_count, 2);
-  assert.equal(event.wording_choice_suggestion_items_count, 1);
+  assert.equal(event.compare_enabled, "true");
+  assert.equal(event.compare_mode, "list");
+  assert.equal(event.compare_variant, "grouped_list_units");
+  assert.equal(event.compare_user_label, "Jouw input");
+  assert.equal(event.compare_suggestion_label, "Mijn suggestie");
+  assert.equal(event.compare_user_items_count, 2);
+  assert.equal(event.compare_suggestion_items_count, 1);
 });
 
 test("finalizeResponse emits session start and wording selection analytics without free-text content", () => {
@@ -241,12 +249,12 @@ test("finalizeResponse emits session start and wording selection analytics witho
         bootstrap_session_id: "bs_usage",
         __session_turn_index: 1,
         last_specialist_result: {
-          wording_choice_selected: "suggestion",
-          wording_choice_mode: "list",
-          wording_choice_presentation: "picker",
-          wording_choice_variant: "grouped_list_units",
-          wording_choice_target_field: "productsservices",
-          wording_choice_pending: "false",
+          compare_selected: "suggestion",
+          compare_mode: "list",
+          compare_presentation: "picker",
+          compare_variant: "grouped_list_units",
+          compare_target_field: "productsservices",
+          compare_pending: "false",
         },
       } as any,
       ui: {
@@ -262,7 +270,7 @@ test("finalizeResponse emits session start and wording selection analytics witho
 
   const events = captured.map((line) => JSON.parse(line));
   const sessionStarted = events.find((entry) => entry.event === "app_usage_session_started");
-  const wordingSelected = events.find((entry) => entry.event === "app_usage_wording_choice_selected");
+  const wordingSelected = events.find((entry) => entry.event === "app_usage_compare_selected");
 
   assert.ok(sessionStarted);
   assert.equal(sessionStarted.analytics_schema, "bsc_app_usage_v1");
@@ -271,8 +279,8 @@ test("finalizeResponse emits session start and wording selection analytics witho
 
   assert.ok(wordingSelected);
   assert.equal(wordingSelected.selection, "suggestion");
-  assert.equal(wordingSelected.wording_choice_target_field, "productsservices");
-  assert.equal(wordingSelected.wording_choice_variant, "grouped_list_units");
+  assert.equal(wordingSelected.compare_target_field, "productsservices");
+  assert.equal(wordingSelected.compare_variant, "grouped_list_units");
   assert.equal(wordingSelected.message, undefined);
 });
 

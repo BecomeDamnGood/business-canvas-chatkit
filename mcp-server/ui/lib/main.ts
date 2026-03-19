@@ -107,8 +107,8 @@ import { getIsLoading, setSessionStarted, setSessionWelcomeShown } from "./ui_st
       ui_action_start: "start",
       ui_action_text_submit: "text_submit",
       ui_action_score_submit: "score_submit",
-      ui_action_wording_pick_user: "wording_pick_user",
-      ui_action_wording_pick_suggestion: "wording_pick_suggestion"
+      ui_action_compare_pick_user: "compare_pick_user",
+      ui_action_compare_pick_suggestion: "compare_pick_suggestion"
     };
     return String(roleMap[normalized] || "").trim();
   }
@@ -337,9 +337,9 @@ import { getIsLoading, setSessionStarted, setSessionWelcomeShown } from "./ui_st
       submitWidgetInput();
     });
   }
-  var wordingChoicePickUser = document.getElementById("wordingChoicePickUser");
-  if (wordingChoicePickUser) {
-    wordingChoicePickUser.addEventListener("click", () => {
+  var comparePickUser = document.getElementById("comparePickUser");
+  if (comparePickUser) {
+    comparePickUser.addEventListener("click", () => {
       if (getIsLoading()) return;
       const pendingAction = pendingInteractionAction("pick_user");
       if (!pendingAction?.actionCode || !pendingAction?.interactionId) {
@@ -354,9 +354,9 @@ import { getIsLoading, setSessionStarted, setSessionWelcomeShown } from "./ui_st
       });
     });
   }
-  var wordingChoicePickSuggestion = document.getElementById("wordingChoicePickSuggestion");
-  if (wordingChoicePickSuggestion) {
-    wordingChoicePickSuggestion.addEventListener("click", () => {
+  var comparePickSuggestion = document.getElementById("comparePickSuggestion");
+  if (comparePickSuggestion) {
+    comparePickSuggestion.addEventListener("click", () => {
       if (getIsLoading()) return;
       const pendingAction = pendingInteractionAction("pick_suggestion");
       if (!pendingAction?.actionCode || !pendingAction?.interactionId) {

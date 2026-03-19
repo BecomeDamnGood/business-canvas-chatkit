@@ -29,16 +29,16 @@ export async function runStepRuntimeExecute(
     NEXT_MENU_BY_ACTIONCODE, DREAM_START_EXERCISE_ACTION_CODES, resolveActionCodeTransition,
     setUiRenderModeByStep, buildContractId, processActionCode, firstConfirmActionCodeForMenu, firstGuidanceActionCodeForMenu, shouldPretransitionActionCode, setDreamRuntimeMode, provisionalValueForStep,
     clearProvisionalValue, clearStepInteractiveState, isUiStateHygieneSwitchV1Enabled,
-    isClearlyGeneralOfftopicInput, isWordingChoiceEligibleContext, buildWordingChoiceFromPendingSpecialist,
-    applyWordingPickSelection, isWordingPickRouteToken, isRefineAdjustRouteToken, buildWordingChoiceFromTurn,
-    pickWordingAgentBase, copyPendingWordingChoiceState, normalizeNonStep0OfftopicSpecialist,
+    isClearlyGeneralOfftopicInput, isCompareEligibleContext, buildCompareFromPendingSpecialist,
+    applyComparePickSelection, isComparePickRouteToken, isRefineAdjustRouteToken, buildCompareFromTurn,
+    pickCompareAgentBase, copyPendingCompareState, normalizeNonStep0OfftopicSpecialist,
     uiStringFromStateMap, uiDefaultString, attachRegistryPayload, langFromState, UI_CONTRACT_VERSION,
     DREAM_FORCE_REFINE_ROUTE_PREFIX, DREAM_EXPLAINER_OVERLAP_REPAIR_ROUTE_PREFIX, DREAM_EXPLAINER_MULTI_REWRITE_REPAIR_ROUTE_PREFIX, STRATEGY_CONSOLIDATE_ROUTE_TOKEN, DREAM_SPECIALIST, PURPOSE_SPECIALIST, BIGWHY_SPECIALIST, ENTITY_SPECIALIST, STRATEGY_SPECIALIST,
     callSpecialistStrictSafe, normalizeLocalizedConceptTerms, normalizeEntitySpecialistResult, applyCentralMetaTopicRouter,
     normalizeStep0AskDisplayContract, hasValidStep0Final, applyPostSpecialistStateMutations,
-    isMetaOfftopicFallbackTurn, shouldTreatAsStepContributingInput, resolvePendingWordingChoiceIntent, hasDreamSpecialistCandidate,
+    isMetaOfftopicFallbackTurn, shouldTreatAsStepContributingInput, resolvePendingCompareIntent, hasDreamSpecialistCandidate,
     buildDreamRefineFallbackSpecialist, strategyStatementsForConsolidateGuard, enforceDreamBuilderQuestionProgress,
-    applyMotivationQuotesContractV11, wordingSelectionMessage, applyStateUpdate, parseStep0Final,
+    applyMotivationQuotesContractV11, compareSelectionMessage, applyStateUpdate, parseStep0Final,
     inferStep0SeedFromInitialMessage, step0ReadinessQuestion, step0CardDescForState, step0QuestionForState, generatePresentationAssets,
     classifyAcceptedOutputUserTurn,
     runStepRuntimeSpecialRoutesLayer, runStepRuntimePostPipelineLayer,
@@ -90,8 +90,8 @@ export async function runStepRuntimeExecute(
     : "none";
   // Runtime contract marker: BSC_WORDING_CHOICE_V2 remains the single-path runtime flag.
   const policyFlags = resolveHolisticPolicyFlags();
-  const wordingChoiceEnabled = policyFlags.wordingChoiceV2;
-  const wordingChoiceIntentV1 = wordingChoiceEnabled && policyFlags.wordingChoiceIntentV1;
+  const compareEnabled = policyFlags.compareV2;
+  const compareIntentV1 = compareEnabled && policyFlags.compareIntentV1;
   const motivationQuotesEnabled = policyFlags.motivationQuotesV11;
   if (process.env.ACTIONCODE_LOG_INPUT_MODE === "1") {
     const incomingLanguageSourceNormalized = normalizeStateLanguageSource((args.state as Record<string, unknown>)?.language_source);
@@ -136,11 +136,11 @@ export async function runStepRuntimeExecute(
     parity_recovered: 0,
     confirm_gate_blocked_count: 0,
     step0_escape_ready_recovered_count: 0,
-    wording_body_sanitized_count: 0,
+    compare_body_sanitized_count: 0,
     semantic_prompt_missing_count: 0,
     semantic_confirm_blocked_count: 0,
     state_hygiene_resets_count: 0,
-    wording_feedback_fallback_count: 0,
+    compare_feedback_fallback_count: 0,
   };
   let migrationApplied = false;
   let migrationFromVersion = "";
@@ -237,14 +237,14 @@ export async function runStepRuntimeExecute(
       parseMenuFromContractIdForStep,
       labelKeysForMenuActionCodes,
       onUiParityError: () => bumpUiI18nCounter(uiI18nTelemetry, "parity_errors"),
-      attachRegistryPayload: (payload: any, specialist: any, flagsOverride: any, actionCodesOverride: any, renderedActionsOverride: any, wordingChoiceOverride: any, contractMetaOverride: any) =>
+      attachRegistryPayload: (payload: any, specialist: any, flagsOverride: any, actionCodesOverride: any, renderedActionsOverride: any, compareOverride: any, contractMetaOverride: any) =>
         attachRegistryPayload(
           payload,
           specialist,
           flagsOverride,
           actionCodesOverride,
           renderedActionsOverride,
-          wordingChoiceOverride,
+          compareOverride,
           contractMetaOverride
         ) as RunStepSuccess | RunStepError,
       uiI18nTelemetry,
@@ -379,8 +379,8 @@ export async function runStepRuntimeExecute(
       lastSpecialistResult,
       model,
       inputMode: inputMode === "widget" ? "widget" : "chat",
-      wordingChoiceEnabled,
-      wordingChoiceIntentV1,
+      compareEnabled,
+      compareIntentV1,
       uiI18nTelemetry,
     },
     ids: {
@@ -422,7 +422,7 @@ export async function runStepRuntimeExecute(
       isUiStateHygieneSwitchV1Enabled,
       isClearlyGeneralOfftopicInput,
       shouldTreatAsStepContributingInput,
-      resolvePendingWordingChoiceIntent,
+      resolvePendingCompareIntent,
       classifyAcceptedOutputUserTurn,
       bumpUiI18nCounter: (telemetry: any, key: any) =>
         bumpUiI18nCounter(
@@ -430,15 +430,15 @@ export async function runStepRuntimeExecute(
           key as any
         ),
     },
-    wording: {
-      isWordingChoiceEligibleContext,
-      buildWordingChoiceFromPendingSpecialist,
-      applyWordingPickSelection,
-      isWordingPickRouteToken,
+    compare: {
+      isCompareEligibleContext,
+      buildCompareFromPendingSpecialist,
+      applyComparePickSelection,
+      isComparePickRouteToken,
       isRefineAdjustRouteToken,
-      buildWordingChoiceFromTurn,
-      pickWordingAgentBase,
-      copyPendingWordingChoiceState,
+      buildCompareFromTurn,
+      pickCompareAgentBase,
+      copyPendingCompareState,
     },
     behavior: {
       ensureUiStrings: finalizeLayer.ensureUiStrings,
@@ -484,11 +484,11 @@ export async function runStepRuntimeExecute(
     normalization: { normalizeLocalizedConceptTerms, normalizeEntitySpecialistResult, applyCentralMetaTopicRouter, normalizeNonStep0OfftopicSpecialist, normalizeStep0AskDisplayContract, hasValidStep0Final },
     state: { applyPostSpecialistStateMutations, getDreamRuntimeMode, isMetaOfftopicFallbackTurn, shouldTreatAsStepContributingInput, hasDreamSpecialistCandidate, buildDreamRefineFallbackSpecialist, strategyStatementsForConsolidateGuard, pickBigWhyCandidate: actionRoutingLayer.pickBigWhyCandidate, countWords: actionRoutingLayer.countWords, buildBigWhyTooLongFeedback: actionRoutingLayer.buildBigWhyTooLongFeedback, enforceDreamBuilderQuestionProgress, applyMotivationQuotesContractV11 },
     render: { renderFreeTextTurnPolicy, validateRenderedContractOrRecover, applyUiPhaseByStep, buildContractId },
-    wording: {
+    compare: {
       classifyAcceptedOutputUserTurn,
-      isWordingChoiceEligibleContext,
-      buildWordingChoiceFromTurn,
-      buildWordingChoiceFromPendingSpecialist,
+      isCompareEligibleContext,
+      buildCompareFromTurn,
+      buildCompareFromPendingSpecialist,
     },
     response: {
       attachRegistryPayload: finalizeLayer.attachRegistryPayload,
@@ -501,7 +501,7 @@ export async function runStepRuntimeExecute(
   const routePorts = {
     ids: { step0Id: STEP_0_ID, step0Specialist: STEP_0_SPECIALIST, dreamStepId: DREAM_STEP_ID, dreamSpecialist: DREAM_SPECIALIST, dreamExplainerSpecialist: DREAM_EXPLAINER_SPECIALIST, purposeStepId: PURPOSE_STEP_ID, purposeSpecialist: PURPOSE_SPECIALIST, roleStepId: ROLE_STEP_ID, roleSpecialist: ROLE_SPECIALIST, strategyStepId: STRATEGY_STEP_ID, strategySpecialist: STRATEGY_SPECIALIST, presentationStepId: PRESENTATION_STEP_ID, presentationSpecialist: PRESENTATION_SPECIALIST, bigwhySpecialist: BIGWHY_SPECIALIST, entitySpecialist: ENTITY_SPECIALIST },
     tokens: { dreamPickOneRouteToken: DREAM_PICK_ONE_ROUTE_TOKEN, purposeChooseForMeRouteToken: PURPOSE_CHOOSE_FOR_ME_ROUTE_TOKEN, bigWhyChooseForMeRouteToken: BIGWHY_CHOOSE_FOR_ME_ROUTE_TOKEN, roleChooseForMeRouteToken: ROLE_CHOOSE_FOR_ME_ROUTE_TOKEN, entityChooseForMeRouteToken: ENTITY_CHOOSE_FOR_ME_ROUTE_TOKEN, strategyChooseForMeRouteToken: STRATEGY_CHOOSE_FOR_ME_ROUTE_TOKEN, presentationMakeRouteToken: PRESENTATION_MAKE_ROUTE_TOKEN, switchToSelfDreamToken: SWITCH_TO_SELF_DREAM_TOKEN, dreamStartExerciseRouteToken: DREAM_START_EXERCISE_ROUTE_TOKEN },
-    wording: { wordingSelectionMessage, pickPrompt, buildTextForWidget },
+    compare: { compareSelectionMessage, pickPrompt, buildTextForWidget },
     state: {
       applyStateUpdate,
       applyPostSpecialistStateMutations,
@@ -525,7 +525,7 @@ export async function runStepRuntimeExecute(
       actionCodeRaw,
       responseUiFlags,
       inputMode: inputMode === "widget" ? "widget" : "chat",
-      wordingChoiceEnabled,
+      compareEnabled,
       languageResolvedThisTurn,
       isBootstrapPollCall,
       motivationQuotesEnabled,

@@ -4,8 +4,8 @@ import assert from "node:assert/strict";
 import { finalizeResponseContractInternals } from "./turn_contract.js";
 import {
   readCompareContractFailureReason,
-  shouldSuppressMainCardForWordingChoice,
-  shouldSuppressPromptForWordingChoice,
+  shouldSuppressMainCardForCompare,
+  shouldSuppressPromptForCompare,
 } from "../../ui/lib/ui_render.js";
 
 type Fixture = {
@@ -41,17 +41,40 @@ function extractProof(result: Record<string, unknown>): Record<string, unknown> 
   const view = toRecord(ui.view);
   const pending = toRecord(ui.pending_interaction);
   const renderModel = toRecord(pending.render_model);
+  const dreamBuilderContract = toRecord(ui.dream_builder_contract);
+  const dreamBuilderCompare = toRecord(dreamBuilderContract.compare);
+  const actionContract = toRecord(ui.action_contract);
   const content = toRecord(ui.content);
   const compareFailureReason = readCompareContractFailureReason(ui);
-  const wordingChoiceActive = shouldSuppressMainCardForWordingChoice(ui, String(view.variant || ""));
+  const pendingCompareActive = shouldSuppressMainCardForCompare(ui, String(view.variant || ""));
+  const dreamBuilderCompareActive =
+    String(dreamBuilderContract.phase || "").trim() === "compare" &&
+    (
+      String(dreamBuilderCompare.kind || "").trim() === "batch_rewrite_compare" ||
+      String(dreamBuilderCompare.kind || "").trim() === "overlap_merge_compare"
+    );
+  const compareActive = pendingCompareActive || dreamBuilderCompareActive;
   const visibleCard =
     String(error.type || "").trim() === "contract_warning" || compareFailureReason
       ? "contract_failure"
-      : wordingChoiceActive
+      : compareActive
         ? "compare"
         : Object.keys(content).length > 0
           ? "semantic"
           : "empty";
+  const effectiveUserLabel = String(renderModel.user_label || dreamBuilderCompare.current_label || "");
+  const effectiveSuggestionLabel = String(renderModel.suggestion_label || dreamBuilderCompare.suggested_label || "");
+  const effectiveUserItems =
+    normalizeStringArray(renderModel.user_items).length > 0
+      ? normalizeStringArray(renderModel.user_items)
+      : normalizeStringArray(dreamBuilderCompare.current_items);
+  const effectiveSuggestionItems =
+    normalizeStringArray(renderModel.suggestion_items).length > 0
+      ? normalizeStringArray(renderModel.suggestion_items)
+      : normalizeStringArray(dreamBuilderCompare.suggested_items);
+  const actionContractRoles = Array.isArray(actionContract.actions)
+    ? (actionContract.actions as Array<Record<string, unknown>>).map((action) => String(action.role || ""))
+    : [];
 
   return {
     ok: result.ok === true,
@@ -59,26 +82,28 @@ function extractProof(result: Record<string, unknown>): Record<string, unknown> 
     reason_code: String(state.reason_code || ""),
     view_variant: String(view.variant || ""),
     visible_card: visibleCard,
-    main_card_suppressed: wordingChoiceActive,
+    main_card_suppressed: compareActive,
     compare_failure_reason: compareFailureReason || "",
-    prompt_hidden: shouldSuppressPromptForWordingChoice({
+    prompt_hidden: dreamBuilderCompareActive || shouldSuppressPromptForCompare({
       uiViewVariant: String(view.variant || ""),
-      wordingChoiceActive,
-      requireWordingPick: toRecord(ui.flags).require_wording_pick === true,
+      compareActive,
+      requireComparePick: toRecord(ui.flags).require_compare_pick === true,
     }),
     pending_kind: String(pending.kind || ""),
     pending_status: String(pending.status || ""),
     allowed_roles: Array.isArray(pending.allowed_actions)
       ? (pending.allowed_actions as Array<Record<string, unknown>>).map((action) => String(action.role || ""))
-      : [],
-    user_label: String(renderModel.user_label || ""),
-    suggestion_label: String(renderModel.suggestion_label || ""),
+      : dreamBuilderCompareActive
+        ? actionContractRoles
+        : [],
+    user_label: effectiveUserLabel,
+    suggestion_label: effectiveSuggestionLabel,
     user_text: String(renderModel.user_text || ""),
     suggestion_text: String(renderModel.suggestion_text || ""),
-    user_items: normalizeStringArray(renderModel.user_items),
-    suggestion_items: normalizeStringArray(renderModel.suggestion_items),
+    user_items: effectiveUserItems,
+    suggestion_items: effectiveSuggestionItems,
     has_feedback_contract: Object.prototype.hasOwnProperty.call(ui, "feedback_contract"),
-    has_wording_choice: Object.prototype.hasOwnProperty.call(ui, "wording_choice"),
+    has_compare: Object.prototype.hasOwnProperty.call(ui, "compare"),
   };
 }
 
@@ -90,30 +115,31 @@ const fixtures: Fixture[] = [
       current_step_id: "dream",
       text: "",
       prompt: "",
-      specialist: {},
+      specialist: {
+        compare_pending: "true",
+        compare_mode: "text",
+        compare_presentation: "picker",
+        feedback_reason_text: "Je huidige droom is nog te algemeen en mist concreet menselijk effect.",
+        compare_user_normalized: "Wij willen bedrijven helpen groeien.",
+        compare_agent_current: "Mindd droomt van bedrijven die vanuit betekenis echte verandering brengen.",
+        compare_instruction: "Choose the version that fits best.",
+      },
       state: {
         started: "true",
         current_step: "dream",
-        ui_action_wording_pick_user: "ACTION_WORDING_PICK_USER",
-        ui_action_wording_pick_suggestion: "ACTION_WORDING_PICK_SUGGESTION",
+        ui_action_compare_pick_user: "ACTION_COMPARE_PICK_USER",
+        ui_action_compare_pick_suggestion: "ACTION_COMPARE_PICK_SUGGESTION",
       },
       ui: {
         contract_id: "dream:interactive:refine",
-        view: { mode: "interactive", variant: "text_compare" },
-        feedback_contract: {
-          kind: "single_value_compare",
-          mode: "text",
-          current_value: "Wij willen bedrijven helpen groeien.",
-          suggested_value: "Mindd droomt van bedrijven die vanuit betekenis echte verandering brengen.",
-          instruction: "Choose the version that fits best.",
-        },
+        view: { mode: "interactive" },
       },
     },
     expected: {
       visible_card: "compare",
       main_card_suppressed: true,
       pending_kind: "text_compare",
-      allowed_roles: ["wording_pick_user", "wording_pick_suggestion"],
+      allowed_roles: ["compare_pick_user", "compare_pick_suggestion"],
       user_label: "This is your input:",
       suggestion_label: "This would be my suggestion:",
       view_variant: "text_compare",
@@ -127,29 +153,27 @@ const fixtures: Fixture[] = [
       text: "",
       prompt: "",
       specialist: {
-        wording_choice_user_normalized: "Dit gaat over dat mensen het beu zijn om verkeerd voorgelicht te worden.",
-        wording_choice_agent_current:
+        compare_pending: "true",
+        compare_mode: "text",
+        compare_presentation: "picker",
+        feedback_reason_text:
+          "Je input benoemt het probleem van verkeerde voorlichting, maar een Droom vraagt om een positief toekomstbeeld met duidelijk menselijk effect.",
+        compare_user_label: "Dit is jouw input:",
+        compare_suggestion_label: "Dit zou mijn suggestie zijn:",
+        compare_instruction: "Klik alsjeblieft wat het beste bij je past.",
+        compare_user_normalized: "Dit gaat over dat mensen het beu zijn om verkeerd voorgelicht te worden.",
+        compare_agent_current:
           "Mindd droomt van een wereld waarin mensen zich zeker voelen omdat ze eerlijk geinformeerd worden.",
       },
       state: {
         started: "true",
         current_step: "dream",
-        ui_action_wording_pick_user: "ACTION_WORDING_PICK_USER",
-        ui_action_wording_pick_suggestion: "ACTION_WORDING_PICK_SUGGESTION",
+        ui_action_compare_pick_user: "ACTION_COMPARE_PICK_USER",
+        ui_action_compare_pick_suggestion: "ACTION_COMPARE_PICK_SUGGESTION",
       },
       ui: {
         contract_id: "dream:interactive:refine",
-        view: { mode: "interactive", variant: "text_compare" },
-        feedback_contract: {
-          kind: "single_value_compare",
-          mode: "text",
-          current_label: "Dit is jouw input:",
-          suggested_label: "Dit zou mijn suggestie zijn:",
-          current_value: "",
-          suggested_value:
-            "Mindd droomt van een wereld waarin mensen zich zeker voelen omdat ze eerlijk geinformeerd worden.",
-          instruction: "Klik alsjeblieft wat het beste bij je past.",
-        },
+        view: { mode: "interactive" },
       },
     },
     expected: {
@@ -171,8 +195,8 @@ const fixtures: Fixture[] = [
       state: {
         started: "true",
         current_step: "dream",
-        ui_action_wording_pick_user: "ACTION_WORDING_PICK_USER",
-        ui_action_wording_pick_suggestion: "ACTION_WORDING_PICK_SUGGESTION",
+        ui_action_compare_pick_user: "ACTION_COMPARE_PICK_USER",
+        ui_action_compare_pick_suggestion: "ACTION_COMPARE_PICK_SUGGESTION",
       },
       ui: {
         contract_id: "dream:interactive:builder_compare",
@@ -193,7 +217,7 @@ const fixtures: Fixture[] = [
     },
     expected: {
       visible_card: "compare",
-      pending_kind: "list_compare",
+      pending_kind: "",
       user_label: "Keep both statements",
       suggestion_label: "Merge into one statement",
       user_items: ["Statement one", "Statement two"],
@@ -207,25 +231,26 @@ const fixtures: Fixture[] = [
       current_step_id: "strategy",
       text: "",
       prompt: "",
-      specialist: {},
+      specialist: {
+        compare_pending: "true",
+        compare_mode: "list",
+        compare_presentation: "picker",
+        feedback_reason_text: "Ik heb de resterende strategische keuze scherper gemaakt.",
+        compare_user_label: "Jouw compacte formulering",
+        compare_suggestion_label: "Mijn suggestie",
+        compare_user_items: ["Operational simplicity"],
+        compare_suggestion_items: ["Operational focus"],
+        compare_instruction: "Choose the version that fits best for the remaining difference.",
+      },
       state: {
         started: "true",
         current_step: "strategy",
-        ui_action_wording_pick_user: "ACTION_WORDING_PICK_USER",
-        ui_action_wording_pick_suggestion: "ACTION_WORDING_PICK_SUGGESTION",
+        ui_action_compare_pick_user: "ACTION_COMPARE_PICK_USER",
+        ui_action_compare_pick_suggestion: "ACTION_COMPARE_PICK_SUGGESTION",
       },
       ui: {
         contract_id: "strategy:interactive:refine",
         view: { mode: "interactive" },
-        feedback_contract: {
-          kind: "grouped_list_compare",
-          mode: "list",
-          current_label: "Jouw compacte formulering",
-          suggested_label: "Mijn suggestie",
-          current_items: ["Operational simplicity"],
-          suggested_items: ["Operational focus"],
-          instruction: "Choose the version that fits best for the remaining difference.",
-        },
       },
     },
     expected: {
@@ -242,25 +267,26 @@ const fixtures: Fixture[] = [
       current_step_id: "purpose",
       text: "",
       prompt: "",
-      specialist: {},
+      specialist: {
+        compare_pending: "true",
+        compare_mode: "text",
+        compare_presentation: "picker",
+        feedback_reason_text: "Je huidige formulering blijft te breed en laat de bijdrage nog niet duidelijk zien.",
+        compare_user_label: "Your input",
+        compare_suggestion_label: "My suggestion",
+        compare_user_normalized: "We want to do something good.",
+        compare_agent_current: "We exist to make complex choices understandable.",
+        compare_instruction: "Choose the wording that fits best.",
+      },
       state: {
         started: "true",
         current_step: "purpose",
-        ui_action_wording_pick_user: "ACTION_WORDING_PICK_USER",
-        ui_action_wording_pick_suggestion: "ACTION_WORDING_PICK_SUGGESTION",
+        ui_action_compare_pick_user: "ACTION_COMPARE_PICK_USER",
+        ui_action_compare_pick_suggestion: "ACTION_COMPARE_PICK_SUGGESTION",
       },
       ui: {
         contract_id: "purpose:interactive:refine",
         view: { mode: "interactive" },
-        feedback_contract: {
-          kind: "single_value_compare",
-          mode: "text",
-          current_label: "Your input",
-          suggested_label: "My suggestion",
-          current_value: "We want to do something good.",
-          suggested_value: "We exist to make complex choices understandable.",
-          instruction: "Choose the wording that fits best.",
-        },
       },
     },
     expected: {
@@ -297,7 +323,7 @@ const fixtures: Fixture[] = [
       main_card_suppressed: false,
       pending_kind: "",
       has_feedback_contract: false,
-      has_wording_choice: false,
+      has_compare: false,
     },
   },
   {
@@ -315,11 +341,10 @@ const fixtures: Fixture[] = [
       ui: {
         contract_id: "purpose:interactive:resolved",
         view: { mode: "interactive" },
-        feedback_contract: {
-          kind: "single_value_canonical_suggestion",
-          mode: "text",
+        content: {
+          kind: "single_value",
           heading: "OP BASIS VAN JE INPUT STEL IK DE VOLGENDE BESTAANSREDEN VOOR",
-          suggested_value: "We exist to make complex choices understandable.",
+          canonical_text: "We exist to make complex choices understandable.",
         },
       },
     },
@@ -328,17 +353,25 @@ const fixtures: Fixture[] = [
       main_card_suppressed: false,
       pending_kind: "",
       has_feedback_contract: false,
-      has_wording_choice: false,
+      has_compare: false,
     },
   },
   {
-    name: "malformed_compare_fail_closed",
+    name: "malformed_compare_server_heals",
     response: {
       ok: true,
       current_step_id: "dream",
       text: "",
       prompt: "",
-      specialist: {},
+      specialist: {
+        compare_pending: "true",
+        compare_mode: "text",
+        compare_presentation: "picker",
+        feedback_reason_text: "Deze suggestie maakt de droom scherper.",
+        compare_user_normalized: "Wij willen bedrijven helpen groeien.",
+        compare_agent_current: "Mindd droomt van bedrijven die vanuit betekenis echte verandering brengen.",
+        compare_instruction: "Choose the version that fits best.",
+      },
       state: {
         started: "true",
         current_step: "dream",
@@ -346,20 +379,13 @@ const fixtures: Fixture[] = [
       ui: {
         contract_id: "dream:interactive:refine",
         view: { mode: "interactive", variant: "text_compare" },
-        feedback_contract: {
-          kind: "single_value_compare",
-          mode: "text",
-          current_value: "Wij willen bedrijven helpen groeien.",
-          suggested_value: "Mindd droomt van bedrijven die vanuit betekenis echte verandering brengen.",
-          instruction: "Choose the version that fits best.",
-        },
       },
     },
     expected: {
-      ok: false,
-      visible_card: "contract_failure",
-      error_type: "contract_warning",
-      reason_code: "ui_pending_interaction_missing_for_compare",
+      ok: true,
+      visible_card: "empty",
+      error_type: "",
+      reason_code: "",
     },
   },
 ];
@@ -369,7 +395,7 @@ for (const fixture of fixtures) {
     const finalized = finalizeFixture(fixture.response);
     const proof = extractProof(finalized);
     assert.equal(proof.has_feedback_contract, false, `${fixture.name}: feedback_contract leaked`);
-    assert.equal(proof.has_wording_choice, false, `${fixture.name}: wording_choice leaked`);
+    assert.equal(proof.has_compare, false, `${fixture.name}: compare leaked`);
     for (const [key, expectedValue] of Object.entries(fixture.expected)) {
       assert.deepEqual(proof[key], expectedValue, `${fixture.name}: ${key}`);
     }
@@ -396,7 +422,7 @@ test("GitHub reference pack preserves compare visibility behavior at the widget 
       name: "dream_self_compare_text_mode",
       visible_card: "compare",
       prompt_hidden: true,
-      allowed_roles: ["wording_pick_user", "wording_pick_suggestion"],
+      allowed_roles: ["compare_pick_user", "compare_pick_suggestion"],
       user_label: "This is your input:",
       suggestion_label: "This would be my suggestion:",
     },
@@ -404,7 +430,7 @@ test("GitHub reference pack preserves compare visibility behavior at the widget 
       name: "dream_self_compare_after_rewrite_backfill",
       visible_card: "compare",
       prompt_hidden: true,
-      allowed_roles: ["wording_pick_user", "wording_pick_suggestion"],
+      allowed_roles: ["compare_pick_user", "compare_pick_suggestion"],
       user_label: "Dit is jouw input:",
       suggestion_label: "Dit zou mijn suggestie zijn:",
     },
@@ -412,7 +438,7 @@ test("GitHub reference pack preserves compare visibility behavior at the widget 
       name: "dream_builder_compare",
       visible_card: "compare",
       prompt_hidden: true,
-      allowed_roles: ["wording_pick_user", "wording_pick_suggestion"],
+      allowed_roles: ["compare_pick_user", "compare_pick_suggestion"],
       user_label: "Keep both statements",
       suggestion_label: "Merge into one statement",
     },
@@ -420,7 +446,7 @@ test("GitHub reference pack preserves compare visibility behavior at the widget 
       name: "strategy_grouped_compare",
       visible_card: "compare",
       prompt_hidden: true,
-      allowed_roles: ["wording_pick_user", "wording_pick_suggestion"],
+      allowed_roles: ["compare_pick_user", "compare_pick_suggestion"],
       user_label: "Jouw compacte formulering",
       suggestion_label: "Mijn suggestie",
     },
@@ -428,7 +454,7 @@ test("GitHub reference pack preserves compare visibility behavior at the widget 
       name: "purpose_single_value_compare",
       visible_card: "compare",
       prompt_hidden: true,
-      allowed_roles: ["wording_pick_user", "wording_pick_suggestion"],
+      allowed_roles: ["compare_pick_user", "compare_pick_suggestion"],
       user_label: "Your input",
       suggestion_label: "My suggestion",
     },
@@ -449,8 +475,8 @@ test("GitHub reference pack preserves compare visibility behavior at the widget 
       suggestion_label: "",
     },
     {
-      name: "malformed_compare_fail_closed",
-      visible_card: "contract_failure",
+      name: "malformed_compare_server_heals",
+      visible_card: "empty",
       prompt_hidden: false,
       allowed_roles: [],
       user_label: "",

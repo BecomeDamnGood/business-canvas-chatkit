@@ -8,20 +8,20 @@ function buildBaseState(): Record<string, unknown> {
     current_step: "targetgroup",
     active_specialist: "TargetGroup",
     last_specialist_result: {
-      wording_choice_pending: "true",
-      wording_choice_selected: "",
-      wording_choice_mode: "text",
-      wording_choice_presentation: "picker",
-      wording_choice_target_field: "targetgroup",
-      wording_choice_user_raw: "I mean all companies that build complex products.",
-      wording_choice_user_normalized: "I mean all companies that build complex products.",
-      wording_choice_agent_current: "Industrial manufacturers with technical product development.",
+      compare_pending: "true",
+      compare_selected: "",
+      compare_mode: "text",
+      compare_presentation: "picker",
+      compare_target_field: "targetgroup",
+      compare_user_raw: "I mean all companies that build complex products.",
+      compare_user_normalized: "I mean all companies that build complex products.",
+      compare_agent_current: "Industrial manufacturers with technical product development.",
       feedback_reason_text: "This makes the target group specific enough to guide the next step.",
-      wording_choice_user_variant_semantics: "step_variant",
-      wording_choice_user_variant_stepworthy: "true",
-      wording_choice_user_items: [],
-      wording_choice_suggestion_items: [],
-      wording_choice_base_items: [],
+      compare_user_variant_semantics: "step_variant",
+      compare_user_variant_stepworthy: "true",
+      compare_user_items: [],
+      compare_suggestion_items: [],
+      compare_base_items: [],
     },
   };
 }
@@ -31,16 +31,16 @@ function buildParams(intentEnabled: boolean) {
     ...state,
     last_specialist_result: {
       ...((state.last_specialist_result as Record<string, unknown>) || {}),
-      wording_choice_pending: "false",
-      wording_choice_selected: "",
-      wording_choice_user_raw: "",
-      wording_choice_user_normalized: "",
-      wording_choice_user_items: [],
-      wording_choice_suggestion_items: [],
-      wording_choice_base_items: [],
-      wording_choice_agent_current: "",
-      wording_choice_mode: "",
-      wording_choice_target_field: "",
+      compare_pending: "false",
+      compare_selected: "",
+      compare_user_raw: "",
+      compare_user_normalized: "",
+      compare_user_items: [],
+      compare_suggestion_items: [],
+      compare_base_items: [],
+      compare_agent_current: "",
+      compare_mode: "",
+      compare_target_field: "",
     },
   });
 
@@ -50,13 +50,13 @@ function buildParams(intentEnabled: boolean) {
     flagsOverride?: Record<string, boolean | string> | null,
     _actionCodes?: unknown,
     _renderedActions?: unknown,
-    wordingChoice?: Record<string, unknown> | null
+    compare?: Record<string, unknown> | null
   ) => ({
     ...payload,
     specialist,
     ui: {
       flags: flagsOverride || {},
-      ...(wordingChoice ? { wording_choice: wordingChoice } : {}),
+      ...(compare ? { compare: compare } : {}),
     },
     blocked_pending: true,
   });
@@ -69,8 +69,8 @@ function buildParams(intentEnabled: boolean) {
       lastSpecialistResult: {},
       model: "gpt-5-mini",
       inputMode: "widget" as const,
-      wordingChoiceEnabled: true,
-      wordingChoiceIntentV1: intentEnabled,
+      compareEnabled: true,
+      compareIntentV1: intentEnabled,
       uiI18nTelemetry: {},
     },
     ids: {
@@ -121,16 +121,16 @@ function buildParams(intentEnabled: boolean) {
       isUiStateHygieneSwitchV1Enabled: () => true,
       isClearlyGeneralOfftopicInput: () => false,
       shouldTreatAsStepContributingInput: () => true,
-      resolvePendingWordingChoiceIntent: () => ({ intent: "content_input" as const, anchor: "user_input" as const }),
+      resolvePendingCompareIntent: () => ({ intent: "content_input" as const, anchor: "user_input" as const }),
       classifyAcceptedOutputUserTurn: async () => ({
         turn_kind: "unclear" as const,
         user_variant_is_stepworthy: false,
       }),
       bumpUiI18nCounter: () => {},
     },
-    wording: {
-      isWordingChoiceEligibleContext: () => true,
-      buildWordingChoiceFromPendingSpecialist: () => ({
+    compare: {
+      isCompareEligibleContext: () => true,
+      buildCompareFromPendingSpecialist: () => ({
         enabled: true,
         mode: "text" as const,
         user_text: "user",
@@ -139,19 +139,19 @@ function buildParams(intentEnabled: boolean) {
         suggestion_items: [],
         instruction: "pick one",
       }),
-      applyWordingPickSelection: () => ({
+      applyComparePickSelection: () => ({
         handled: false,
         specialist: {},
         nextState: buildBaseState() as any,
       }),
-      isWordingPickRouteToken: () => false,
+      isComparePickRouteToken: () => false,
       isRefineAdjustRouteToken: () => false,
-      buildWordingChoiceFromTurn: (_params: any) => ({
+      buildCompareFromTurn: (_params: any) => ({
         specialist: {
           ...buildBaseState().last_specialist_result,
-          wording_choice_pending: "true",
+          compare_pending: "true",
         },
-        wordingChoice: {
+        compare: {
           enabled: true,
           mode: "text" as const,
           user_text: "updated user variant",
@@ -161,8 +161,8 @@ function buildParams(intentEnabled: boolean) {
           instruction: "pick one",
         },
       }),
-      pickWordingAgentBase: () => "",
-      copyPendingWordingChoiceState: (specialistResult: Record<string, unknown>) => specialistResult,
+      pickCompareAgentBase: () => "",
+      copyPendingCompareState: (specialistResult: Record<string, unknown>) => specialistResult,
     },
     behavior: {
       ensureUiStrings: async (state: any) => state,
@@ -214,34 +214,38 @@ function buildParams(intentEnabled: boolean) {
   };
 }
 
-test("runStepRuntimeActionRoutingLayer rebuilds active wording-choice as a third variant for new step content", async () => {
+test("runStepRuntimeActionRoutingLayer rebuilds active compare as a third variant for new step content", async () => {
   const result = await runStepRuntimeActionRoutingLayer(buildParams(false) as any);
   assert.ok(result.response);
   const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
-  assert.equal(String(specialist.wording_choice_pending || ""), "true");
+  assert.equal(String(specialist.compare_pending || ""), "true");
   assert.equal(result.submittedTextIntent, "content_input");
   assert.equal(result.submittedTextAnchor, "user_input");
   assert.equal(
-    Boolean(((result.response as Record<string, unknown>).ui as Record<string, unknown>)?.flags?.require_wording_pick),
+    Boolean(((result.response as Record<string, unknown>).ui as Record<string, unknown>)?.flags?.require_compare_pick),
     true
   );
   assert.equal(
-    String((((result.response as Record<string, unknown>).ui as Record<string, unknown>)?.wording_choice as Record<string, unknown>)?.user_text || ""),
+    String(specialist.compare_user_normalized || specialist.compare_user_raw || ""),
     "updated user variant"
+  );
+  assert.equal(
+    "compare" in (((result.response as Record<string, unknown>).ui as Record<string, unknown>) || {}),
+    false
   );
 });
 
-test("runStepRuntimeActionRoutingLayer keeps Dream Builder pending free text out of the legacy wording-choice runtime path", async () => {
+test("runStepRuntimeActionRoutingLayer keeps Dream Builder pending free text out of the legacy compare runtime path", async () => {
   const params = buildParams(false) as any;
   params.runtime.state = {
     current_step: "dream",
     active_specialist: "DreamExplainer",
     __dream_runtime_mode: "builder_collect",
     last_specialist_result: {
-      wording_choice_pending: "true",
-      wording_choice_mode: "list",
-      wording_choice_compare_mode: "grouped_units",
-      wording_choice_variant: "grouped_list_units",
+      compare_pending: "true",
+      compare_mode: "list",
+      compare_compare_mode: "grouped_units",
+      compare_variant: "grouped_list_units",
       __dream_builder_compare_pending: "true",
       __dream_builder_compare_kind: "overlap_merge_compare",
       __dream_builder_compare_current_items: ["Existing statement", "User variant"],
@@ -251,8 +255,8 @@ test("runStepRuntimeActionRoutingLayer keeps Dream Builder pending free text out
   };
   params.runtime.userMessage = "Ik wil dit anders formuleren.";
   params.action.getDreamRuntimeMode = () => "builder_collect" as const;
-  params.wording.buildWordingChoiceFromPendingSpecialist = () => {
-    throw new Error("legacy wording-choice pending path should be unreachable for Dream Builder");
+  params.compare.buildCompareFromPendingSpecialist = () => {
+    throw new Error("legacy compare pending path should be unreachable for Dream Builder");
   };
 
   const result = await runStepRuntimeActionRoutingLayer(params);
@@ -315,21 +319,21 @@ test("runStepRuntimeActionRoutingLayer accepts the pending suggestion explicitly
     turn_kind: "accept_existing_suggestion" as const,
     user_variant_is_stepworthy: true,
   });
-  params.wording.applyWordingPickSelection = () => ({
+  params.compare.applyComparePickSelection = () => ({
     handled: true,
     specialist: {
       action: "ASK",
       message: "We gaan door met deze formulering.",
-      wording_choice_pending: "false",
-      wording_choice_selected: "suggestion",
+      compare_pending: "false",
+      compare_selected: "suggestion",
     },
     nextState: {
       ...buildBaseState(),
       last_specialist_result: {
         action: "ASK",
         message: "We gaan door met deze formulering.",
-        wording_choice_pending: "false",
-        wording_choice_selected: "suggestion",
+        compare_pending: "false",
+        compare_selected: "suggestion",
       },
     } as any,
   });
@@ -340,18 +344,18 @@ test("runStepRuntimeActionRoutingLayer accepts the pending suggestion explicitly
   assert.equal(result.submittedTextIntent, "accept_suggestion_explicit");
   assert.equal(result.submittedTextAnchor, "suggestion");
   const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
-  assert.equal(String(specialist.wording_choice_pending || ""), "false");
-  assert.equal(String(specialist.wording_choice_selected || ""), "suggestion");
+  assert.equal(String(specialist.compare_pending || ""), "false");
+  assert.equal(String(specialist.compare_selected || ""), "suggestion");
   assert.equal(
-    Boolean(((result.response as Record<string, unknown>).ui as Record<string, unknown>)?.flags?.require_wording_pick),
+    Boolean(((result.response as Record<string, unknown>).ui as Record<string, unknown>)?.flags?.require_compare_pick),
     false
   );
 });
 
-test("runStepRuntimeActionRoutingLayer keeps explicit suggestion rejection inside the wording-choice widget flow", async () => {
+test("runStepRuntimeActionRoutingLayer keeps explicit suggestion rejection inside the compare widget flow", async () => {
   const params = buildParams(false) as any;
   params.runtime.userMessage = "Dat is niet wat ik bedoel.";
-  params.state.resolvePendingWordingChoiceIntent = () => ({
+  params.state.resolvePendingCompareIntent = () => ({
     intent: "reject_suggestion_explicit" as const,
     anchor: "suggestion" as const,
   });
@@ -362,14 +366,18 @@ test("runStepRuntimeActionRoutingLayer keeps explicit suggestion rejection insid
   assert.equal(result.submittedTextIntent, "reject_suggestion_explicit");
   assert.equal(result.submittedTextAnchor, "suggestion");
   const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
-  assert.equal(String(specialist.wording_choice_pending || ""), "true");
+  assert.equal(String(specialist.compare_pending || ""), "true");
   assert.equal(
-    Boolean(((result.response as Record<string, unknown>).ui as Record<string, unknown>)?.flags?.require_wording_pick),
+    Boolean(((result.response as Record<string, unknown>).ui as Record<string, unknown>)?.flags?.require_compare_pick),
     true
   );
   assert.equal(
-    String((((result.response as Record<string, unknown>).ui as Record<string, unknown>)?.wording_choice as Record<string, unknown>)?.suggestion_text || ""),
+    String(specialist.compare_agent_current || ""),
     "suggestion"
+  );
+  assert.equal(
+    "compare" in (((result.response as Record<string, unknown>).ui as Record<string, unknown>) || {}),
+    false
   );
 });
 
@@ -389,14 +397,14 @@ test("runStepRuntimeActionRoutingLayer suspends the picker before returning an o
 
   assert.ok(result.response);
   const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
-  assert.equal(String(specialist.wording_choice_pending || ""), "false");
+  assert.equal(String(specialist.compare_pending || ""), "false");
   assert.equal(String(specialist.is_offtopic || ""), "true");
   assert.equal(
-    Boolean(((result.response as Record<string, unknown>).ui as Record<string, unknown>)?.flags?.require_wording_pick),
+    Boolean(((result.response as Record<string, unknown>).ui as Record<string, unknown>)?.flags?.require_compare_pick),
     false
   );
   assert.equal(
-    "wording_choice" in (((result.response as Record<string, unknown>).ui as Record<string, unknown>) || {}),
+    "compare" in (((result.response as Record<string, unknown>).ui as Record<string, unknown>) || {}),
     false
   );
 });
@@ -404,19 +412,19 @@ test("runStepRuntimeActionRoutingLayer suspends the picker before returning an o
 test("runStepRuntimeActionRoutingLayer suspends pending picker state when no picker payload can be rebuilt", async () => {
   const params = buildParams(false) as any;
   params.runtime.userMessage = "Dat is niet wat ik bedoel.";
-  params.state.resolvePendingWordingChoiceIntent = () => ({
+  params.state.resolvePendingCompareIntent = () => ({
     intent: "reject_suggestion_explicit" as const,
     anchor: "suggestion" as const,
   });
-  params.wording.buildWordingChoiceFromPendingSpecialist = () => null;
+  params.compare.buildCompareFromPendingSpecialist = () => null;
 
   const result = await runStepRuntimeActionRoutingLayer(params);
 
   assert.ok(result.response);
   const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
-  assert.equal(String(specialist.wording_choice_pending || ""), "false");
+  assert.equal(String(specialist.compare_pending || ""), "false");
   assert.equal(
-    Boolean(((result.response as Record<string, unknown>).ui as Record<string, unknown>)?.flags?.require_wording_pick),
+    Boolean(((result.response as Record<string, unknown>).ui as Record<string, unknown>)?.flags?.require_compare_pick),
     false
   );
 });
@@ -442,7 +450,7 @@ test("runStepRuntimeActionRoutingLayer keeps dream scoring free text available f
   params.runtime.userMessage = "Nog een extra statement over meer vertrouwen tussen mensen.";
   params.action.getDreamRuntimeMode = (state: Record<string, unknown>) =>
     String(state.__dream_runtime_mode || "self") as any;
-  params.wording.isWordingChoiceEligibleContext = () => false;
+  params.compare.isCompareEligibleContext = () => false;
   params.state.shouldTreatAsStepContributingInput = () => true;
 
   const result = await runStepRuntimeActionRoutingLayer(params);
@@ -679,21 +687,21 @@ test("runStepRuntimeActionRoutingLayer reroutes resumed Dream picker to canonica
     current_step: "dream",
     active_specialist: "Dream",
     last_specialist_result: {
-      wording_choice_pending: "true",
-      wording_choice_mode: "text",
-      wording_choice_target_field: "dream",
-      wording_choice_user_raw:
+      compare_pending: "true",
+      compare_mode: "text",
+      compare_target_field: "dream",
+      compare_user_raw:
         "Ik zou willen dat mensen gezonder zouden eten met minder bewerkt voedsel en voedsel eten waar minimale tot geen ongezonde toevoegingen in zitten.",
-      wording_choice_user_normalized:
+      compare_user_normalized:
         "Ik zou willen dat mensen gezonder zouden eten met minder bewerkt voedsel en voedsel eten waar minimale tot geen ongezonde toevoegingen in zitten.",
-      wording_choice_agent_current:
+      compare_agent_current:
         "Bart droomt van een wereld waarin mensen zich gezond en energiek voelen doordat zij genieten van puur, onbewerkt voedsel zonder ongezonde toevoegingen.",
       message: "Ik denk dat ik je begrijp.",
       refined_formulation:
         "Bart droomt van een wereld waarin mensen zich gezond en energiek voelen doordat zij genieten van puur, onbewerkt voedsel zonder ongezonde toevoegingen.",
-      wording_choice_user_items: [],
-      wording_choice_suggestion_items: [],
-      wording_choice_base_items: [],
+      compare_user_items: [],
+      compare_suggestion_items: [],
+      compare_base_items: [],
     },
   };
   params.state.classifyAcceptedOutputUserTurn = async () => ({
@@ -708,9 +716,9 @@ test("runStepRuntimeActionRoutingLayer reroutes resumed Dream picker to canonica
   const result = await runStepRuntimeActionRoutingLayer(params);
   assert.ok(result.response);
   const specialist = ((result.response as Record<string, unknown>).specialist || {}) as Record<string, unknown>;
-  assert.equal(String(specialist.wording_choice_presentation || ""), "canonical");
-  assert.equal(String(specialist.wording_choice_user_variant_stepworthy || ""), "false");
-  assert.equal(String(specialist.wording_choice_user_variant_semantics || ""), "raw_source_content");
+  assert.equal(String(specialist.compare_presentation || ""), "canonical");
+  assert.equal(String(specialist.compare_user_variant_stepworthy || ""), "false");
+  assert.equal(String(specialist.compare_user_variant_semantics || ""), "raw_source_content");
 });
 
 test("runStepRuntimeActionRoutingLayer proceeds from single-value confirm actions when canonical value only exists in ui content", async () => {
@@ -805,7 +813,7 @@ test("runStepRuntimeActionRoutingLayer proceeds from single-value confirm action
         },
         refined_formulation: "",
         [current.fieldKey]: "",
-        wording_choice_pending: "false",
+        compare_pending: "false",
       },
     };
     params.state.provisionalValueForStep = () => "";
@@ -830,7 +838,7 @@ test("runStepRuntimeActionRoutingLayer proceeds from single-value confirm action
   }
 });
 
-test("runStepRuntimeActionRoutingLayer proceeds from Dream confirm when canonical pending wording state is hidden behind the card", async () => {
+test("runStepRuntimeActionRoutingLayer proceeds from Dream confirm when canonical pending compare state is hidden behind the card", async () => {
   const cases = [
     {
       actionCode: "ACTION_DREAM_EXPLAINER_REFINE_CONFIRM",
@@ -861,19 +869,19 @@ test("runStepRuntimeActionRoutingLayer proceeds from Dream confirm when canonica
         },
         refined_formulation: canonical,
         dream: "",
-        wording_choice_pending: "true",
-        wording_choice_mode: "text",
-        wording_choice_target_field: "dream",
-        wording_choice_presentation: "canonical",
-        wording_choice_agent_current: canonical,
-        wording_choice_user_raw: "Ik wil dat mensen meer verbonden zijn met natuur.",
-        wording_choice_user_normalized: "Ik wil dat mensen meer verbonden zijn met natuur.",
-        wording_choice_user_variant_semantics: "raw_source_content",
-        wording_choice_user_variant_stepworthy: "false",
+        compare_pending: "true",
+        compare_mode: "text",
+        compare_target_field: "dream",
+        compare_presentation: "canonical",
+        compare_agent_current: canonical,
+        compare_user_raw: "Ik wil dat mensen meer verbonden zijn met natuur.",
+        compare_user_normalized: "Ik wil dat mensen meer verbonden zijn met natuur.",
+        compare_user_variant_semantics: "raw_source_content",
+        compare_user_variant_stepworthy: "false",
       },
     };
     params.state.provisionalValueForStep = () => "";
-    params.wording.buildWordingChoiceFromPendingSpecialist = () => null;
+    params.compare.buildCompareFromPendingSpecialist = () => null;
 
     const result = await runStepRuntimeActionRoutingLayer(params);
     assert.ok(result.response);
@@ -881,11 +889,11 @@ test("runStepRuntimeActionRoutingLayer proceeds from Dream confirm when canonica
     assert.equal(String((result.state as Record<string, unknown>).dream_final || ""), canonical);
     assert.equal(String((result.state as Record<string, unknown>).active_specialist || ""), "Purpose");
     const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
-    assert.notEqual(String(specialist.wording_choice_pending || ""), "true");
+    assert.notEqual(String(specialist.compare_pending || ""), "true");
   }
 });
 
-test("runStepRuntimeActionRoutingLayer keeps confirm blocked when a visible picker wording choice is still pending", async () => {
+test("runStepRuntimeActionRoutingLayer keeps confirm blocked when a visible picker compare choice is still pending", async () => {
   const params = buildParams(true) as any;
   params.runtime.actionCodeRaw = "ACTION_DREAM_EXPLAINER_REFINE_CONFIRM";
   params.runtime.userMessage = "";
@@ -893,16 +901,16 @@ test("runStepRuntimeActionRoutingLayer keeps confirm blocked when a visible pick
     current_step: "dream",
     active_specialist: "DreamExplainer",
     last_specialist_result: {
-      wording_choice_pending: "true",
-      wording_choice_mode: "text",
-      wording_choice_target_field: "dream",
-      wording_choice_presentation: "picker",
-      wording_choice_user_raw: "Ik wil dat mensen gezonder eten.",
-      wording_choice_user_normalized: "Ik wil dat mensen gezonder eten.",
-      wording_choice_agent_current:
+      compare_pending: "true",
+      compare_mode: "text",
+      compare_target_field: "dream",
+      compare_presentation: "picker",
+      compare_user_raw: "Ik wil dat mensen gezonder eten.",
+      compare_user_normalized: "Ik wil dat mensen gezonder eten.",
+      compare_agent_current:
         "FluerOp droomt van een wereld waarin mensen zich gezond en energiek voelen door puur eten.",
-      wording_choice_user_variant_semantics: "step_variant",
-      wording_choice_user_variant_stepworthy: "true",
+      compare_user_variant_semantics: "step_variant",
+      compare_user_variant_stepworthy: "true",
       refined_formulation:
         "FluerOp droomt van een wereld waarin mensen zich gezond en energiek voelen door puur eten.",
     },
@@ -912,10 +920,10 @@ test("runStepRuntimeActionRoutingLayer keeps confirm blocked when a visible pick
   assert.ok(result.response);
   assert.equal(String((result.state as Record<string, unknown>).current_step || ""), "dream");
   const specialist = ((result.response as Record<string, unknown>).specialist || {}) as Record<string, unknown>;
-  assert.equal(String(specialist.wording_choice_pending || ""), "true");
+  assert.equal(String(specialist.compare_pending || ""), "true");
 });
 
-test("runStepRuntimeActionRoutingLayer strips stale legacy wording-choice state while Dream Builder mode is active", async () => {
+test("runStepRuntimeActionRoutingLayer strips stale legacy compare state while Dream Builder mode is active", async () => {
   const params = buildParams(true) as any;
   params.runtime.state = {
     current_step: "dream",
@@ -923,13 +931,13 @@ test("runStepRuntimeActionRoutingLayer strips stale legacy wording-choice state 
     __dream_runtime_mode: "builder_collect",
     dream_builder_statements: ["Statement 1", "Statement 2"],
     last_specialist_result: {
-      wording_choice_pending: "true",
-      wording_choice_mode: "text",
-      wording_choice_presentation: "picker",
-      wording_choice_target_field: "dream",
-      wording_choice_user_raw: "I want to help people solve a problem they care about.",
-      wording_choice_user_normalized: "I want to help people solve a problem they care about.",
-      wording_choice_agent_current:
+      compare_pending: "true",
+      compare_mode: "text",
+      compare_presentation: "picker",
+      compare_target_field: "dream",
+      compare_user_raw: "I want to help people solve a problem they care about.",
+      compare_user_normalized: "I want to help people solve a problem they care about.",
+      compare_agent_current:
         "Over 5 tot 10 jaar zoeken mensen steeds meer naar oplossingen die voor hen echt betekenisvol zijn.",
       feedback_reason_text: "Dream Builder zoekt hier naar bredere maatschappelijke verschuivingen.",
       __dream_builder_compare_pending: "true",
@@ -942,21 +950,21 @@ test("runStepRuntimeActionRoutingLayer strips stale legacy wording-choice state 
   };
   params.runtime.userMessage = "";
   params.runtime.inputMode = "widget";
-  params.runtime.wordingChoiceEnabled = true;
+  params.runtime.compareEnabled = true;
   params.behavior.buildTextForWidget = ({ specialist }: { specialist: Record<string, unknown> }) =>
     JSON.stringify({
-      wording_choice_pending: specialist.wording_choice_pending,
+      compare_pending: specialist.compare_pending,
       dream_builder_compare_pending: specialist.__dream_builder_compare_pending,
     });
 
   const result = await runStepRuntimeActionRoutingLayer(params);
   const specialist = ((((result.response as Record<string, unknown> | null)?.specialist) || (result.state as Record<string, unknown>).last_specialist_result) || {}) as Record<string, unknown>;
-  assert.equal(String(specialist.wording_choice_pending || ""), "false");
-  assert.equal(String(specialist.wording_choice_target_field || ""), "");
+  assert.equal(String(specialist.compare_pending || ""), "false");
+  assert.equal(String(specialist.compare_target_field || ""), "");
   assert.equal(String(specialist.__dream_builder_compare_pending || ""), "true");
   if (result.response) {
     assert.equal(
-      "wording_choice" in ((((result.response as Record<string, unknown>).ui || {}) as Record<string, unknown>)),
+      "compare" in ((((result.response as Record<string, unknown>).ui || {}) as Record<string, unknown>)),
       false
     );
   }
@@ -970,17 +978,17 @@ test("runStepRuntimeActionRoutingLayer keeps strategy confirm blocked while grou
     current_step: "strategy",
     active_specialist: "Strategy",
     last_specialist_result: {
-      wording_choice_pending: "true",
-      wording_choice_mode: "list",
-      wording_choice_target_field: "strategy",
-      wording_choice_presentation: "picker",
-      wording_choice_compare_mode: "grouped_units",
-      wording_choice_compare_cursor: "0",
-      wording_choice_compare_segments: [
+      compare_pending: "true",
+      compare_mode: "list",
+      compare_target_field: "strategy",
+      compare_presentation: "picker",
+      compare_compare_mode: "grouped_units",
+      compare_compare_cursor: "0",
+      compare_compare_segments: [
         { kind: "retained", items: ["Recurring revenue", "Expert-led delivery"] },
         { kind: "unit", unit_id: "unit_1" },
       ],
-      wording_choice_compare_units: [
+      compare_compare_units: [
         {
           id: "unit_1",
           user_items: ["Operational simplicity"],
@@ -991,10 +999,10 @@ test("runStepRuntimeActionRoutingLayer keeps strategy confirm blocked while grou
           confidence: "anchored",
         },
       ],
-      wording_choice_user_items: ["Operational simplicity"],
-      wording_choice_suggestion_items: ["Operational focus"],
-      wording_choice_user_normalized: "Operational simplicity",
-      wording_choice_agent_current: "Operational focus",
+      compare_user_items: ["Operational simplicity"],
+      compare_suggestion_items: ["Operational focus"],
+      compare_user_normalized: "Operational simplicity",
+      compare_agent_current: "Operational focus",
       statements: ["Recurring revenue", "Expert-led delivery"],
       strategy: ["Recurring revenue", "Expert-led delivery"].join("\n"),
     },
@@ -1003,7 +1011,7 @@ test("runStepRuntimeActionRoutingLayer keeps strategy confirm blocked while grou
   const result = await runStepRuntimeActionRoutingLayer(params);
   assert.ok(result.response);
   const specialist = ((result.response as Record<string, unknown>).specialist || {}) as Record<string, unknown>;
-  assert.equal(String(specialist.wording_choice_pending || ""), "true");
+  assert.equal(String(specialist.compare_pending || ""), "true");
 });
 
 test("runStepRuntimeActionRoutingLayer keeps rules confirm blocked while grouped compare units are still pending", async () => {
@@ -1014,17 +1022,17 @@ test("runStepRuntimeActionRoutingLayer keeps rules confirm blocked while grouped
     current_step: "rulesofthegame",
     active_specialist: "RulesOfTheGame",
     last_specialist_result: {
-      wording_choice_pending: "true",
-      wording_choice_mode: "list",
-      wording_choice_target_field: "rulesofthegame",
-      wording_choice_presentation: "picker",
-      wording_choice_compare_mode: "grouped_units",
-      wording_choice_compare_cursor: "0",
-      wording_choice_compare_segments: [
+      compare_pending: "true",
+      compare_mode: "list",
+      compare_target_field: "rulesofthegame",
+      compare_presentation: "picker",
+      compare_compare_mode: "grouped_units",
+      compare_compare_cursor: "0",
+      compare_compare_segments: [
         { kind: "retained", items: ["We communicate proactively.", "We keep commitments."] },
         { kind: "unit", unit_id: "unit_1" },
       ],
-      wording_choice_compare_units: [
+      compare_compare_units: [
         {
           id: "unit_1",
           user_items: ["We resolve blockers quickly."],
@@ -1035,10 +1043,10 @@ test("runStepRuntimeActionRoutingLayer keeps rules confirm blocked while grouped
           confidence: "anchored",
         },
       ],
-      wording_choice_user_items: ["We resolve blockers quickly."],
-      wording_choice_suggestion_items: ["We escalate blockers early and visibly."],
-      wording_choice_user_normalized: "We resolve blockers quickly.",
-      wording_choice_agent_current: "We escalate blockers early and visibly.",
+      compare_user_items: ["We resolve blockers quickly."],
+      compare_suggestion_items: ["We escalate blockers early and visibly."],
+      compare_user_normalized: "We resolve blockers quickly.",
+      compare_agent_current: "We escalate blockers early and visibly.",
       statements: ["We communicate proactively.", "We keep commitments."],
       rulesofthegame: ["We communicate proactively.", "We keep commitments."].join("\n"),
     },
@@ -1047,40 +1055,40 @@ test("runStepRuntimeActionRoutingLayer keeps rules confirm blocked while grouped
   const result = await runStepRuntimeActionRoutingLayer(params);
   assert.ok(result.response);
   const specialist = ((result.response as Record<string, unknown>).specialist || {}) as Record<string, unknown>;
-  assert.equal(String(specialist.wording_choice_pending || ""), "true");
+  assert.equal(String(specialist.compare_pending || ""), "true");
 });
 
-test("runStepRuntimeActionRoutingLayer keeps free-text variants inside the widget wording-choice flow when enabled", async () => {
+test("runStepRuntimeActionRoutingLayer keeps free-text variants inside the widget compare flow when enabled", async () => {
   const result = await runStepRuntimeActionRoutingLayer(buildParams(true) as any);
   assert.ok(result.response);
   const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
-  assert.equal(String(specialist.wording_choice_pending || ""), "true");
+  assert.equal(String(specialist.compare_pending || ""), "true");
   assert.equal(result.submittedTextIntent, "content_input");
   assert.equal(result.submittedTextAnchor, "user_input");
 });
 
-test("runStepRuntimeActionRoutingLayer implicitly accepts suggestion on pending wording choice only for explicit accept text", async () => {
+test("runStepRuntimeActionRoutingLayer implicitly accepts suggestion on pending compare choice only for explicit accept text", async () => {
   const params = buildParams(true) as any;
   params.runtime.userMessage = "Ja, dit is goed zo.";
-  params.state.resolvePendingWordingChoiceIntent = () => ({
+  params.state.resolvePendingCompareIntent = () => ({
     intent: "accept_suggestion_explicit" as const,
     anchor: "suggestion" as const,
   });
-  params.wording.applyWordingPickSelection = ({ state, routeToken }: any) => {
-    if (routeToken !== "__WORDING_PICK_SUGGESTION__") {
+  params.compare.applyComparePickSelection = ({ state, routeToken }: any) => {
+    if (routeToken !== "__COMPARE_PICK_SUGGESTION__") {
       return { handled: false, specialist: {}, nextState: state };
     }
     const selectedSpecialist = {
       ...((state.last_specialist_result as Record<string, unknown>) || {}),
-      wording_choice_pending: "false",
-      wording_choice_selected: "suggestion",
-      wording_choice_mode: "",
-      wording_choice_target_field: "",
-      wording_choice_user_raw: "",
-      wording_choice_user_normalized: "",
-      wording_choice_user_items: [],
-      wording_choice_suggestion_items: [],
-      wording_choice_base_items: [],
+      compare_pending: "false",
+      compare_selected: "suggestion",
+      compare_mode: "",
+      compare_target_field: "",
+      compare_user_raw: "",
+      compare_user_normalized: "",
+      compare_user_items: [],
+      compare_suggestion_items: [],
+      compare_base_items: [],
     };
     return {
       handled: true,
@@ -1098,20 +1106,20 @@ test("runStepRuntimeActionRoutingLayer implicitly accepts suggestion on pending 
   assert.equal(result.submittedTextIntent, "accept_suggestion_explicit");
   assert.equal(result.submittedTextAnchor, "suggestion");
   const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
-  assert.equal(String(specialist.wording_choice_pending || ""), "false");
-  assert.equal(String(specialist.wording_choice_selected || ""), "suggestion");
+  assert.equal(String(specialist.compare_pending || ""), "false");
+  assert.equal(String(specialist.compare_selected || ""), "suggestion");
 });
 
-test("runStepRuntimeActionRoutingLayer clears pending wording choice for feedback without implicit accept", async () => {
+test("runStepRuntimeActionRoutingLayer clears pending compare choice for feedback without implicit accept", async () => {
   const params = buildParams(true) as any;
   params.runtime.userMessage = "Dit raakt me nog niet echt.";
-  params.state.resolvePendingWordingChoiceIntent = () => ({
+  params.state.resolvePendingCompareIntent = () => ({
     intent: "feedback_on_suggestion" as const,
     anchor: "suggestion" as const,
   });
   let implicitPickCalled = false;
-  params.wording.applyWordingPickSelection = ({ routeToken, state }: any) => {
-    if (routeToken === "__WORDING_PICK_SUGGESTION__") {
+  params.compare.applyComparePickSelection = ({ routeToken, state }: any) => {
+    if (routeToken === "__COMPARE_PICK_SUGGESTION__") {
       implicitPickCalled = true;
     }
     return { handled: false, specialist: {}, nextState: state };
@@ -1124,8 +1132,8 @@ test("runStepRuntimeActionRoutingLayer clears pending wording choice for feedbac
   assert.equal(result.submittedTextIntent, "feedback_on_suggestion");
   assert.equal(result.submittedTextAnchor, "suggestion");
   const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
-  assert.equal(String(specialist.wording_choice_pending || ""), "true");
-  assert.equal(String(specialist.wording_choice_selected || ""), "");
+  assert.equal(String(specialist.compare_pending || ""), "true");
+  assert.equal(String(specialist.compare_selected || ""), "");
   assert.equal(String(specialist.pending_suggestion_intent || ""), "feedback_on_suggestion");
   assert.equal(String(specialist.pending_suggestion_anchor || ""), "suggestion");
   assert.equal(String(specialist.pending_suggestion_seed_source || ""), "previous_suggestion");
@@ -1134,13 +1142,13 @@ test("runStepRuntimeActionRoutingLayer clears pending wording choice for feedbac
 test("runStepRuntimeActionRoutingLayer does not implicit-accept suggestion when user explicitly rejects it", async () => {
   const params = buildParams(true) as any;
   params.runtime.userMessage = "Dat is niet wat ik bedoel.";
-  params.state.resolvePendingWordingChoiceIntent = () => ({
+  params.state.resolvePendingCompareIntent = () => ({
     intent: "reject_suggestion_explicit" as const,
     anchor: "suggestion" as const,
   });
   let implicitPickCalled = false;
-  params.wording.applyWordingPickSelection = ({ routeToken, state }: any) => {
-    if (routeToken === "__WORDING_PICK_SUGGESTION__") {
+  params.compare.applyComparePickSelection = ({ routeToken, state }: any) => {
+    if (routeToken === "__COMPARE_PICK_SUGGESTION__") {
       implicitPickCalled = true;
     }
     return { handled: false, specialist: {}, nextState: state };
@@ -1152,8 +1160,8 @@ test("runStepRuntimeActionRoutingLayer does not implicit-accept suggestion when 
   assert.equal(result.submittedTextIntent, "reject_suggestion_explicit");
   assert.equal(result.submittedTextAnchor, "suggestion");
   const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
-  assert.equal(String(specialist.wording_choice_pending || ""), "true");
-  assert.equal(String(specialist.wording_choice_selected || ""), "");
+  assert.equal(String(specialist.compare_pending || ""), "true");
+  assert.equal(String(specialist.compare_selected || ""), "");
   assert.equal(String(specialist.pending_suggestion_intent || ""), "reject_suggestion_explicit");
   assert.equal(String(specialist.pending_suggestion_anchor || ""), "suggestion");
 });
@@ -1164,39 +1172,39 @@ test("runStepRuntimeActionRoutingLayer handles explicit accept correctly in Drea
     current_step: "dream",
     active_specialist: "Dream",
     last_specialist_result: {
-      wording_choice_pending: "true",
-      wording_choice_mode: "text",
-      wording_choice_presentation: "picker",
-      wording_choice_target_field: "dream",
-      wording_choice_user_raw: "Wij willen bedrijven helpen groeien.",
-      wording_choice_user_normalized: "Wij willen bedrijven helpen groeien.",
-      wording_choice_agent_current: "Mindd droomt van een wereld waarin ondernemers rust ervaren in hun keuzes.",
+      compare_pending: "true",
+      compare_mode: "text",
+      compare_presentation: "picker",
+      compare_target_field: "dream",
+      compare_user_raw: "Wij willen bedrijven helpen groeien.",
+      compare_user_normalized: "Wij willen bedrijven helpen groeien.",
+      compare_agent_current: "Mindd droomt van een wereld waarin ondernemers rust ervaren in hun keuzes.",
       feedback_reason_text: "This version turns the dream into a clearer world-level change.",
-      wording_choice_user_variant_semantics: "step_variant",
-      wording_choice_user_variant_stepworthy: "true",
-      wording_choice_user_items: [],
-      wording_choice_suggestion_items: [],
-      wording_choice_base_items: [],
+      compare_user_variant_semantics: "step_variant",
+      compare_user_variant_stepworthy: "true",
+      compare_user_items: [],
+      compare_suggestion_items: [],
+      compare_base_items: [],
     },
   };
   params.runtime.userMessage = "Ja, dit klopt.";
-  params.state.resolvePendingWordingChoiceIntent = () => ({
+  params.state.resolvePendingCompareIntent = () => ({
     intent: "accept_suggestion_explicit" as const,
     anchor: "suggestion" as const,
   });
-  params.wording.applyWordingPickSelection = ({ state, routeToken }: any) => ({
-    handled: routeToken === "__WORDING_PICK_SUGGESTION__",
+  params.compare.applyComparePickSelection = ({ state, routeToken }: any) => ({
+    handled: routeToken === "__COMPARE_PICK_SUGGESTION__",
     specialist: {
       ...((state.last_specialist_result as Record<string, unknown>) || {}),
-      wording_choice_pending: "false",
-      wording_choice_selected: "suggestion",
+      compare_pending: "false",
+      compare_selected: "suggestion",
     },
     nextState: {
       ...state,
       last_specialist_result: {
         ...state.last_specialist_result,
-        wording_choice_pending: "false",
-        wording_choice_selected: "suggestion",
+        compare_pending: "false",
+        compare_selected: "suggestion",
       },
     },
   });
@@ -1206,8 +1214,8 @@ test("runStepRuntimeActionRoutingLayer handles explicit accept correctly in Drea
   const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
   assert.equal(result.submittedTextIntent, "accept_suggestion_explicit");
   assert.equal(result.submittedTextAnchor, "suggestion");
-  assert.equal(String(specialist.wording_choice_pending || ""), "false");
-  assert.equal(String(specialist.wording_choice_selected || ""), "suggestion");
+  assert.equal(String(specialist.compare_pending || ""), "false");
+  assert.equal(String(specialist.compare_selected || ""), "suggestion");
 });
 
 test("runStepRuntimeActionRoutingLayer keeps explicit reject inside the widget in Dream pending flow", async () => {
@@ -1216,23 +1224,23 @@ test("runStepRuntimeActionRoutingLayer keeps explicit reject inside the widget i
     current_step: "dream",
     active_specialist: "Dream",
     last_specialist_result: {
-      wording_choice_pending: "true",
-      wording_choice_mode: "text",
-      wording_choice_presentation: "picker",
-      wording_choice_target_field: "dream",
-      wording_choice_user_raw: "Wij willen bedrijven helpen groeien.",
-      wording_choice_user_normalized: "Wij willen bedrijven helpen groeien.",
-      wording_choice_agent_current: "Mindd droomt van een wereld waarin ondernemers rust ervaren in hun keuzes.",
+      compare_pending: "true",
+      compare_mode: "text",
+      compare_presentation: "picker",
+      compare_target_field: "dream",
+      compare_user_raw: "Wij willen bedrijven helpen groeien.",
+      compare_user_normalized: "Wij willen bedrijven helpen groeien.",
+      compare_agent_current: "Mindd droomt van een wereld waarin ondernemers rust ervaren in hun keuzes.",
       feedback_reason_text: "This version turns the dream into a clearer world-level change.",
-      wording_choice_user_variant_semantics: "step_variant",
-      wording_choice_user_variant_stepworthy: "true",
-      wording_choice_user_items: [],
-      wording_choice_suggestion_items: [],
-      wording_choice_base_items: [],
+      compare_user_variant_semantics: "step_variant",
+      compare_user_variant_stepworthy: "true",
+      compare_user_items: [],
+      compare_suggestion_items: [],
+      compare_base_items: [],
     },
   };
   params.runtime.userMessage = "Dat is niet wat ik bedoel.";
-  params.state.resolvePendingWordingChoiceIntent = () => ({
+  params.state.resolvePendingCompareIntent = () => ({
     intent: "reject_suggestion_explicit" as const,
     anchor: "suggestion" as const,
   });
@@ -1242,7 +1250,7 @@ test("runStepRuntimeActionRoutingLayer keeps explicit reject inside the widget i
   const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
   assert.equal(result.submittedTextIntent, "reject_suggestion_explicit");
   assert.equal(result.submittedTextAnchor, "suggestion");
-  assert.equal(String(specialist.wording_choice_pending || ""), "true");
+  assert.equal(String(specialist.compare_pending || ""), "true");
 });
 
 test("runStepRuntimeActionRoutingLayer suspends the picker and renders a normal widget response for off-topic text", async () => {
@@ -1256,7 +1264,7 @@ test("runStepRuntimeActionRoutingLayer suspends the picker and renders a normal 
     return {
       ...incoming.specialistResult,
       is_offtopic: true,
-      wording_choice_pending: "false",
+      compare_pending: "false",
     };
   };
 
@@ -1264,15 +1272,15 @@ test("runStepRuntimeActionRoutingLayer suspends the picker and renders a normal 
   assert.ok(result.response);
   assert.equal(normalizedOfftopic, true);
   const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
-  assert.equal(String(specialist.wording_choice_pending || ""), "false");
+  assert.equal(String(specialist.compare_pending || ""), "false");
   assert.equal(String(specialist.is_offtopic || ""), "true");
 });
 
-test("runStepRuntimeActionRoutingLayer suspends pending wording choice for meta/help text instead of trapping it in the picker", async () => {
+test("runStepRuntimeActionRoutingLayer suspends pending compare choice for meta/help text instead of trapping it in the picker", async () => {
   const params = buildParams(true) as any;
   params.runtime.userMessage = "Kun je uitleggen waarom je deze suggestie doet?";
   params.state.shouldTreatAsStepContributingInput = () => false;
-  params.state.resolvePendingWordingChoiceIntent = () => ({
+  params.state.resolvePendingCompareIntent = () => ({
     intent: "content_input" as const,
     anchor: "user_input" as const,
   });
@@ -1282,18 +1290,18 @@ test("runStepRuntimeActionRoutingLayer suspends pending wording choice for meta/
   assert.equal(result.response, null);
   assert.equal(result.userMessage, "Kun je uitleggen waarom je deze suggestie doet?");
   const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
-  assert.equal(String(specialist.wording_choice_pending || ""), "false");
+  assert.equal(String(specialist.compare_pending || ""), "false");
   assert.equal(
-    String(specialist.wording_choice_agent_current || ""),
+    String(specialist.compare_agent_current || ""),
     "Industrial manufacturers with technical product development."
   );
 });
 
-test("runStepRuntimeActionRoutingLayer suspends pending wording choice for locale-control text instead of forcing it into compare logic", async () => {
+test("runStepRuntimeActionRoutingLayer suspends pending compare choice for locale-control text instead of forcing it into compare logic", async () => {
   const params = buildParams(true) as any;
   params.runtime.userMessage = "Kun je vanaf nu in het Engels antwoorden?";
   params.state.shouldTreatAsStepContributingInput = () => false;
-  params.state.resolvePendingWordingChoiceIntent = () => ({
+  params.state.resolvePendingCompareIntent = () => ({
     intent: "content_input" as const,
     anchor: "user_input" as const,
   });
@@ -1303,14 +1311,14 @@ test("runStepRuntimeActionRoutingLayer suspends pending wording choice for local
   assert.equal(result.response, null);
   assert.equal(result.userMessage, "Kun je vanaf nu in het Engels antwoorden?");
   const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
-  assert.equal(String(specialist.wording_choice_pending || ""), "false");
+  assert.equal(String(specialist.compare_pending || ""), "false");
   assert.equal(
-    String(specialist.wording_choice_user_normalized || ""),
+    String(specialist.compare_user_normalized || ""),
     "I mean all companies that build complex products."
   );
 });
 
-test("runStepRuntimeActionRoutingLayer treats new Dream Builder text as fresh input instead of pending wording feedback", async () => {
+test("runStepRuntimeActionRoutingLayer treats new Dream Builder text as fresh input instead of pending compare feedback", async () => {
   const params = buildParams(true) as any;
   let classifyCalls = 0;
   let resolveIntentCalls = 0;
@@ -1342,14 +1350,14 @@ test("runStepRuntimeActionRoutingLayer treats new Dream Builder text as fresh in
       user_variant_is_stepworthy: false,
     };
   };
-  params.state.resolvePendingWordingChoiceIntent = async () => {
+  params.state.resolvePendingCompareIntent = async () => {
     resolveIntentCalls += 1;
     return { intent: "feedback_on_suggestion" as const, anchor: "suggestion" as const };
   };
-  params.wording.buildWordingChoiceFromTurn = () => ({
+  params.compare.buildCompareFromTurn = () => ({
     specialist: {
       action: "ASK",
-      wording_choice_pending: "false",
+      compare_pending: "false",
       __dream_builder_compare_pending: "true",
       __dream_builder_compare_kind: "batch_rewrite_compare",
       __dream_builder_compare_current_items: [
@@ -1363,7 +1371,7 @@ test("runStepRuntimeActionRoutingLayer treats new Dream Builder text as fresh in
       __dream_builder_compare_segments: [{ kind: "unit", unit_id: "unit_1" }],
       __dream_builder_compare_rationale: "Dream Builder zoekt naar bredere maatschappelijke verschuivingen.",
     },
-    wordingChoice: {
+    compare: {
       enabled: true,
       mode: "list" as const,
       variant: "grouped_list_units" as const,
@@ -1385,7 +1393,7 @@ test("runStepRuntimeActionRoutingLayer treats new Dream Builder text as fresh in
   assert.equal(resolveIntentCalls, 0);
   assert.equal(result.submittedTextIntent, "");
   const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
-  assert.notEqual(String(specialist.wording_choice_pending || ""), "true");
+  assert.notEqual(String(specialist.compare_pending || ""), "true");
   assert.equal(String(specialist.__dream_builder_compare_pending || ""), "false");
 });
 
@@ -1441,13 +1449,13 @@ test("runStepRuntimeActionRoutingLayer lets refine-adjust action codes continue 
     };
     params.runtime.actionCodeRaw = scenario.actionCode;
     params.runtime.userMessage = scenario.actionCode;
-    let rebuiltWordingChoice = false;
+    let rebuiltCompare = false;
     let pickedAgentBase = false;
-    params.wording.buildWordingChoiceFromTurn = () => {
-      rebuiltWordingChoice = true;
-      return { specialist: {}, wordingChoice: null };
+    params.compare.buildCompareFromTurn = () => {
+      rebuiltCompare = true;
+      return { specialist: {}, compare: null };
     };
-    params.wording.pickWordingAgentBase = () => {
+    params.compare.pickCompareAgentBase = () => {
       pickedAgentBase = true;
       return "";
     };
@@ -1463,7 +1471,7 @@ test("runStepRuntimeActionRoutingLayer lets refine-adjust action codes continue 
     const result = await runStepRuntimeActionRoutingLayer(params);
     assert.equal(result.response, null);
     assert.equal(result.userMessage, scenario.expectedRoute);
-    assert.equal(rebuiltWordingChoice, false);
+    assert.equal(rebuiltCompare, false);
     assert.equal(pickedAgentBase, false);
     assert.equal(dreamRuntimeModeSet, scenario.expectedDreamRuntimeMode || "");
   }
@@ -1477,7 +1485,7 @@ test("runStepRuntimeActionRoutingLayer maps proceed text intent to current confi
     last_specialist_result: {},
   };
   params.runtime.userMessage = "Ga door naar de volgende stap";
-  params.runtime.wordingChoiceEnabled = false;
+  params.runtime.compareEnabled = false;
   params.action.inferCurrentMenuForStep = () => "STRATEGY_MENU_CONFIRM";
   params.action.firstConfirmActionCodeForMenu = () => "ACTION_STRATEGY_CONFIRM_SATISFIED";
   params.action.resolveActionCodeTransition = () => null;
@@ -1497,7 +1505,7 @@ test("runStepRuntimeActionRoutingLayer maps proceed text intent to current confi
   };
   params.runtime.inputMode = "chat";
   params.runtime.userMessage = "Ga door naar de volgende stap";
-  params.runtime.wordingChoiceEnabled = false;
+  params.runtime.compareEnabled = false;
   params.action.inferCurrentMenuForStep = () => "STRATEGY_MENU_CONFIRM";
   params.action.firstConfirmActionCodeForMenu = () => "ACTION_STRATEGY_CONFIRM_SATISFIED";
   params.action.resolveActionCodeTransition = () => null;
@@ -1517,7 +1525,7 @@ test("runStepRuntimeActionRoutingLayer maps proceed text intent to guidance acti
   };
   params.runtime.inputMode = "chat";
   params.runtime.userMessage = "Ga door naar de volgende stap";
-  params.runtime.wordingChoiceEnabled = false;
+  params.runtime.compareEnabled = false;
   params.action.inferCurrentMenuForStep = () => "STRATEGY_MENU_ASK";
   params.action.firstConfirmActionCodeForMenu = () => "";
   params.action.firstGuidanceActionCodeForMenu = () => "ACTION_STRATEGY_ASK_3_QUESTIONS";
@@ -1551,7 +1559,7 @@ test("runStepRuntimeActionRoutingLayer preserves rules proceed as user intent an
   };
   params.runtime.inputMode = "chat";
   params.runtime.userMessage = "Ga door naar de volgende stap";
-  params.runtime.wordingChoiceEnabled = false;
+  params.runtime.compareEnabled = false;
   params.action.inferCurrentMenuForStep = () => "RULES_MENU_ASK_EXPLAIN";
   params.action.firstConfirmActionCodeForMenu = () => "";
   params.action.firstGuidanceActionCodeForMenu = () => "ACTION_RULES_ASK_EXPLAIN_MORE";
@@ -1580,7 +1588,7 @@ test("runStepRuntimeActionRoutingLayer preserves rules proceed as user intent an
   assert.equal(String(specialist.proceed_request_intent || ""), "next_step");
   assert.deepEqual(specialist.proceed_block_reason_codes, ["rules_min_count"]);
   assert.equal(Number(specialist.proceed_block_rule_count || 0), 2);
-  assert.equal(String(specialist.wording_choice_pending || ""), "false");
+  assert.equal(String(specialist.compare_pending || ""), "false");
   assert.match(String((result.response as Record<string, unknown>).text || ""), /Je kunt nog niet doorgaan/);
   assert.doesNotMatch(String((result.response as Record<string, unknown>).text || ""), /Op basis van je input stel ik/);
 });
@@ -1599,17 +1607,17 @@ test("runStepRuntimeActionRoutingLayer keeps rules proceed out of picker routing
       rulesofthegame: "user_input",
     },
     last_specialist_result: {
-      wording_choice_pending: "true",
-      wording_choice_mode: "list",
+      compare_pending: "true",
+      compare_mode: "list",
       feedback_reason_text:
         "Er staat nog een open wording-keuze klaar. Werk eerst naar één definitieve set spelregels toe.",
-      wording_choice_target_field: "rulesofthegame",
-      wording_choice_user_items: [
+      compare_target_field: "rulesofthegame",
+      compare_user_items: [
         "Gratis is gratis voor iedereen.",
         "We komen afspraken na.",
         "We communiceren proactief.",
       ],
-      wording_choice_suggestion_items: [
+      compare_suggestion_items: [
         "We passen prijsafspraken consequent en transparant toe in iedere samenwerking.",
         "We komen afspraken na.",
         "We communiceren proactief.",
@@ -1623,11 +1631,11 @@ test("runStepRuntimeActionRoutingLayer keeps rules proceed out of picker routing
   };
   params.runtime.inputMode = "widget";
   params.runtime.userMessage = "Ga door naar de volgende stap";
-  params.runtime.wordingChoiceEnabled = true;
+  params.runtime.compareEnabled = true;
   params.action.inferCurrentMenuForStep = () => "RULES_MENU_ASK_EXPLAIN";
   params.action.firstConfirmActionCodeForMenu = () => "";
   params.action.firstGuidanceActionCodeForMenu = () => "ACTION_RULES_ASK_EXPLAIN_MORE";
-  params.wording.isWordingChoiceEligibleContext = () => true;
+  params.compare.isCompareEligibleContext = () => true;
   params.behavior.buildTextForWidget = ({ specialist }: { specialist: Record<string, unknown> }) =>
     [String(specialist.message || ""), String(specialist.rulesofthegame || "")].filter(Boolean).join("\n\n");
   params.behavior.pickPrompt = (specialist: Record<string, unknown>) => String(specialist.question || "");
@@ -1655,7 +1663,7 @@ test("runStepRuntimeActionRoutingLayer keeps rules proceed out of picker routing
   const specialist = ((result.response as Record<string, unknown>).specialist || {}) as Record<string, unknown>;
   assert.equal(String(specialist.proceed_request_intent || ""), "next_step");
   assert.deepEqual(specialist.proceed_block_reason_codes, ["rules_pending_choice"]);
-  assert.equal(String(specialist.wording_choice_pending || ""), "false");
+  assert.equal(String(specialist.compare_pending || ""), "false");
   assert.doesNotMatch(String((result.response as Record<string, unknown>).text || ""), /Op basis van je input stel ik/);
 });
 
@@ -1669,7 +1677,7 @@ test("runStepRuntimeActionRoutingLayer routes rules proceed to confirm for accep
         "• We bewaken kwaliteit.\n• We doen alles met plezier.\n• We maken de klant koning.\n• We geven minder uit dan er binnenkomt.\n• We zijn punctueel.",
     },
     provisional_source_by_step: {
-      rulesofthegame: "wording_pick",
+      rulesofthegame: "compare_pick",
     },
     last_specialist_result: {
       rulesofthegame:
@@ -1685,7 +1693,7 @@ test("runStepRuntimeActionRoutingLayer routes rules proceed to confirm for accep
   };
   params.runtime.inputMode = "chat";
   params.runtime.userMessage = "Ga door naar de volgende stap";
-  params.runtime.wordingChoiceEnabled = false;
+  params.runtime.compareEnabled = false;
   params.action.inferCurrentMenuForStep = () => "RULES_MENU_ASK_EXPLAIN";
   params.action.firstConfirmActionCodeForMenu = () => "";
   params.action.processActionCode = () => "__ROUTE__RULES_CONFIRM_ALL__";
@@ -1721,7 +1729,7 @@ test("runStepRuntimeActionRoutingLayer routes rules proceed to confirm when the 
   };
   params.runtime.inputMode = "chat";
   params.runtime.userMessage = "Ga door naar de volgende stap";
-  params.runtime.wordingChoiceEnabled = false;
+  params.runtime.compareEnabled = false;
   params.action.inferCurrentMenuForStep = () => "RULES_MENU_ASK_EXPLAIN";
   params.action.firstConfirmActionCodeForMenu = () => "";
   params.action.processActionCode = () => "__ROUTE__RULES_CONFIRM_ALL__";

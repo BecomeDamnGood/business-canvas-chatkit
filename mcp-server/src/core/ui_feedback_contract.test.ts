@@ -4,8 +4,8 @@ import assert from "node:assert/strict";
 import {
   normalizeUiFeedbackContractSource,
   parseRetainedInstruction,
-  resolveWordingChoiceFeedbackSource,
-  synthesizeUiFeedbackContractFromWordingChoice,
+  resolveCompareFeedbackSource,
+  synthesizeUiFeedbackContractFromCompare,
 } from "./ui_feedback_contract.js";
 
 test("parseRetainedInstruction splits retained heading, bullets, and final instruction", () => {
@@ -24,8 +24,8 @@ test("parseRetainedInstruction splits retained heading, bullets, and final instr
   });
 });
 
-test("synthesizeUiFeedbackContractFromWordingChoice prefers feedback_reason_text and parses retained compare instruction", () => {
-  const contract = synthesizeUiFeedbackContractFromWordingChoice(
+test("synthesizeUiFeedbackContractFromCompare prefers feedback_reason_text and parses retained compare instruction", () => {
+  const contract = synthesizeUiFeedbackContractFromCompare(
     {
       enabled: true,
       mode: "list",
@@ -46,7 +46,7 @@ test("synthesizeUiFeedbackContractFromWordingChoice prefers feedback_reason_text
         "Kies de versie die het beste past bij het resterende verschil.",
       ].join("\n"),
     },
-    { require_wording_pick: true }
+    { require_compare_pick: true }
   );
 
   assert.deepEqual(contract, {
@@ -64,8 +64,8 @@ test("synthesizeUiFeedbackContractFromWordingChoice prefers feedback_reason_text
   });
 });
 
-test("resolveWordingChoiceFeedbackSource backfills missing compare fields from specialist wording-choice state", () => {
-  const resolved = resolveWordingChoiceFeedbackSource(
+test("resolveCompareFeedbackSource backfills missing compare fields from specialist compare state", () => {
+  const resolved = resolveCompareFeedbackSource(
     {
       enabled: true,
       mode: "text",
@@ -75,8 +75,8 @@ test("resolveWordingChoiceFeedbackSource backfills missing compare fields from s
       suggestion_items: [],
     },
     {
-      wording_choice_user_normalized: "Dit gaat over dat mensen het beu zijn om verkeerd voorgelicht te worden.",
-      wording_choice_agent_current:
+      compare_user_normalized: "Dit gaat over dat mensen het beu zijn om verkeerd voorgelicht te worden.",
+      compare_agent_current:
         "Mindd droomt van een wereld waarin mensen zich zeker voelen omdat ze eerlijk geinformeerd worden.",
     }
   );
@@ -107,7 +107,7 @@ test("normalizeUiFeedbackContractSource backfills single-value compare current_v
       instruction: "Klik alsjeblieft wat het beste bij je past.",
     },
     {
-      wording_choice_user_normalized:
+      compare_user_normalized:
         "Dit gaat over dat mensen het beu zijn om verkeerd voorgelicht te worden.",
     }
   );

@@ -5,14 +5,14 @@ import { UI_STRINGS_CATALOG_BY_LOCALE } from "./ui_strings_catalog.js";
 import { UI_STRINGS_SOURCE_EN } from "./ui_strings_defaults.js";
 
 const FIX6_UI_KEYS = [
-  "wording.feedback.compare.intro.template",
-  "wording.feedback.user_pick.ack.default",
-  "wording.feedback.user_pick.reason.default",
-  "wording.feedback.dream_builder.rewrite.default",
-  "wordingChoiceGroupedCompareUserLabel",
-  "wordingChoiceGroupedCompareSuggestionLabel",
-  "wordingChoiceGroupedCompareInstruction",
-  "wordingChoiceGroupedCompareRetainedHeading",
+  "compare.feedback.compare.intro.template",
+  "compare.feedback.user_pick.ack.default",
+  "compare.feedback.user_pick.reason.default",
+  "compare.feedback.dream_builder.rewrite.default",
+  "compareGroupedUserLabel",
+  "compareGroupedCompareSuggestionLabel",
+  "compareGroupedCompareInstruction",
+  "compareGroupedCompareRetainedHeading",
   "menuLabel.DREAM_MENU_INTRO.ACTION_DREAM_INTRO_EXPLAIN_MORE",
   "menuLabel.PURPOSE_MENU_INTRO.ACTION_PURPOSE_INTRO_EXPLAIN_MORE",
   "menuLabel.PURPOSE_MENU_POST_ASK.ACTION_PURPOSE_INTRO_EXPLAIN_MORE",

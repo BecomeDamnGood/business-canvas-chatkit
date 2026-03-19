@@ -15,7 +15,7 @@ export const STEP_REGISTRY_ORDER = [
 export type StepRegistryStepId = (typeof STEP_REGISTRY_ORDER)[number];
 export type StepRegistryStepKind = "bootstrap" | "single_value" | "list_value" | "presentation";
 export type StepRegistryListSemantics = "none" | "grouped_compare";
-export type StepRegistryWordingFamily = "none" | "single_value" | "grouped_list";
+export type StepRegistryCompareFamily = "none" | "single_value" | "grouped_list";
 export type StepRegistrySupportFamily = "none" | "interactive_step";
 export type StepRegistryPresentationMode = "bootstrap" | "interactive" | "presentation";
 export type StepRegistrySectionTitleMode = "plain_key" | "business_name_template" | "presentation_key";
@@ -52,7 +52,7 @@ export type StepRegistryEntry = {
   specialistId: string;
   stepKind: StepRegistryStepKind;
   listSemantics: StepRegistryListSemantics;
-  wordingFamily: StepRegistryWordingFamily;
+  compareFamily: StepRegistryCompareFamily;
   supportFamily: StepRegistrySupportFamily;
   presentationMode: StepRegistryPresentationMode;
   chooseForMe: StepRegistryChooseForMe | null;
@@ -76,7 +76,7 @@ export const STEP_REGISTRY_BY_STEP_ID = {
     specialistId: "ValidationAndBusinessName",
     stepKind: "bootstrap",
     listSemantics: "none",
-    wordingFamily: "none",
+    compareFamily: "none",
     supportFamily: "none",
     presentationMode: "bootstrap",
     chooseForMe: null,
@@ -94,7 +94,7 @@ export const STEP_REGISTRY_BY_STEP_ID = {
     specialistId: "Dream",
     stepKind: "single_value",
     listSemantics: "none",
-    wordingFamily: "single_value",
+    compareFamily: "single_value",
     supportFamily: "interactive_step",
     presentationMode: "interactive",
     chooseForMe: {
@@ -120,7 +120,7 @@ export const STEP_REGISTRY_BY_STEP_ID = {
     specialistId: "Purpose",
     stepKind: "single_value",
     listSemantics: "none",
-    wordingFamily: "single_value",
+    compareFamily: "single_value",
     supportFamily: "interactive_step",
     presentationMode: "interactive",
     chooseForMe: {
@@ -146,7 +146,7 @@ export const STEP_REGISTRY_BY_STEP_ID = {
     specialistId: "BigWhy",
     stepKind: "single_value",
     listSemantics: "none",
-    wordingFamily: "single_value",
+    compareFamily: "single_value",
     supportFamily: "interactive_step",
     presentationMode: "interactive",
     chooseForMe: {
@@ -172,7 +172,7 @@ export const STEP_REGISTRY_BY_STEP_ID = {
     specialistId: "Role",
     stepKind: "single_value",
     listSemantics: "none",
-    wordingFamily: "single_value",
+    compareFamily: "single_value",
     supportFamily: "interactive_step",
     presentationMode: "interactive",
     chooseForMe: {
@@ -198,7 +198,7 @@ export const STEP_REGISTRY_BY_STEP_ID = {
     specialistId: "Entity",
     stepKind: "single_value",
     listSemantics: "none",
-    wordingFamily: "single_value",
+    compareFamily: "single_value",
     supportFamily: "interactive_step",
     presentationMode: "interactive",
     chooseForMe: {
@@ -224,7 +224,7 @@ export const STEP_REGISTRY_BY_STEP_ID = {
     specialistId: "Strategy",
     stepKind: "list_value",
     listSemantics: "grouped_compare",
-    wordingFamily: "grouped_list",
+    compareFamily: "grouped_list",
     supportFamily: "interactive_step",
     presentationMode: "interactive",
     chooseForMe: {
@@ -250,7 +250,7 @@ export const STEP_REGISTRY_BY_STEP_ID = {
     specialistId: "TargetGroup",
     stepKind: "single_value",
     listSemantics: "none",
-    wordingFamily: "single_value",
+    compareFamily: "single_value",
     supportFamily: "interactive_step",
     presentationMode: "interactive",
     chooseForMe: null,
@@ -268,7 +268,7 @@ export const STEP_REGISTRY_BY_STEP_ID = {
     specialistId: "ProductsServices",
     stepKind: "list_value",
     listSemantics: "grouped_compare",
-    wordingFamily: "grouped_list",
+    compareFamily: "grouped_list",
     supportFamily: "interactive_step",
     presentationMode: "interactive",
     chooseForMe: null,
@@ -286,7 +286,7 @@ export const STEP_REGISTRY_BY_STEP_ID = {
     specialistId: "RulesOfTheGame",
     stepKind: "list_value",
     listSemantics: "grouped_compare",
-    wordingFamily: "grouped_list",
+    compareFamily: "grouped_list",
     supportFamily: "interactive_step",
     presentationMode: "interactive",
     chooseForMe: null,
@@ -304,7 +304,7 @@ export const STEP_REGISTRY_BY_STEP_ID = {
     specialistId: "Presentation",
     stepKind: "presentation",
     listSemantics: "none",
-    wordingFamily: "none",
+    compareFamily: "none",
     supportFamily: "none",
     presentationMode: "presentation",
     chooseForMe: null,
@@ -382,12 +382,12 @@ export function isSingleValueStep(stepId: string): boolean {
   return getStepRegistryEntry(stepId)?.stepKind === "single_value";
 }
 
-export function isSingleValueWordingStep(stepId: string): boolean {
-  return getStepRegistryEntry(stepId)?.wordingFamily === "single_value";
+export function isSingleValueCompareStep(stepId: string): boolean {
+  return getStepRegistryEntry(stepId)?.compareFamily === "single_value";
 }
 
-export function isGroupedListWordingStep(stepId: string): boolean {
-  return getStepRegistryEntry(stepId)?.wordingFamily === "grouped_list";
+export function isGroupedListCompareStep(stepId: string): boolean {
+  return getStepRegistryEntry(stepId)?.compareFamily === "grouped_list";
 }
 
 export function hasGroupedCompareListSemantics(stepId: string): boolean {

@@ -40,7 +40,7 @@ This contract separates display text from routing/action semantics.
 
 ## Wording Choice Rendering
 
-- When wording choice is pending, render wording panel and suppress regular action buttons.
+- When compare choice is pending, render compare panel and suppress regular action buttons.
 
 ## Legacy Compatibility
 

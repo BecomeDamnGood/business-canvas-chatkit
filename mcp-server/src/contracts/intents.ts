@@ -22,8 +22,8 @@ export const SubmitScoresIntentZod = z.object({
   scores: z.array(z.array(z.number().min(1).max(10))),
 });
 
-export const WordingPickIntentZod = z.object({
-  type: z.literal("WORDING_PICK"),
+export const ComparePickIntentZod = z.object({
+  type: z.literal("COMPARE_PICK"),
   choice: z.enum(["user", "suggestion"]),
 });
 
@@ -50,7 +50,7 @@ export const StepIntentZod = z.discriminatedUnion("type", [
   RequestExplanationIntentZod,
   StartExerciseIntentZod,
   SubmitScoresIntentZod,
-  WordingPickIntentZod,
+  ComparePickIntentZod,
   RouteIntentZod,
   NavigateStepIntentZod,
   ContinueIntentZod,

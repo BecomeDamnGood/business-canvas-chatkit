@@ -46,7 +46,7 @@ export const StructuredTurnPayloadZod = z.object({
     .object({
       showDreamBuilder: z.boolean().optional(),
       showScoring: z.boolean().optional(),
-      wordingChoiceMode: z.boolean().optional(),
+      compareMode: z.boolean().optional(),
     })
     .optional(),
 });

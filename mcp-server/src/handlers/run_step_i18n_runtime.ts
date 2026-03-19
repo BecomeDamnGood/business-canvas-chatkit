@@ -110,11 +110,11 @@ export type UiI18nTelemetryCounters = {
   parity_recovered: number;
   confirm_gate_blocked_count: number;
   step0_escape_ready_recovered_count: number;
-  wording_body_sanitized_count: number;
+  compare_body_sanitized_count: number;
   semantic_prompt_missing_count: number;
   semantic_confirm_blocked_count: number;
   state_hygiene_resets_count: number;
-  wording_feedback_fallback_count: number;
+  compare_feedback_fallback_count: number;
 };
 
 type RunStepI18nRuntimeDeps = {

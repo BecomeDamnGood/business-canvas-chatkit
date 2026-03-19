@@ -10,8 +10,8 @@ export type HolisticPolicyFlags = {
   holisticPolicyV2: boolean;
   offtopicV2: boolean;
   bulletRenderV2: boolean;
-  wordingChoiceV2: boolean;
-  wordingChoiceIntentV1: boolean;
+  compareV2: boolean;
+  compareIntentV1: boolean;
   timeoutGuardV2: boolean;
   motivationQuotesV11: boolean;
 };
@@ -152,14 +152,14 @@ export function resolveHolisticPolicyFlags(): HolisticPolicyFlags {
     holisticPolicyV2,
     offtopicV2: holisticPolicyV2 && envFlagEnabled("BSC_OFFTOPIC_V2", localDevDefaults),
     bulletRenderV2: holisticPolicyV2 && envFlagEnabled("BSC_BULLET_RENDER_V2", localDevDefaults),
-    wordingChoiceV2: envFlagEnabled("BSC_WORDING_CHOICE_V2", true),
-    wordingChoiceIntentV1: envFlagEnabled("BSC_WORDING_CHOICE_INTENT_V1", true),
+    compareV2: envFlagEnabled("BSC_WORDING_CHOICE_V2", true),
+    compareIntentV1: envFlagEnabled("BSC_WORDING_CHOICE_INTENT_V1", true),
     timeoutGuardV2: holisticPolicyV2 && envFlagEnabled("BSC_TIMEOUT_GUARD_V2", localDevDefaults),
     motivationQuotesV11: holisticPolicyV2 && envFlagEnabled("BSC_MOTIVATION_QUOTES_V11", localDevDefaults),
   };
 }
 
-export function isWordingChoiceIntentV1Enabled(): boolean {
+export function isCompareIntentV1Enabled(): boolean {
   return envFlagEnabled("BSC_WORDING_CHOICE_INTENT_V1", true);
 }
 
@@ -306,7 +306,7 @@ export function isUiI18nCriticalKeysV1Enabled(): boolean {
   return envFlagEnabled("UI_I18N_CRITICAL_KEYS_V1", true);
 }
 
-export function isWordingPanelCleanBodyV1Enabled(): boolean {
+export function isComparePanelCleanBodyV1Enabled(): boolean {
   return envFlagEnabled("UI_WORDING_PANEL_CLEAN_BODY_V1", true);
 }
 
@@ -314,7 +314,7 @@ export function isUiSemanticInvariantsV1Enabled(): boolean {
   return envFlagEnabled("UI_SEMANTIC_INVARIANTS_V1", true);
 }
 
-export function isUiWordingFeedbackKeyedV1Enabled(): boolean {
+export function isUiCompareFeedbackKeyedV1Enabled(): boolean {
   return envFlagEnabled("UI_WORDING_FEEDBACK_KEYED_V1", true);
 }
 

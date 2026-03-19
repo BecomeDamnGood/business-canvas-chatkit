@@ -6,7 +6,7 @@ import {
   normalizeLightUserInput,
   parseListItems,
   tokenizeWords,
-} from "./run_step_wording_heuristics.js";
+} from "./run_step_compare_heuristics.js";
 
 export const BUSINESS_LIST_ROUTE_REMOVE = "__BUSINESS_LIST_REMOVE__";
 export const BUSINESS_LIST_ROUTE_REPLACE = "__BUSINESS_LIST_REPLACE__";
@@ -279,8 +279,8 @@ export function readBusinessListReferenceItems(state: CanvasState, stepId: strin
       ? ((state as Record<string, unknown>).provisional_by_step as Record<string, unknown>)
       : {};
   const candidates: string[][] = [];
-  if (Array.isArray(lastSpecialist.wording_choice_base_items)) {
-    candidates.push(dedupeItems((lastSpecialist.wording_choice_base_items as unknown[]).map((item) => String(item || ""))));
+  if (Array.isArray(lastSpecialist.compare_base_items)) {
+    candidates.push(dedupeItems((lastSpecialist.compare_base_items as unknown[]).map((item) => String(item || ""))));
   }
   if (Array.isArray(lastSpecialist.statements)) {
     candidates.push(dedupeItems((lastSpecialist.statements as unknown[]).map((item) => String(item || ""))));

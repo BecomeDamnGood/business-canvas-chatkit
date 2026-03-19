@@ -1893,7 +1893,7 @@
       specialistId: "ValidationAndBusinessName",
       stepKind: "bootstrap",
       listSemantics: "none",
-      wordingFamily: "none",
+      compareFamily: "none",
       supportFamily: "none",
       presentationMode: "bootstrap",
       chooseForMe: null
@@ -1911,7 +1911,7 @@
       specialistId: "Dream",
       stepKind: "single_value",
       listSemantics: "none",
-      wordingFamily: "single_value",
+      compareFamily: "single_value",
       supportFamily: "interactive_step",
       presentationMode: "interactive",
       chooseForMe: {
@@ -1937,7 +1937,7 @@
       specialistId: "Purpose",
       stepKind: "single_value",
       listSemantics: "none",
-      wordingFamily: "single_value",
+      compareFamily: "single_value",
       supportFamily: "interactive_step",
       presentationMode: "interactive",
       chooseForMe: {
@@ -1963,7 +1963,7 @@
       specialistId: "BigWhy",
       stepKind: "single_value",
       listSemantics: "none",
-      wordingFamily: "single_value",
+      compareFamily: "single_value",
       supportFamily: "interactive_step",
       presentationMode: "interactive",
       chooseForMe: {
@@ -1989,7 +1989,7 @@
       specialistId: "Role",
       stepKind: "single_value",
       listSemantics: "none",
-      wordingFamily: "single_value",
+      compareFamily: "single_value",
       supportFamily: "interactive_step",
       presentationMode: "interactive",
       chooseForMe: {
@@ -2015,7 +2015,7 @@
       specialistId: "Entity",
       stepKind: "single_value",
       listSemantics: "none",
-      wordingFamily: "single_value",
+      compareFamily: "single_value",
       supportFamily: "interactive_step",
       presentationMode: "interactive",
       chooseForMe: {
@@ -2041,7 +2041,7 @@
       specialistId: "Strategy",
       stepKind: "list_value",
       listSemantics: "grouped_compare",
-      wordingFamily: "grouped_list",
+      compareFamily: "grouped_list",
       supportFamily: "interactive_step",
       presentationMode: "interactive",
       chooseForMe: {
@@ -2067,7 +2067,7 @@
       specialistId: "TargetGroup",
       stepKind: "single_value",
       listSemantics: "none",
-      wordingFamily: "single_value",
+      compareFamily: "single_value",
       supportFamily: "interactive_step",
       presentationMode: "interactive",
       chooseForMe: null
@@ -2085,7 +2085,7 @@
       specialistId: "ProductsServices",
       stepKind: "list_value",
       listSemantics: "grouped_compare",
-      wordingFamily: "grouped_list",
+      compareFamily: "grouped_list",
       supportFamily: "interactive_step",
       presentationMode: "interactive",
       chooseForMe: null
@@ -2103,7 +2103,7 @@
       specialistId: "RulesOfTheGame",
       stepKind: "list_value",
       listSemantics: "grouped_compare",
-      wordingFamily: "grouped_list",
+      compareFamily: "grouped_list",
       supportFamily: "interactive_step",
       presentationMode: "interactive",
       chooseForMe: null
@@ -2121,7 +2121,7 @@
       specialistId: "Presentation",
       stepKind: "presentation",
       listSemantics: "none",
-      wordingFamily: "none",
+      compareFamily: "none",
       supportFamily: "none",
       presentationMode: "presentation",
       chooseForMe: null
@@ -3345,7 +3345,7 @@
   };
   var ACCEPTED_CANONICAL_PROVISIONAL_SOURCES = /* @__PURE__ */ new Set([
     "user_input",
-    "wording_pick",
+    "compare_pick",
     "action_route"
   ]);
   function readBootstrapOrderingState(raw) {
@@ -4506,13 +4506,13 @@
     const inputEl2 = document.getElementById("input");
     const sendEl2 = document.getElementById("send");
     const btnStart2 = document.getElementById("btnStart");
-    const wordingChoicePickUser2 = document.getElementById("wordingChoicePickUser");
-    const wordingChoicePickSuggestion2 = document.getElementById("wordingChoicePickSuggestion");
+    const comparePickUser2 = document.getElementById("comparePickUser");
+    const comparePickSuggestion2 = document.getElementById("comparePickSuggestion");
     if (inputEl2) inputEl2.disabled = loading;
     if (sendEl2) sendEl2.disabled = loading;
     if (btnStart2) btnStart2.disabled = loading;
-    if (wordingChoicePickUser2) wordingChoicePickUser2.disabled = loading;
-    if (wordingChoicePickSuggestion2) wordingChoicePickSuggestion2.disabled = loading;
+    if (comparePickUser2) comparePickUser2.disabled = loading;
+    if (comparePickSuggestion2) comparePickSuggestion2.disabled = loading;
     document.querySelectorAll("#choiceWrap button").forEach((b) => {
       b.disabled = loading;
     });
@@ -5151,41 +5151,41 @@
 ${String(item || "").trim()}`.trim())
     };
   }
-  function shouldSuppressMainCardForWordingChoice(uiPayloadRaw, uiViewVariantRaw) {
+  function shouldSuppressMainCardForCompare(uiPayloadRaw, uiViewVariantRaw) {
     const uiPayload = uiPayloadRaw && typeof uiPayloadRaw === "object" ? uiPayloadRaw : {};
     return Boolean(readPendingInteraction(uiPayload));
   }
-  function shouldSuppressPromptForWordingChoice(params) {
-    return String(params.uiViewVariant || "").trim() === "text_compare" || params.wordingChoiceActive === true || params.requireWordingPick === true;
+  function shouldSuppressPromptForCompare(params) {
+    return String(params.uiViewVariant || "").trim() === "text_compare" || params.compareActive === true || params.requireComparePick === true;
   }
-  function shouldShowTextInputForWordingChoice(params) {
+  function shouldShowTextInputForCompare(params) {
     if (params.textSubmitAvailable !== true) return false;
-    if (params.requireWordingPick === true) return true;
-    return !shouldSuppressPromptForWordingChoice({
+    if (params.requireComparePick === true) return true;
+    return !shouldSuppressPromptForCompare({
       uiViewVariant: params.uiViewVariant,
-      wordingChoiceActive: params.wordingChoiceActive,
-      requireWordingPick: params.requireWordingPick
+      compareActive: params.compareActive,
+      requireComparePick: params.requireComparePick
     });
   }
-  function shouldDisableTextInputForWordingChoice(params) {
-    return params.requireWordingPick === true;
+  function shouldDisableTextInputForCompare(params) {
+    return params.requireComparePick === true;
   }
   function shouldRenderPurposeStepIntroVideo(params) {
     if (String(params.currentStep || "").trim() !== "purpose") return false;
     if (params.showStepIntroChrome !== true) return false;
-    if (params.wordingChoiceActive === true) return false;
+    if (params.compareActive === true) return false;
     return Boolean(purposeStepVideoUrlForLang(params.lang));
   }
   function shouldRenderBigWhyStepIntroVideo(params) {
     if (String(params.currentStep || "").trim() !== "bigwhy") return false;
     if (params.showStepIntroChrome !== true) return false;
-    if (params.wordingChoiceActive === true) return false;
+    if (params.compareActive === true) return false;
     return Boolean(bigWhyStepVideoUrlForLang(params.lang));
   }
   function shouldRenderRoleStepIntroVideo(params) {
     if (String(params.currentStep || "").trim() !== "role") return false;
     if (params.showStepIntroChrome !== true) return false;
-    if (params.wordingChoiceActive === true) return false;
+    if (params.compareActive === true) return false;
     return Boolean(roleStepVideoUrlForLang(params.lang));
   }
   function actionContractActionsForResult(resultData) {
@@ -5235,8 +5235,8 @@ ${String(item || "").trim()}`.trim())
       };
     }).filter((entry) => Boolean(entry)) : [];
     if (allowedActions.length === 0) return null;
-    const hasUserPickAction = allowedActions.some((action) => action.role === "wording_pick_user");
-    const hasSuggestionPickAction = allowedActions.some((action) => action.role === "wording_pick_suggestion");
+    const hasUserPickAction = allowedActions.some((action) => action.role === "compare_pick_user");
+    const hasSuggestionPickAction = allowedActions.some((action) => action.role === "compare_pick_suggestion");
     if (!hasUserPickAction || !hasSuggestionPickAction) return null;
     const userLabel = String(renderModelRaw.user_label || "").trim();
     const suggestionLabel = String(renderModelRaw.suggestion_label || "").trim();
@@ -5303,7 +5303,7 @@ ${String(item || "").trim()}`.trim())
     if (normalizedRole === "start") return "primary";
     if (normalizedRole === "text_submit") return "text_input";
     if (normalizedRole === "score_submit") return "primary";
-    if (normalizedRole === "wording_pick_user" || normalizedRole === "wording_pick_suggestion") {
+    if (normalizedRole === "compare_pick_user" || normalizedRole === "compare_pick_suggestion") {
       return "compare_pick";
     }
     if (normalizedRole === "dream_start_exercise") {
@@ -5601,10 +5601,10 @@ ${String(item || "").trim()}`.trim())
   }
   function stripStructuredChoiceLines(promptRaw, lang) {
     const blockedLines = [
-      t(lang, "wordingChoiceInstruction"),
+      t(lang, "compareInstruction"),
       t(lang, "invariant.prompt.ask.default"),
       t(lang, "generic.choicePrompt.shareOrOption"),
-      t(lang, "wording.choice.context.default")
+      t(lang, "compare.choice.context.default")
     ].map((line) => normalizeChoiceLine(line)).filter(Boolean);
     const blockedSet = new Set(blockedLines);
     const kept = String(promptRaw || "").replace(/\r/g, "\n").split("\n").map((line) => String(line || "").trim()).filter(Boolean).filter((line) => !/^\d+[\)\.]\s+/.test(line)).filter((line) => !blockedSet.has(normalizeChoiceLine(line)));
@@ -5778,19 +5778,19 @@ ${String(item || "").trim()}`.trim())
       setInlineNotice(t(lang, "optionsDisplayError"));
     }
   }
-  function renderWordingChoicePanel(resultData, lang) {
-    const wrap = document.getElementById("wordingChoiceWrap");
-    const feedbackEl = document.getElementById("wordingChoiceFeedback");
-    const userTextEl = document.getElementById("wordingChoiceUserText");
-    const userListEl = document.getElementById("wordingChoiceUserList");
-    const suggestionTextEl = document.getElementById("wordingChoiceSuggestionText");
-    const suggestionListEl = document.getElementById("wordingChoiceSuggestionList");
-    const retainedWrapEl = document.getElementById("wordingChoiceRetained");
-    const retainedHeadingEl = document.getElementById("wordingChoiceRetainedHeading");
-    const retainedListEl = document.getElementById("wordingChoiceRetainedList");
-    const instructionEl = document.getElementById("wordingChoiceInstruction");
-    const userBtn = document.getElementById("wordingChoicePickUser");
-    const suggestionBtn = document.getElementById("wordingChoicePickSuggestion");
+  function renderComparePanel(resultData, lang) {
+    const wrap = document.getElementById("compareWrap");
+    const feedbackEl = document.getElementById("compareFeedback");
+    const userTextEl = document.getElementById("compareUserText");
+    const userListEl = document.getElementById("compareUserList");
+    const suggestionTextEl = document.getElementById("compareSuggestionText");
+    const suggestionListEl = document.getElementById("compareSuggestionList");
+    const retainedWrapEl = document.getElementById("compareRetained");
+    const retainedHeadingEl = document.getElementById("compareRetainedHeading");
+    const retainedListEl = document.getElementById("compareRetainedList");
+    const instructionEl = document.getElementById("compareInstruction");
+    const userBtn = document.getElementById("comparePickUser");
+    const suggestionBtn = document.getElementById("comparePickSuggestion");
     if (!wrap || !feedbackEl || !userTextEl || !userListEl || !suggestionTextEl || !suggestionListEl || !retainedWrapEl || !retainedHeadingEl || !retainedListEl || !instructionEl || !userBtn || !suggestionBtn) {
       return false;
     }
@@ -5809,7 +5809,7 @@ ${String(item || "").trim()}`.trim())
     const suggestionLabelFromPayload = pendingInteraction.renderModel.suggestionLabel;
     const userItems = pendingInteraction.renderModel.userItems;
     const suggestionItems = pendingInteraction.renderModel.suggestionItems;
-    const instruction = pendingInteraction.renderModel.instruction || t(lang, "wordingChoiceInstruction");
+    const instruction = pendingInteraction.renderModel.instruction || t(lang, "compareInstruction");
     const instructionParts = {
       retainedHeading: pendingInteraction.renderModel.retainedHeading,
       retainedItems: pendingInteraction.renderModel.retainedItems,
@@ -5820,8 +5820,8 @@ ${String(item || "").trim()}`.trim())
       if (!trimmed) return "";
       return /[:]\s*$/.test(trimmed) ? trimmed : `${trimmed}:`;
     };
-    const userLabel = userLabelFromPayload ? ensureLabelColon(userLabelFromPayload) : variant === "clarify_dual" ? ensureLabelColon(t(lang, "wordingChoiceHeading")) : ensureLabelColon(t(lang, "wordingChoiceHeading"));
-    const suggestionLabel = suggestionLabelFromPayload ? ensureLabelColon(suggestionLabelFromPayload) : variant === "clarify_dual" ? ensureLabelColon(t(lang, "wordingChoiceSuggestionLabel")) : ensureLabelColon(t(lang, "wordingChoiceSuggestionLabel"));
+    const userLabel = userLabelFromPayload ? ensureLabelColon(userLabelFromPayload) : variant === "clarify_dual" ? ensureLabelColon(t(lang, "compareHeading")) : ensureLabelColon(t(lang, "compareHeading"));
+    const suggestionLabel = suggestionLabelFromPayload ? ensureLabelColon(suggestionLabelFromPayload) : variant === "clarify_dual" ? ensureLabelColon(t(lang, "compareSuggestionLabel")) : ensureLabelColon(t(lang, "compareSuggestionLabel"));
     const normalizeListItem = (value) => String(value || "").replace(/^\s*(?:[-*•·]\s+|\d+[\.\)]\s+)/, "").trim();
     feedbackEl.innerHTML = "";
     if (feedbackReasonText) {
@@ -5837,8 +5837,8 @@ ${String(item || "").trim()}`.trim())
     }
     retainedWrapEl.style.display = instructionParts.retainedHeading && instructionParts.retainedItems.length > 0 ? "block" : "none";
     instructionEl.textContent = instructionParts.instructionText || instruction;
-    userTextEl.textContent = userLabel || uiText2(lang, "wordingChoiceHeading", "");
-    suggestionTextEl.textContent = suggestionLabel || uiText2(lang, "wordingChoiceSuggestionLabel", "");
+    userTextEl.textContent = userLabel || uiText2(lang, "compareHeading", "");
+    suggestionTextEl.textContent = suggestionLabel || uiText2(lang, "compareSuggestionLabel", "");
     if (mode === "list") {
       userTextEl.style.display = "block";
       suggestionTextEl.style.display = "block";
@@ -5856,8 +5856,8 @@ ${String(item || "").trim()}`.trim())
         li.textContent = normalizeListItem(item);
         suggestionListEl.appendChild(li);
       }
-      userBtn.textContent = uiText2(lang, "wordingChoice.chooseVersion", "");
-      suggestionBtn.textContent = uiText2(lang, "wordingChoice.chooseVersion", "");
+      userBtn.textContent = uiText2(lang, "compare.chooseVersion", "");
+      suggestionBtn.textContent = uiText2(lang, "compare.chooseVersion", "");
     } else {
       userTextEl.style.display = "block";
       suggestionTextEl.style.display = "block";
@@ -5865,7 +5865,7 @@ ${String(item || "").trim()}`.trim())
       suggestionListEl.style.display = "none";
       userListEl.innerHTML = "";
       suggestionListEl.innerHTML = "";
-      userBtn.textContent = userText || uiText2(lang, "wordingChoice.useInputFallback", "");
+      userBtn.textContent = userText || uiText2(lang, "compare.useInputFallback", "");
       suggestionBtn.textContent = suggestionText || suggestionLabel;
     }
     userBtn.disabled = getIsLoading();
@@ -5935,14 +5935,14 @@ ${String(item || "").trim()}`.trim())
         bootstrap_phase: String(state?.bootstrap_phase || "").trim().toLowerCase()
       });
       const choiceWrap = document.getElementById("choiceWrap");
-      const wordingChoiceWrap = document.getElementById("wordingChoiceWrap");
+      const compareWrap = document.getElementById("compareWrap");
       const cardDesc = document.getElementById("cardDesc");
       const prompt = document.getElementById("prompt");
       const uiSubtitle = document.getElementById("uiSubtitle");
       const sectionTitleEl2 = document.getElementById("sectionTitle");
       inputWrap.style.display = "none";
       if (choiceWrap) choiceWrap.style.display = "none";
-      if (wordingChoiceWrap) wordingChoiceWrap.style.display = "none";
+      if (compareWrap) compareWrap.style.display = "none";
       if (primaryActionWrap) primaryActionWrap.style.display = "none";
       if (auxiliaryActionWrap) auxiliaryActionWrap.style.display = "none";
       if (prompt) prompt.textContent = "";
@@ -6007,8 +6007,8 @@ ${String(item || "").trim()}`.trim())
       inputWrap.style.display = "none";
       const choiceWrap = document.getElementById("choiceWrap");
       if (choiceWrap) choiceWrap.style.display = "none";
-      const wordingChoiceWrap = document.getElementById("wordingChoiceWrap");
-      if (wordingChoiceWrap) wordingChoiceWrap.style.display = "none";
+      const compareWrap = document.getElementById("compareWrap");
+      if (compareWrap) compareWrap.style.display = "none";
       const cardDesc = document.getElementById("cardDesc");
       const prompt = document.getElementById("prompt");
       const uiSubtitle = document.getElementById("uiSubtitle");
@@ -6041,8 +6041,8 @@ ${String(item || "").trim()}`.trim())
       inputWrap.style.display = "none";
       const choiceWrap = document.getElementById("choiceWrap");
       if (choiceWrap) choiceWrap.style.display = "none";
-      const wordingChoiceWrap = document.getElementById("wordingChoiceWrap");
-      if (wordingChoiceWrap) wordingChoiceWrap.style.display = "none";
+      const compareWrap = document.getElementById("compareWrap");
+      if (compareWrap) compareWrap.style.display = "none";
       const cardDesc = document.getElementById("cardDesc");
       const prompt = document.getElementById("prompt");
       const uiSubtitle = document.getElementById("uiSubtitle");
@@ -6107,8 +6107,8 @@ ${String(item || "").trim()}`.trim())
       inputWrap.style.display = "none";
       const choiceWrap = document.getElementById("choiceWrap");
       if (choiceWrap) choiceWrap.style.display = "none";
-      const wordingChoiceWrap = document.getElementById("wordingChoiceWrap");
-      if (wordingChoiceWrap) wordingChoiceWrap.style.display = "none";
+      const compareWrap = document.getElementById("compareWrap");
+      if (compareWrap) compareWrap.style.display = "none";
       btnStart2.style.display = "none";
       renderActionSurfaceButtons({
         containerId: "primaryActionWrap",
@@ -6151,15 +6151,15 @@ ${String(item || "").trim()}`.trim())
     const uiViewVariant = String(uiView.variant || "").trim();
     const dreamBuilderContract = readDreamBuilderContract(uiPayload);
     const dreamBuilderPhase = dreamBuilderContract?.phase || "";
-    const isViewModeWordingChoice = uiViewVariant === "text_compare";
+    const isViewModeCompare = uiViewVariant === "text_compare";
     const isViewModeDreamBuilderCollect = uiViewVariant === "dream_builder_collect" || dreamBuilderPhase === "collect";
     const isViewModeDreamBuilderRefine = uiViewVariant === "dream_builder_refine" || dreamBuilderPhase === "refine";
     const isViewModeDreamBuilderScoring = uiViewVariant === "dream_builder_scoring" || dreamBuilderPhase === "scoring";
     const dreamBuilderViewContract = readDreamBuilderViewContract(uiView);
     const uiQuestionText = String(uiPayload.questionText || "").trim();
-    const wordingChoiceActive = shouldSuppressMainCardForWordingChoice(uiPayload, uiViewVariant);
-    const singleValueContent = wordingChoiceActive ? null : readSingleValueCardContent(uiPayload);
-    const structuredSuggestionsContent = wordingChoiceActive ? null : decorateStructuredSuggestionItemsForStep({
+    const compareActive = shouldSuppressMainCardForCompare(uiPayload, uiViewVariant);
+    const singleValueContent = compareActive ? null : readSingleValueCardContent(uiPayload);
+    const structuredSuggestionsContent = compareActive ? null : decorateStructuredSuggestionItemsForStep({
       stepId: current,
       lang,
       content: readStructuredSuggestionsCardContent(uiPayload)
@@ -6200,29 +6200,29 @@ ${String(item || "").trim()}`.trim())
       cardDescEl.classList.add("has-grid");
       const isBenProfile = String(specialist.meta_topic || "").trim().toUpperCase() === "BEN_PROFILE";
       const isStep0AskLayout = current === "step_0" && !isBenProfile;
-      const shouldAppendDreamStepVideo = current === "dream" && showStepIntroChrome && dreamRuntimeMode === "self" && !isDreamDirectionView && !wordingChoiceActive;
+      const shouldAppendDreamStepVideo = current === "dream" && showStepIntroChrome && dreamRuntimeMode === "self" && !isDreamDirectionView && !compareActive;
       const shouldAppendPurposeStepVideo = shouldRenderPurposeStepIntroVideo({
         currentStep: current,
         showStepIntroChrome,
-        wordingChoiceActive,
+        compareActive,
         lang
       });
       const shouldAppendBigWhyStepVideo = shouldRenderBigWhyStepIntroVideo({
         currentStep: current,
         showStepIntroChrome,
-        wordingChoiceActive,
+        compareActive,
         lang
       });
       const shouldAppendRoleStepVideo = shouldRenderRoleStepIntroVideo({
         currentStep: current,
         showStepIntroChrome,
-        wordingChoiceActive,
+        compareActive,
         lang
       });
       cardDescEl.classList.toggle("is-step0-ask-layout", isStep0AskLayout);
       cardDescEl.classList.toggle("is-ben-profile", isBenProfile);
       const renderedSemanticContent = renderStructuredSuggestionsCardContent(cardDescEl, structuredSuggestionsContent) || renderSingleValueCardContent(cardDescEl, singleValueContent);
-      if (!renderedSemanticContent && !wordingChoiceActive) {
+      if (!renderedSemanticContent && !compareActive) {
         renderStructuredText(cardDescEl, body || "");
         if (shouldAppendDreamStepVideo) {
           appendDreamStepIntroVideo(cardDescEl, lang);
@@ -6348,8 +6348,8 @@ ${String(item || "").trim()}`.trim())
       if (statementsPanelEl) statementsPanelEl.style.display = "none";
       const choiceWrap = document.getElementById("choiceWrap");
       if (choiceWrap) choiceWrap.style.display = "none";
-      const wordingChoiceWrap = document.getElementById("wordingChoiceWrap");
-      if (wordingChoiceWrap) wordingChoiceWrap.style.display = "none";
+      const compareWrap = document.getElementById("compareWrap");
+      if (compareWrap) compareWrap.style.display = "none";
       const showPrompt = document.getElementById("prompt");
       if (showPrompt) {
         showPrompt.textContent = t(lang, "scoringDreamQuestion");
@@ -6487,7 +6487,7 @@ ${String(item || "").trim()}`.trim())
     if (cardDescEl) cardDescEl.style.display = "block";
     const promptPost = document.getElementById("prompt");
     if (promptPost) promptPost.style.display = "block";
-    if (isViewModeWordingChoice) {
+    if (isViewModeCompare) {
       if (statementsPanelEl) statementsPanelEl.style.display = "none";
     } else if (isDreamDirectionView) {
       if (statementsPanelEl) statementsPanelEl.style.display = "none";
@@ -6523,17 +6523,17 @@ ${String(item || "").trim()}`.trim())
     } else {
       if (statementsPanelEl) statementsPanelEl.style.display = "none";
     }
-    let requireWordingPick = false;
-    const suppressWordingChoice = isViewModeDreamBuilderScoring;
-    if (!suppressWordingChoice) {
-      requireWordingPick = renderWordingChoicePanel(result, lang);
+    let requireComparePick = false;
+    const suppressCompare = isViewModeDreamBuilderScoring;
+    if (!suppressCompare) {
+      requireComparePick = renderComparePanel(result, lang);
     } else {
-      const wordingChoiceWrap = document.getElementById("wordingChoiceWrap");
-      if (wordingChoiceWrap) wordingChoiceWrap.style.display = "none";
+      const compareWrap = document.getElementById("compareWrap");
+      if (compareWrap) compareWrap.style.display = "none";
     }
     let choicesArr = [];
     let promptText = isDreamDirectionView ? "" : promptSource;
-    const shouldStripStructuredPrompt = isViewModeWordingChoice || !hasStructuredActions;
+    const shouldStripStructuredPrompt = isViewModeCompare || !hasStructuredActions;
     if (shouldStripStructuredPrompt) {
       promptText = isDreamDirectionView ? "" : stripStructuredChoiceLines(promptSource, lang);
     } else if (hasStructuredActions) {
@@ -6542,10 +6542,10 @@ ${String(item || "").trim()}`.trim())
       choicesArr = [];
       promptText = isDreamDirectionView ? "" : promptSource;
     }
-    if (shouldSuppressPromptForWordingChoice({
+    if (shouldSuppressPromptForCompare({
       uiViewVariant,
-      wordingChoiceActive,
-      requireWordingPick
+      compareActive,
+      requireComparePick
     })) {
       promptText = "";
     }
@@ -6555,10 +6555,10 @@ ${String(item || "").trim()}`.trim())
       const hasBodyText = stripInlineText(String(body || "")).trim().length > 0;
       const showPromptDivider = hasPromptText && hasBodyText;
       promptEl.classList.toggle("with-divider", showPromptDivider);
-      promptEl.classList.toggle("choice-pending", requireWordingPick);
+      promptEl.classList.toggle("choice-pending", requireComparePick);
       renderInlineText(promptEl, promptText || "");
     }
-    if (requireWordingPick) {
+    if (requireComparePick) {
       const choiceWrap = document.getElementById("choiceWrap");
       if (choiceWrap) {
         choiceWrap.innerHTML = "";
@@ -6572,17 +6572,17 @@ ${String(item || "").trim()}`.trim())
       if (!choiceWrap) return false;
       return choiceWrap.childNodes.length > 0;
     })();
-    const choiceMode = !requireWordingPick && (renderedChoiceButtons || hasStructuredActions);
+    const choiceMode = !requireComparePick && (renderedChoiceButtons || hasStructuredActions);
     const textSubmitActionCode = actionCodeForRole(result, "text_submit");
     const textSubmitAvailable = textSubmitActionCode.length > 0;
-    const showTextSubmit = shouldShowTextInputForWordingChoice({
+    const showTextSubmit = shouldShowTextInputForCompare({
       textSubmitAvailable,
       uiViewVariant,
-      wordingChoiceActive,
-      requireWordingPick
+      compareActive,
+      requireComparePick
     });
-    const disableTextSubmit = shouldDisableTextInputForWordingChoice({
-      requireWordingPick
+    const disableTextSubmit = shouldDisableTextInputForCompare({
+      requireComparePick
     });
     inputWrap.style.display = showTextSubmit ? "flex" : "none";
     const inputEl2 = document.getElementById("input");
@@ -6601,10 +6601,10 @@ ${String(item || "").trim()}`.trim())
       const choiceWrap = document.getElementById("choiceWrap");
       if (choiceWrap) choiceWrap.style.display = "none";
     }
-    const primaryActions = requireWordingPick ? [] : surfaceActionsForResult(result, "primary", lang).filter(
+    const primaryActions = requireComparePick ? [] : surfaceActionsForResult(result, "primary", lang).filter(
       (action) => action.role !== "start" && action.role !== "score_submit"
     );
-    const auxiliaryActions = requireWordingPick ? [] : surfaceActionsForResult(result, "auxiliary", lang);
+    const auxiliaryActions = requireComparePick ? [] : surfaceActionsForResult(result, "auxiliary", lang);
     renderActionSurfaceButtons({
       containerId: "primaryActionWrap",
       actions: primaryActions,
@@ -6739,8 +6739,8 @@ ${String(item || "").trim()}`.trim())
       ui_action_start: "start",
       ui_action_text_submit: "text_submit",
       ui_action_score_submit: "score_submit",
-      ui_action_wording_pick_user: "wording_pick_user",
-      ui_action_wording_pick_suggestion: "wording_pick_suggestion"
+      ui_action_compare_pick_user: "compare_pick_user",
+      ui_action_compare_pick_suggestion: "compare_pick_suggestion"
     };
     return String(roleMap[normalized] || "").trim();
   }
@@ -6949,9 +6949,9 @@ ${String(item || "").trim()}`.trim())
       submitWidgetInput();
     });
   }
-  var wordingChoicePickUser = document.getElementById("wordingChoicePickUser");
-  if (wordingChoicePickUser) {
-    wordingChoicePickUser.addEventListener("click", () => {
+  var comparePickUser = document.getElementById("comparePickUser");
+  if (comparePickUser) {
+    comparePickUser.addEventListener("click", () => {
       if (getIsLoading()) return;
       const pendingAction = pendingInteractionAction("pick_user");
       if (!pendingAction?.actionCode || !pendingAction?.interactionId) {
@@ -6966,9 +6966,9 @@ ${String(item || "").trim()}`.trim())
       });
     });
   }
-  var wordingChoicePickSuggestion = document.getElementById("wordingChoicePickSuggestion");
-  if (wordingChoicePickSuggestion) {
-    wordingChoicePickSuggestion.addEventListener("click", () => {
+  var comparePickSuggestion = document.getElementById("comparePickSuggestion");
+  if (comparePickSuggestion) {
+    comparePickSuggestion.addEventListener("click", () => {
       if (getIsLoading()) return;
       const pendingAction = pendingInteractionAction("pick_suggestion");
       if (!pendingAction?.actionCode || !pendingAction?.interactionId) {

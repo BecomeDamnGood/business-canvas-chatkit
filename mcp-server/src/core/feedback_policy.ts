@@ -1,11 +1,11 @@
 import {
-  isGroupedListWordingStep,
-  isSingleValueWordingStep,
+  isGroupedListCompareStep,
+  isSingleValueCompareStep,
 } from "../steps/step_registry.js";
 
-export type PendingWordingFeedbackMode = "text" | "list";
-export type PendingWordingFeedbackRequirement = "required" | "optional";
-export type WordingFeedbackFamily = "single_value" | "grouped_list" | "other";
+export type PendingCompareFeedbackMode = "text" | "list";
+export type PendingCompareFeedbackRequirement = "required" | "optional";
+export type CompareFeedbackFamily = "single_value" | "grouped_list" | "other";
 export type PendingCompareFeedbackSourcePolicy =
   | "explicit_only"
   | "dream_builder_material_rewrite_fallback";
@@ -13,36 +13,36 @@ export type PendingCompareFeedbackModeRequirement = "compare_suggestion" | "any"
 export type PendingCompareEmptyBehavior = "suppress_picker" | "allow_empty";
 
 export type PendingCompareFeedbackPolicy = {
-  family: WordingFeedbackFamily;
-  requirement: PendingWordingFeedbackRequirement;
+  family: CompareFeedbackFamily;
+  requirement: PendingCompareFeedbackRequirement;
   sourcePolicy: PendingCompareFeedbackSourcePolicy;
   feedbackModeRequirement: PendingCompareFeedbackModeRequirement;
   emptyBehavior: PendingCompareEmptyBehavior;
 };
 
 export type UserPickFeedbackPolicy = {
-  family: WordingFeedbackFamily;
+  family: CompareFeedbackFamily;
   requirement: "optional";
   fallbackBehavior: "use_catalog_fallback" | "allow_empty";
 };
 
-export function wordingFeedbackFamilyForStep(stepId: string): WordingFeedbackFamily {
-  if (isSingleValueWordingStep(stepId)) return "single_value";
-  if (isGroupedListWordingStep(stepId)) return "grouped_list";
+export function compareFeedbackFamilyForStep(stepId: string): CompareFeedbackFamily {
+  if (isSingleValueCompareStep(stepId)) return "single_value";
+  if (isGroupedListCompareStep(stepId)) return "grouped_list";
   return "other";
 }
 
 export function isSingleValueFeedbackStep(stepId: string): boolean {
-  return wordingFeedbackFamilyForStep(stepId) === "single_value";
+  return compareFeedbackFamilyForStep(stepId) === "single_value";
 }
 
 export function isGroupedCompareFeedbackStep(stepId: string): boolean {
-  return wordingFeedbackFamilyForStep(stepId) === "grouped_list";
+  return compareFeedbackFamilyForStep(stepId) === "grouped_list";
 }
 
 export function pendingCompareFeedbackPolicy(params: {
   stepId: string;
-  mode: PendingWordingFeedbackMode;
+  mode: PendingCompareFeedbackMode;
   forcePending: boolean;
   isDreamBuilderMaterialRewrite?: boolean;
 }): PendingCompareFeedbackPolicy {
@@ -56,7 +56,7 @@ export function pendingCompareFeedbackPolicy(params: {
     };
   }
 
-  const family = wordingFeedbackFamilyForStep(params.stepId);
+  const family = compareFeedbackFamilyForStep(params.stepId);
   if (family === "single_value" && params.mode === "text") {
     return {
       family,
@@ -84,12 +84,12 @@ export function pendingCompareFeedbackPolicy(params: {
   };
 }
 
-export function pendingWordingFeedbackRequirement(params: {
+export function pendingCompareFeedbackRequirement(params: {
   stepId: string;
-  mode: PendingWordingFeedbackMode;
+  mode: PendingCompareFeedbackMode;
   forcePending: boolean;
   isDreamBuilderMaterialRewrite?: boolean;
-}): PendingWordingFeedbackRequirement {
+}): PendingCompareFeedbackRequirement {
   return pendingCompareFeedbackPolicy(params).requirement;
 }
 
@@ -109,7 +109,7 @@ export function shouldSuppressPendingCompareForMissingFeedback(
 }
 
 export function userPickFeedbackPolicy(stepId: string): UserPickFeedbackPolicy {
-  const family = wordingFeedbackFamilyForStep(stepId);
+  const family = compareFeedbackFamilyForStep(stepId);
   return {
     family,
     requirement: "optional",

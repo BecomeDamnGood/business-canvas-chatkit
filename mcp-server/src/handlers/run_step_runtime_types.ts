@@ -12,7 +12,7 @@ export type PendingInteractionAllowedAction = {
   primary: boolean;
 };
 
-export type PendingInteractionWordingChoiceRenderModel = {
+export type PendingInteractionCompareRenderModel = {
   mode: "text" | "list";
   variant: "default" | "clarify_dual" | "grouped_list_units";
   instruction: string;
@@ -35,7 +35,7 @@ export type PendingInteractionPayload = {
   source: "server_contract";
   response_contract_id: string;
   allowed_actions: PendingInteractionAllowedAction[];
-  render_model: PendingInteractionWordingChoiceRenderModel;
+  render_model: PendingInteractionCompareRenderModel;
 };
 
 export type RunStepBase = {

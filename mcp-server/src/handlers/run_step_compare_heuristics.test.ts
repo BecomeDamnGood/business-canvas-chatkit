@@ -2,18 +2,18 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
-  resolvePendingWordingChoiceIntent,
+  resolvePendingCompareIntent,
   resolveCurrentValueFeedbackIntent,
   parseListItems,
   shouldTreatAsStepContributingInput,
-} from "./run_step_wording_heuristics.js";
+} from "./run_step_compare_heuristics.js";
 import {
   pickBigWhySuggestionFromPreviousState,
   pickDualChoiceSuggestion,
   pickDreamSuggestionFromPreviousState,
   pickEntitySuggestionFromPreviousState,
   pickRoleSuggestionFromPreviousState,
-} from "./run_step_wording_heuristics_defaults.js";
+} from "./run_step_compare_heuristics_defaults.js";
 import { isValidStepValueForStorage } from "./run_step_value_shape.js";
 
 test("parseListItems splits run-on strategy style sentences into logical list items", () => {
@@ -49,34 +49,34 @@ test("shouldTreatAsStepContributingInput ignores process navigation utterances",
   );
 });
 
-test("resolvePendingWordingChoiceIntent resolves semantic intent and anchor against pending suggestion context", () => {
+test("resolvePendingCompareIntent resolves semantic intent and anchor against pending suggestion context", () => {
   const context = {
     pendingSuggestion: "Technische mkb-bedrijven met complexe productontwikkeling.",
     pendingUserInput: "Alle bedrijven met complexe producten.",
   };
   assert.deepEqual(
-    resolvePendingWordingChoiceIntent({
+    resolvePendingCompareIntent({
       ...context,
       input: "Dit klinkt nog een beetje saai.",
     }),
     { intent: "feedback_on_suggestion", anchor: "suggestion" }
   );
   assert.deepEqual(
-    resolvePendingWordingChoiceIntent({
+    resolvePendingCompareIntent({
       ...context,
       input: "Dat is niet wat ik bedoel.",
     }),
     { intent: "reject_suggestion_explicit", anchor: "suggestion" }
   );
   assert.deepEqual(
-    resolvePendingWordingChoiceIntent({
+    resolvePendingCompareIntent({
       ...context,
       input: "Ja, dit klopt zo.",
     }),
     { intent: "accept_suggestion_explicit", anchor: "suggestion" }
   );
   assert.deepEqual(
-    resolvePendingWordingChoiceIntent({
+    resolvePendingCompareIntent({
       ...context,
       input: "Ik bedoel vooral familiebedrijven met een technische kern.",
     }),

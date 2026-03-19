@@ -1,35 +1,35 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { createRunStepWordingHelpers } from "./run_step_wording.js";
-import { pickDualChoiceSuggestion as defaultPickDualChoiceSuggestion } from "./run_step_wording_heuristics_defaults.js";
+import { createRunStepCompareHelpers } from "./run_step_compare.js";
+import { pickDualChoiceSuggestion as defaultPickDualChoiceSuggestion } from "./run_step_compare_heuristics_defaults.js";
 
 function buildHelpers(intentEnabled: boolean) {
   const defaultUi: Record<string, string> = {
-    wordingChoiceHeading: "This is your input:",
-    wordingChoiceInterpretedListHeading: "This is what I took from your input:",
-    wordingChoiceGroupedCompareUserLabel: "This is your compact wording:",
-    wordingChoiceGroupedCompareSuggestionLabel: "This is my suggestion:",
-    wordingChoiceGroupedCompareInstruction: "Choose the version that fits best for the remaining difference.",
-    wordingChoiceGroupedCompareRetainedHeading: "These points already stay in the final list:",
-    wordingChoiceDreamBuilderKeepBothLabel: "Keep both statements:",
-    wordingChoiceDreamBuilderMergeLabel: "Merge into one statement:",
-    wordingChoiceDreamBuilderMergeInstruction:
+    compareHeading: "This is your input:",
+    compareInterpretedListHeading: "This is what I took from your input:",
+    compareGroupedUserLabel: "This is your compact wording:",
+    compareGroupedCompareSuggestionLabel: "This is my suggestion:",
+    compareGroupedCompareInstruction: "Choose the version that fits best for the remaining difference.",
+    compareGroupedCompareRetainedHeading: "These points already stay in the final list:",
+    compareDreamBuilderKeepBothLabel: "Keep both statements:",
+    compareDreamBuilderMergeLabel: "Merge into one statement:",
+    compareDreamBuilderMergeInstruction:
       "Choose whether you want to keep both similar statements or merge them into one stronger statement.",
-    wordingChoiceSuggestionLabel: "This would be my suggestion:",
-    wordingChoiceInstruction: "Please click what suits you best.",
-    "wording.choice.context.default": "Please choose the wording that fits best.",
-    "wording.feedback.compare.intro.template":
+    compareSuggestionLabel: "This would be my suggestion:",
+    compareInstruction: "Please click what suits you best.",
+    "compare.choice.context.default": "Please choose the wording that fits best.",
+    "compare.feedback.compare.intro.template":
       "I think I understand what you mean. For a stronger {0}, it helps to keep this in mind.",
-    "wording.feedback.user_pick.ack.default": "Your own wording is completely okay.",
-    "wording.feedback.user_pick.nudge.template":
+    "compare.feedback.user_pick.ack.default": "Your own wording is completely okay.",
+    "compare.feedback.user_pick.nudge.template":
       "At the same time, it helps to remember what usually makes a strong {0}.",
-    "wording.feedback.user_pick.reason.default":
+    "compare.feedback.user_pick.reason.default":
       "Keep in mind what makes this step strong, so your wording stays clear and aligned.",
-    "wording.feedback.dream_builder.rewrite.default":
+    "compare.feedback.dream_builder.rewrite.default":
       "Your original wording is mainly about your own wish, while Dream Builder asks for a broader change in the world.",
-    "wordingChoice.chooseVersion": "Choose this version",
-    "wordingChoice.useInputFallback": "Use this input",
+    "compare.chooseVersion": "Choose this version",
+    "compare.useInputFallback": "Use this input",
     "autosuggest.prefix.template": "Based on your input I suggest the following {0}:",
     "offtopic.step.dream": "Dream",
     "offtopic.step.purpose": "Purpose",
@@ -38,7 +38,7 @@ function buildHelpers(intentEnabled: boolean) {
     "offtopic.step.entity": "Entity",
     "offtopic.step.targetgroup": "Target Group",
   };
-  return createRunStepWordingHelpers({
+  return createRunStepCompareHelpers({
     step0Id: "step0",
     presentationStepId: "presentation",
     dreamStepId: "dream",
@@ -95,7 +95,7 @@ function buildHelpers(intentEnabled: boolean) {
     shouldTreatAsStepContributingInput: () => true,
     pickDualChoiceSuggestion: (_stepId, specialistResult) =>
       String((specialistResult as Record<string, unknown>)?.refined_formulation || "").trim(),
-    areEquivalentWordingVariants: () => false,
+    areEquivalentCompareVariants: () => false,
     normalizeEntityPhrase: (input: string) => String(input || "").trim(),
     withProvisionalValue: (state) => state,
     renderFreeTextTurnPolicy: () => ({
@@ -105,39 +105,39 @@ function buildHelpers(intentEnabled: boolean) {
       textKeys: [],
     }),
     applyUiPhaseByStep: () => {},
-    isUiWordingFeedbackKeyedV1Enabled: () => false,
-    isWordingChoiceIntentV1Enabled: () => intentEnabled,
+    isUiCompareFeedbackKeyedV1Enabled: () => false,
+    isCompareIntentV1Enabled: () => intentEnabled,
     bumpUiI18nCounter: () => {},
-    wordingSelectionMessage: () => "",
+    compareSelectionMessage: () => "",
   });
 }
 
 function buildDreamBuilderHelpers(intentEnabled: boolean) {
   const defaultUi: Record<string, string> = {
-    wordingChoiceHeading: "This is your input:",
-    wordingChoiceInterpretedListHeading: "This is what I took from your input:",
-    wordingChoiceGroupedCompareUserLabel: "This is your compact wording:",
-    wordingChoiceGroupedCompareSuggestionLabel: "This is my suggestion:",
-    wordingChoiceGroupedCompareInstruction: "Choose the version that fits best for the remaining difference.",
-    wordingChoiceGroupedCompareRetainedHeading: "These points already stay in the final list:",
-    wordingChoiceDreamBuilderKeepBothLabel: "Keep both statements:",
-    wordingChoiceDreamBuilderMergeLabel: "Merge into one statement:",
-    wordingChoiceDreamBuilderMergeInstruction:
+    compareHeading: "This is your input:",
+    compareInterpretedListHeading: "This is what I took from your input:",
+    compareGroupedUserLabel: "This is your compact wording:",
+    compareGroupedCompareSuggestionLabel: "This is my suggestion:",
+    compareGroupedCompareInstruction: "Choose the version that fits best for the remaining difference.",
+    compareGroupedCompareRetainedHeading: "These points already stay in the final list:",
+    compareDreamBuilderKeepBothLabel: "Keep both statements:",
+    compareDreamBuilderMergeLabel: "Merge into one statement:",
+    compareDreamBuilderMergeInstruction:
       "Choose whether you want to keep both similar statements or merge them into one stronger statement.",
-    wordingChoiceSuggestionLabel: "This would be my suggestion:",
-    wordingChoiceInstruction: "Please click what suits you best.",
-    "wording.choice.context.default": "Please choose the wording that fits best.",
-    "wording.feedback.compare.intro.template":
+    compareSuggestionLabel: "This would be my suggestion:",
+    compareInstruction: "Please click what suits you best.",
+    "compare.choice.context.default": "Please choose the wording that fits best.",
+    "compare.feedback.compare.intro.template":
       "I think I understand what you mean. For a stronger {0}, it helps to keep this in mind.",
-    "wording.feedback.user_pick.ack.default": "Your own wording is completely okay.",
-    "wording.feedback.user_pick.nudge.template":
+    "compare.feedback.user_pick.ack.default": "Your own wording is completely okay.",
+    "compare.feedback.user_pick.nudge.template":
       "At the same time, it helps to remember what usually makes a strong {0}.",
-    "wording.feedback.user_pick.reason.default":
+    "compare.feedback.user_pick.reason.default":
       "Keep in mind what makes this step strong, so your wording stays clear and aligned.",
-    "wording.feedback.dream_builder.rewrite.default":
+    "compare.feedback.dream_builder.rewrite.default":
       "Your original wording is mainly about your own wish, while Dream Builder asks for a broader change in the world.",
-    "wordingChoice.chooseVersion": "Choose this version",
-    "wordingChoice.useInputFallback": "Use this input",
+    "compare.chooseVersion": "Choose this version",
+    "compare.useInputFallback": "Use this input",
     "autosuggest.prefix.template": "Based on your input I suggest the following {0}:",
     "offtopic.step.dream": "Dream",
     "offtopic.step.purpose": "Purpose",
@@ -146,7 +146,7 @@ function buildDreamBuilderHelpers(intentEnabled: boolean) {
     "offtopic.step.entity": "Entity",
     "offtopic.step.targetgroup": "Target Group",
   };
-  return createRunStepWordingHelpers({
+  return createRunStepCompareHelpers({
     step0Id: "step0",
     presentationStepId: "presentation",
     dreamStepId: "dream",
@@ -204,7 +204,7 @@ function buildDreamBuilderHelpers(intentEnabled: boolean) {
     shouldTreatAsStepContributingInput: () => true,
     pickDualChoiceSuggestion: (_stepId, specialistResult) =>
       String((specialistResult as Record<string, unknown>)?.refined_formulation || "").trim(),
-    areEquivalentWordingVariants: () => false,
+    areEquivalentCompareVariants: () => false,
     normalizeEntityPhrase: (input: string) => String(input || "").trim(),
     withProvisionalValue: (state) => state,
     renderFreeTextTurnPolicy: () => ({
@@ -214,32 +214,32 @@ function buildDreamBuilderHelpers(intentEnabled: boolean) {
       textKeys: [],
     }),
     applyUiPhaseByStep: () => {},
-    isUiWordingFeedbackKeyedV1Enabled: () => false,
-    isWordingChoiceIntentV1Enabled: () => intentEnabled,
+    isUiCompareFeedbackKeyedV1Enabled: () => false,
+    isCompareIntentV1Enabled: () => intentEnabled,
     bumpUiI18nCounter: () => {},
-    wordingSelectionMessage: () => "",
+    compareSelectionMessage: () => "",
   });
 }
 
 function buildDreamBuilderHelpersWithRealSuggestionGate() {
   const defaultUi: Record<string, string> = {
-    wordingChoiceHeading: "This is your input:",
-    wordingChoiceInterpretedListHeading: "This is what I took from your input:",
-    wordingChoiceGroupedCompareUserLabel: "This is your compact wording:",
-    wordingChoiceGroupedCompareSuggestionLabel: "This is my suggestion:",
-    wordingChoiceGroupedCompareInstruction: "Choose the version that fits best for the remaining difference.",
-    wordingChoiceGroupedCompareRetainedHeading: "These points already stay in the final list:",
-    wordingChoiceDreamBuilderKeepBothLabel: "Keep both statements:",
-    wordingChoiceDreamBuilderMergeLabel: "Merge into one statement:",
-    wordingChoiceDreamBuilderMergeInstruction:
+    compareHeading: "This is your input:",
+    compareInterpretedListHeading: "This is what I took from your input:",
+    compareGroupedUserLabel: "This is your compact wording:",
+    compareGroupedCompareSuggestionLabel: "This is my suggestion:",
+    compareGroupedCompareInstruction: "Choose the version that fits best for the remaining difference.",
+    compareGroupedCompareRetainedHeading: "These points already stay in the final list:",
+    compareDreamBuilderKeepBothLabel: "Keep both statements:",
+    compareDreamBuilderMergeLabel: "Merge into one statement:",
+    compareDreamBuilderMergeInstruction:
       "Choose whether you want to keep both similar statements or merge them into one stronger statement.",
-    wordingChoiceSuggestionLabel: "This would be my suggestion:",
-    wordingChoiceInstruction: "Please click what suits you best.",
-    "wording.choice.context.default": "Please choose the wording that fits best.",
-    "wording.feedback.dream_builder.rewrite.default":
+    compareSuggestionLabel: "This would be my suggestion:",
+    compareInstruction: "Please click what suits you best.",
+    "compare.choice.context.default": "Please choose the wording that fits best.",
+    "compare.feedback.dream_builder.rewrite.default":
       "Your original wording is mainly about your own wish, while Dream Builder asks for a broader change in the world.",
-    "wordingChoice.chooseVersion": "Choose this version",
-    "wordingChoice.useInputFallback": "Use this input",
+    "compare.chooseVersion": "Choose this version",
+    "compare.useInputFallback": "Use this input",
     "autosuggest.prefix.template": "Based on your input I suggest the following {0}:",
   };
   const canonicalize = (input: string) =>
@@ -248,7 +248,7 @@ function buildDreamBuilderHelpersWithRealSuggestionGate() {
       .replace(/[^a-z0-9\s]/gi, " ")
       .replace(/\s+/g, " ")
       .trim();
-  return createRunStepWordingHelpers({
+  return createRunStepCompareHelpers({
     step0Id: "step0",
     presentationStepId: "presentation",
     dreamStepId: "dream",
@@ -286,7 +286,7 @@ function buildDreamBuilderHelpersWithRealSuggestionGate() {
     isMaterialRewriteCandidate: () => true,
     shouldTreatAsStepContributingInput: () => true,
     pickDualChoiceSuggestion: defaultPickDualChoiceSuggestion,
-    areEquivalentWordingVariants: ({ userItems, suggestionItems }) =>
+    areEquivalentCompareVariants: ({ userItems, suggestionItems }) =>
       JSON.stringify(userItems.map(canonicalize)) === JSON.stringify(suggestionItems.map(canonicalize)),
     normalizeEntityPhrase: (input: string) => String(input || "").trim(),
     withProvisionalValue: (state) => state,
@@ -297,10 +297,10 @@ function buildDreamBuilderHelpersWithRealSuggestionGate() {
       textKeys: [],
     }),
     applyUiPhaseByStep: () => {},
-    isUiWordingFeedbackKeyedV1Enabled: () => false,
-    isWordingChoiceIntentV1Enabled: () => true,
+    isUiCompareFeedbackKeyedV1Enabled: () => false,
+    isCompareIntentV1Enabled: () => true,
     bumpUiI18nCounter: () => {},
-    wordingSelectionMessage: () => "",
+    compareSelectionMessage: () => "",
   });
 }
 
@@ -311,24 +311,24 @@ function buildHeadingAwareSingleValueHelpers(params: {
   equivalent?: boolean;
 }) {
   const defaultUi: Record<string, string> = {
-    wordingChoiceHeading: "This is your input:",
-    wordingChoiceInterpretedListHeading: "This is what I took from your input:",
-    wordingChoiceGroupedCompareUserLabel: "This is your compact wording:",
-    wordingChoiceGroupedCompareSuggestionLabel: "This is my suggestion:",
-    wordingChoiceGroupedCompareInstruction: "Choose the version that fits best for the remaining difference.",
-    wordingChoiceGroupedCompareRetainedHeading: "These points already stay in the final list:",
-    wordingChoiceSuggestionLabel: "This would be my suggestion:",
-    wordingChoiceInstruction: "Please click what suits you best.",
-    "wording.choice.context.default": "Please choose the wording that fits best.",
-    "wording.feedback.compare.intro.template":
+    compareHeading: "This is your input:",
+    compareInterpretedListHeading: "This is what I took from your input:",
+    compareGroupedUserLabel: "This is your compact wording:",
+    compareGroupedCompareSuggestionLabel: "This is my suggestion:",
+    compareGroupedCompareInstruction: "Choose the version that fits best for the remaining difference.",
+    compareGroupedCompareRetainedHeading: "These points already stay in the final list:",
+    compareSuggestionLabel: "This would be my suggestion:",
+    compareInstruction: "Please click what suits you best.",
+    "compare.choice.context.default": "Please choose the wording that fits best.",
+    "compare.feedback.compare.intro.template":
       "I think I understand what you mean. For a stronger {0}, it helps to keep this in mind.",
-    "wording.feedback.user_pick.ack.default": "Your own wording is completely okay.",
-    "wording.feedback.user_pick.nudge.template":
+    "compare.feedback.user_pick.ack.default": "Your own wording is completely okay.",
+    "compare.feedback.user_pick.nudge.template":
       "At the same time, it helps to remember what usually makes a strong {0}.",
-    "wording.feedback.user_pick.reason.default":
+    "compare.feedback.user_pick.reason.default":
       "Keep in mind what makes this step strong, so your wording stays clear and aligned.",
-    "wordingChoice.chooseVersion": "Choose this version",
-    "wordingChoice.useInputFallback": "Use this input",
+    "compare.chooseVersion": "Choose this version",
+    "compare.useInputFallback": "Use this input",
     "autosuggest.prefix.template": "Based on your input I suggest the following {0}:",
     "offtopic.step.dream": "Dream",
     "offtopic.step.purpose": "Purpose",
@@ -343,7 +343,7 @@ function buildHeadingAwareSingleValueHelpers(params: {
       .replace(/[^a-z0-9\s]/gi, " ")
       .replace(/\s+/g, " ")
       .trim();
-  return createRunStepWordingHelpers({
+  return createRunStepCompareHelpers({
     step0Id: "step0",
     presentationStepId: "presentation",
     dreamStepId: "dream",
@@ -391,7 +391,7 @@ function buildHeadingAwareSingleValueHelpers(params: {
     isMaterialRewriteCandidate: () => true,
     shouldTreatAsStepContributingInput: () => true,
     pickDualChoiceSuggestion: () => params.suggestion,
-    areEquivalentWordingVariants: ({ userRaw, suggestionRaw }) =>
+    areEquivalentCompareVariants: ({ userRaw, suggestionRaw }) =>
       params.equivalent !== undefined ? params.equivalent : canonicalize(userRaw) === canonicalize(suggestionRaw),
     normalizeEntityPhrase: (input: string) => String(input || "").trim(),
     withProvisionalValue: (state) => state,
@@ -402,17 +402,17 @@ function buildHeadingAwareSingleValueHelpers(params: {
       textKeys: [],
     }),
     applyUiPhaseByStep: () => {},
-    isUiWordingFeedbackKeyedV1Enabled: () => false,
-    isWordingChoiceIntentV1Enabled: () => true,
+    isUiCompareFeedbackKeyedV1Enabled: () => false,
+    isCompareIntentV1Enabled: () => true,
     bumpUiI18nCounter: () => {},
-    wordingSelectionMessage: (_stepId, _state, _activeSpecialist, selectedValue = "") =>
+    compareSelectionMessage: (_stepId, _state, _activeSpecialist, selectedValue = "") =>
       `${params.heading}\n\n${selectedValue}`.trim(),
   });
 }
 
-test("buildWordingChoiceFromTurn keeps targetgroup in picker pending presentation for direct content input", () => {
+test("buildCompareFromTurn keeps targetgroup in picker pending presentation for direct content input", () => {
   const helpers = buildHelpers(true);
-  const result = helpers.buildWordingChoiceFromTurn({
+  const result = helpers.buildCompareFromTurn({
     stepId: "targetgroup",
     state: {} as any,
     activeSpecialist: "TargetGroup",
@@ -430,14 +430,14 @@ test("buildWordingChoiceFromTurn keeps targetgroup in picker pending presentatio
     isOfftopic: false,
   });
 
-  assert.equal(result.wordingChoice, null);
-  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "true");
-  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_presentation || ""), "picker");
+  assert.equal(result.compare, null);
+  assert.equal(String((result.specialist as Record<string, unknown>).compare_pending || ""), "true");
+  assert.equal(String((result.specialist as Record<string, unknown>).compare_presentation || ""), "picker");
 });
 
-test("buildWordingChoiceFromTurn keeps targetgroup picker pending presentation for regular rewrites", () => {
+test("buildCompareFromTurn keeps targetgroup picker pending presentation for regular rewrites", () => {
   const helpers = buildHelpers(true);
-  const result = helpers.buildWordingChoiceFromTurn({
+  const result = helpers.buildCompareFromTurn({
     stepId: "targetgroup",
     state: {} as any,
     activeSpecialist: "TargetGroup",
@@ -454,14 +454,14 @@ test("buildWordingChoiceFromTurn keeps targetgroup picker pending presentation f
     isOfftopic: false,
   });
 
-  assert.equal(result.wordingChoice, null);
-  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "true");
-  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_presentation || ""), "picker");
+  assert.equal(result.compare, null);
+  assert.equal(String((result.specialist as Record<string, unknown>).compare_pending || ""), "true");
+  assert.equal(String((result.specialist as Record<string, unknown>).compare_presentation || ""), "picker");
 });
 
-test("buildWordingChoiceFromTurn keeps Dream in picker pending presentation for direct content input", () => {
+test("buildCompareFromTurn keeps Dream in picker pending presentation for direct content input", () => {
   const helpers = buildHelpers(true);
-  const result = helpers.buildWordingChoiceFromTurn({
+  const result = helpers.buildCompareFromTurn({
     stepId: "dream",
     state: {} as any,
     activeSpecialist: "Dream",
@@ -477,14 +477,14 @@ test("buildWordingChoiceFromTurn keeps Dream in picker pending presentation for 
     isOfftopic: false,
   });
 
-  assert.equal(result.wordingChoice, null);
-  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "true");
-  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_presentation || ""), "picker");
+  assert.equal(result.compare, null);
+  assert.equal(String((result.specialist as Record<string, unknown>).compare_pending || ""), "true");
+  assert.equal(String((result.specialist as Record<string, unknown>).compare_presentation || ""), "picker");
 });
 
-test("buildWordingChoiceFromTurn keeps Dream Builder statements canonical while a rewritten addition is still pending", () => {
+test("buildCompareFromTurn keeps Dream Builder statements canonical while a rewritten addition is still pending", () => {
   const helpers = buildDreamBuilderHelpers(true);
-  const result = helpers.buildWordingChoiceFromTurn({
+  const result = helpers.buildCompareFromTurn({
     stepId: "dream",
     state: {
       current_step: "dream",
@@ -515,17 +515,17 @@ test("buildWordingChoiceFromTurn keeps Dream Builder statements canonical while 
     dreamRuntimeModeRaw: "builder_collect",
   });
 
-  assert.equal(result.wordingChoice, null);
-  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "false");
+  assert.equal(result.compare, null);
+  assert.equal(String((result.specialist as Record<string, unknown>).compare_pending || ""), "false");
   assert.equal(String((result.specialist as Record<string, unknown>).__dream_builder_compare_pending || ""), "true");
   assert.deepEqual((result.specialist as Record<string, unknown>).statements, [
     "Over 5 tot 10 jaar zullen meer mensen streven naar werk dat een positieve impact heeft op het leven van anderen.",
   ]);
 });
 
-test("buildWordingChoiceFromTurn keeps Dream in picker for a first draft even when the classifier marks it as source content", () => {
+test("buildCompareFromTurn keeps Dream in picker for a first draft even when the classifier marks it as source content", () => {
   const helpers = buildHelpers(true);
-  const result = helpers.buildWordingChoiceFromTurn({
+  const result = helpers.buildCompareFromTurn({
     stepId: "dream",
     state: {} as any,
     activeSpecialist: "Dream",
@@ -545,18 +545,18 @@ test("buildWordingChoiceFromTurn keeps Dream in picker for a first draft even wh
     },
   });
 
-  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "true");
-  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_presentation || ""), "picker");
+  assert.equal(String((result.specialist as Record<string, unknown>).compare_pending || ""), "true");
+  assert.equal(String((result.specialist as Record<string, unknown>).compare_presentation || ""), "picker");
   assert.equal(String((result.specialist as Record<string, unknown>).feedback_mode || ""), "compare_suggestion");
   assert.equal(
-    String((result.specialist as Record<string, unknown>).wording_choice_user_variant_semantics || ""),
+    String((result.specialist as Record<string, unknown>).compare_user_variant_semantics || ""),
     "raw_source_content"
   );
 });
 
-test("buildWordingChoiceFromTurn suppresses Dream picker when user text is refine feedback", () => {
+test("buildCompareFromTurn suppresses Dream picker when user text is refine feedback", () => {
   const helpers = buildHelpers(true);
-  const result = helpers.buildWordingChoiceFromTurn({
+  const result = helpers.buildCompareFromTurn({
     stepId: "dream",
     state: {} as any,
     activeSpecialist: "Dream",
@@ -578,18 +578,18 @@ test("buildWordingChoiceFromTurn suppresses Dream picker when user text is refin
     },
   });
 
-  assert.equal(result.wordingChoice, null);
-  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "true");
-  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_presentation || ""), "canonical");
+  assert.equal(result.compare, null);
+  assert.equal(String((result.specialist as Record<string, unknown>).compare_pending || ""), "true");
+  assert.equal(String((result.specialist as Record<string, unknown>).compare_presentation || ""), "canonical");
   assert.equal(
-    String((result.specialist as Record<string, unknown>).wording_choice_user_variant_semantics || ""),
+    String((result.specialist as Record<string, unknown>).compare_user_variant_semantics || ""),
     "feedback_on_existing_content"
   );
 });
 
-test("buildWordingChoiceFromTurn keeps Purpose in picker pending presentation for direct content input", () => {
+test("buildCompareFromTurn keeps Purpose in picker pending presentation for direct content input", () => {
   const helpers = buildHelpers(true);
-  const result = helpers.buildWordingChoiceFromTurn({
+  const result = helpers.buildCompareFromTurn({
     stepId: "purpose",
     state: {} as any,
     activeSpecialist: "Purpose",
@@ -605,14 +605,14 @@ test("buildWordingChoiceFromTurn keeps Purpose in picker pending presentation fo
     isOfftopic: false,
   });
 
-  assert.equal(result.wordingChoice, null);
-  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "true");
-  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_presentation || ""), "picker");
+  assert.equal(result.compare, null);
+  assert.equal(String((result.specialist as Record<string, unknown>).compare_pending || ""), "true");
+  assert.equal(String((result.specialist as Record<string, unknown>).compare_presentation || ""), "picker");
 });
 
-test("buildWordingChoiceFromTurn keeps Role in picker pending presentation for direct content input", () => {
+test("buildCompareFromTurn keeps Role in picker pending presentation for direct content input", () => {
   const helpers = buildHelpers(true);
-  const result = helpers.buildWordingChoiceFromTurn({
+  const result = helpers.buildCompareFromTurn({
     stepId: "role",
     state: {} as any,
     activeSpecialist: "Role",
@@ -628,14 +628,14 @@ test("buildWordingChoiceFromTurn keeps Role in picker pending presentation for d
     isOfftopic: false,
   });
 
-  assert.equal(result.wordingChoice, null);
-  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "true");
-  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_presentation || ""), "picker");
+  assert.equal(result.compare, null);
+  assert.equal(String((result.specialist as Record<string, unknown>).compare_pending || ""), "true");
+  assert.equal(String((result.specialist as Record<string, unknown>).compare_presentation || ""), "picker");
 });
 
-test("buildWordingChoiceFromTurn suppresses Role picker when user text is pure rejection", () => {
+test("buildCompareFromTurn suppresses Role picker when user text is pure rejection", () => {
   const helpers = buildHelpers(true);
-  const result = helpers.buildWordingChoiceFromTurn({
+  const result = helpers.buildCompareFromTurn({
     stepId: "role",
     state: {} as any,
     activeSpecialist: "Role",
@@ -655,18 +655,18 @@ test("buildWordingChoiceFromTurn suppresses Role picker when user text is pure r
     },
   });
 
-  assert.equal(result.wordingChoice, null);
-  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "true");
-  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_presentation || ""), "canonical");
+  assert.equal(result.compare, null);
+  assert.equal(String((result.specialist as Record<string, unknown>).compare_pending || ""), "true");
+  assert.equal(String((result.specialist as Record<string, unknown>).compare_presentation || ""), "canonical");
   assert.equal(
-    String((result.specialist as Record<string, unknown>).wording_choice_user_variant_semantics || ""),
+    String((result.specialist as Record<string, unknown>).compare_user_variant_semantics || ""),
     "rejection_without_replacement"
   );
 });
 
-test("buildWordingChoiceFromTurn skips wording panel for meta-topic turns", () => {
+test("buildCompareFromTurn skips compare panel for meta-topic turns", () => {
   const helpers = buildHelpers(true);
-  const result = helpers.buildWordingChoiceFromTurn({
+  const result = helpers.buildCompareFromTurn({
     stepId: "targetgroup",
     state: {} as any,
     activeSpecialist: "TargetGroup",
@@ -681,13 +681,13 @@ test("buildWordingChoiceFromTurn skips wording panel for meta-topic turns", () =
     isOfftopic: false,
   });
 
-  assert.equal(result.wordingChoice, null);
-  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "false");
+  assert.equal(result.compare, null);
+  assert.equal(String((result.specialist as Record<string, unknown>).compare_pending || ""), "false");
 });
 
-test("buildWordingChoiceFromTurn skips wording panel when user intent is not step input", () => {
+test("buildCompareFromTurn skips compare panel when user intent is not step input", () => {
   const helpers = buildHelpers(true);
-  const result = helpers.buildWordingChoiceFromTurn({
+  const result = helpers.buildCompareFromTurn({
     stepId: "targetgroup",
     state: {} as any,
     activeSpecialist: "TargetGroup",
@@ -702,13 +702,13 @@ test("buildWordingChoiceFromTurn skips wording panel when user intent is not ste
     isOfftopic: false,
   });
 
-  assert.equal(result.wordingChoice, null);
-  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "false");
+  assert.equal(result.compare, null);
+  assert.equal(String((result.specialist as Record<string, unknown>).compare_pending || ""), "false");
 });
 
-test("buildWordingChoiceFromTurn treats remove-line requests as list edit intent in business list steps", () => {
+test("buildCompareFromTurn treats remove-line requests as list edit intent in business list steps", () => {
   const helpers = buildHelpers(true);
-  const result = helpers.buildWordingChoiceFromTurn({
+  const result = helpers.buildCompareFromTurn({
     stepId: "productsservices",
     state: {
       active_specialist: "ProductsAndServices",
@@ -750,26 +750,26 @@ test("buildWordingChoiceFromTurn treats remove-line requests as list edit intent
     isOfftopic: false,
   });
 
-  assert.equal(result.wordingChoice, null);
-  assert.equal(result.wordingChoice?.mode, "list");
-  assert.deepEqual(result.wordingChoice?.user_items, [
+  assert.equal(result.compare, null);
+  assert.equal(result.compare?.mode, "list");
+  assert.deepEqual(result.compare?.user_items, [
     "AI-compatible websites and apps",
     "AI-tools and support",
     "Branding",
     "Strategy",
   ]);
-  assert.deepEqual(result.wordingChoice?.suggestion_items, [
+  assert.deepEqual(result.compare?.suggestion_items, [
     "AI-compatible websites and apps",
     "AI-tools and support",
     "Branding",
     "Strategy",
   ]);
-  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_list_semantics || ""), "full");
+  assert.equal(String((result.specialist as Record<string, unknown>).compare_list_semantics || ""), "full");
 });
 
-test("buildWordingChoiceFromTurn compares strategy wording choices per differing compare unit", () => {
+test("buildCompareFromTurn compares strategy compare choices per differing compare unit", () => {
   const helpers = buildHelpers(true);
-  const result = helpers.buildWordingChoiceFromTurn({
+  const result = helpers.buildCompareFromTurn({
     stepId: "strategy",
     state: {} as any,
     activeSpecialist: "Strategy",
@@ -801,47 +801,47 @@ test("buildWordingChoiceFromTurn compares strategy wording choices per differing
     isOfftopic: false,
   });
 
-  assert.equal(result.wordingChoice, null);
-  assert.equal(result.wordingChoice?.mode, "list");
-  assert.equal(result.wordingChoice?.user_label, "This is your compact wording:");
+  assert.equal(result.compare, null);
+  assert.equal(result.compare?.mode, "list");
+  assert.equal(result.compare?.user_label, "This is your compact wording:");
   assert.equal(
-    String((result.specialist as Record<string, unknown>).wording_choice_list_semantics || ""),
+    String((result.specialist as Record<string, unknown>).compare_list_semantics || ""),
     "full"
   );
   assert.equal(
-    String(result.wordingChoice?.compare_feedback?.text || ""),
+    String(result.compare?.compare_feedback?.text || ""),
     "This suggestion sharpens the remaining strategic difference into one clearer choice."
   );
-  assert.deepEqual(result.wordingChoice?.user_items, ["Operational simplicity"]);
-  assert.deepEqual(result.wordingChoice?.suggestion_items, ["Operational focus"]);
-  assert.equal(result.wordingChoice?.user_text, "Operational simplicity");
-  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_compare_mode || ""), "grouped_units");
+  assert.deepEqual(result.compare?.user_items, ["Operational simplicity"]);
+  assert.deepEqual(result.compare?.suggestion_items, ["Operational focus"]);
+  assert.equal(result.compare?.user_text, "Operational simplicity");
+  assert.equal(String((result.specialist as Record<string, unknown>).compare_compare_mode || ""), "grouped_units");
 });
 
-test("buildWordingChoiceFromPendingSpecialist applies interpreted list labels for business list steps", () => {
+test("buildCompareFromPendingSpecialist applies interpreted list labels for business list steps", () => {
   const helpers = buildHelpers(true);
-  const wordingChoice = helpers.buildWordingChoiceFromPendingSpecialist(
+  const compare = helpers.buildCompareFromPendingSpecialist(
     {
-      wording_choice_pending: "true",
-      wording_choice_mode: "list",
-      wording_choice_target_field: "rulesofthegame",
+      compare_pending: "true",
+      compare_mode: "list",
+      compare_target_field: "rulesofthegame",
       feedback_reason_text: "This suggestion makes the remaining rule interpretation more concrete.",
-      wording_choice_user_normalized: [
+      compare_user_normalized: [
         "We communicate proactively.",
         "We keep commitments.",
         "We escalate risks early.",
       ].join("\n"),
-      wording_choice_agent_current: [
+      compare_agent_current: [
         "We communicate proactively.",
         "We keep commitments.",
         "We escalate risks early.",
       ].join("\n"),
-      wording_choice_user_items: [
+      compare_user_items: [
         "We communicate proactively.",
         "We keep commitments.",
         "We escalate risks early.",
       ],
-      wording_choice_suggestion_items: [
+      compare_suggestion_items: [
         "We communicate proactively.",
         "We keep commitments.",
         "We escalate risks early.",
@@ -852,22 +852,22 @@ test("buildWordingChoiceFromPendingSpecialist applies interpreted list labels fo
     {}
   );
 
-  assert.ok(wordingChoice);
-  assert.equal(wordingChoice?.user_label, "This is what I took from your input:");
-  assert.equal(wordingChoice?.suggestion_label, "This would be my suggestion:");
+  assert.ok(compare);
+  assert.equal(compare?.user_label, "This is what I took from your input:");
+  assert.equal(compare?.suggestion_label, "This would be my suggestion:");
 });
 
-test("buildWordingChoiceFromPendingSpecialist suppresses picker when only a generic interpretation opener is available", () => {
+test("buildCompareFromPendingSpecialist suppresses picker when only a generic interpretation opener is available", () => {
   const helpers = buildHelpers(true);
-  const wordingChoice = helpers.buildWordingChoiceFromPendingSpecialist(
+  const compare = helpers.buildCompareFromPendingSpecialist(
     {
-      wording_choice_pending: "true",
-      wording_choice_mode: "text",
-      wording_choice_target_field: "purpose",
-      wording_choice_user_variant_stepworthy: "true",
-      wording_choice_user_normalized:
+      compare_pending: "true",
+      compare_mode: "text",
+      compare_target_field: "purpose",
+      compare_user_variant_stepworthy: "true",
+      compare_user_normalized:
         "Mindd bestaat om bij te dragen aan een wereld waarin communicatie en verhalen authentiek, eerlijk en origineel zijn.",
-      wording_choice_agent_current:
+      compare_agent_current:
         "Mindd bestaat om communicatie en verhalen authentiek, eerlijk en origineel te maken, zodat echte mensen en echte waarden centraal staan.",
       refined_formulation:
         "Mindd bestaat om communicatie en verhalen authentiek, eerlijk en origineel te maken, zodat echte mensen en echte waarden centraal staan.",
@@ -880,26 +880,26 @@ test("buildWordingChoiceFromPendingSpecialist suppresses picker when only a gene
     {}
   );
 
-  assert.equal(wordingChoice, null);
+  assert.equal(compare, null);
 });
 
-test("buildWordingChoiceFromPendingSpecialist keeps grouped compare feedback bound to the active unit instead of stale top-level feedback", () => {
+test("buildCompareFromPendingSpecialist keeps grouped compare feedback bound to the active unit instead of stale top-level feedback", () => {
   const helpers = buildHelpers(true);
-  const wordingChoice = helpers.buildWordingChoiceFromPendingSpecialist(
+  const compare = helpers.buildCompareFromPendingSpecialist(
     {
-      wording_choice_pending: "true",
-      wording_choice_mode: "list",
-      wording_choice_presentation: "picker",
-      wording_choice_target_field: "strategy",
-      wording_choice_variant: "grouped_list_units",
-      wording_choice_compare_mode: "grouped_units",
-      wording_choice_compare_cursor: "1",
-      wording_choice_compare_segments: [
+      compare_pending: "true",
+      compare_mode: "list",
+      compare_presentation: "picker",
+      compare_target_field: "strategy",
+      compare_variant: "grouped_list_units",
+      compare_compare_mode: "grouped_units",
+      compare_compare_cursor: "1",
+      compare_compare_segments: [
         { kind: "retained", items: ["Recurring revenue"] },
         { kind: "unit", unit_id: "unit_1" },
         { kind: "unit", unit_id: "unit_2" },
       ],
-      wording_choice_compare_units: [
+      compare_compare_units: [
         {
           id: "unit_1",
           user_items: ["Expert-led delivery"],
@@ -922,10 +922,10 @@ test("buildWordingChoiceFromPendingSpecialist keeps grouped compare feedback bou
           confidence: "anchored",
         },
       ],
-      wording_choice_user_items: ["Operational simplicity"],
-      wording_choice_suggestion_items: ["Operational focus"],
-      wording_choice_user_normalized: "Operational simplicity",
-      wording_choice_agent_current: "Operational focus",
+      compare_user_items: ["Operational simplicity"],
+      compare_suggestion_items: ["Operational focus"],
+      compare_user_normalized: "Operational simplicity",
+      compare_agent_current: "Operational focus",
       feedback_reason_text: "Earlier unit feedback should not stay on screen.",
     },
     { current_step: "strategy" } as any,
@@ -933,36 +933,36 @@ test("buildWordingChoiceFromPendingSpecialist keeps grouped compare feedback bou
     {}
   );
 
-  assert.ok(wordingChoice);
+  assert.ok(compare);
   assert.equal(
-    String(wordingChoice?.compare_feedback?.text || ""),
+    String(compare?.compare_feedback?.text || ""),
     "This suggestion sharpens the remaining strategic difference into one clearer choice."
   );
-  assert.match(String(wordingChoice?.instruction || ""), /These points already stay in the final list:/);
-  assert.match(String(wordingChoice?.instruction || ""), /Recurring revenue/);
+  assert.match(String(compare?.instruction || ""), /These points already stay in the final list:/);
+  assert.match(String(compare?.instruction || ""), /Recurring revenue/);
   assert.doesNotMatch(
-    String(wordingChoice?.compare_feedback?.text || ""),
+    String(compare?.compare_feedback?.text || ""),
     /Recurring revenue|Earlier unit feedback should not stay on screen/i
   );
 });
 
-test("buildWordingChoiceFromPendingSpecialist suppresses grouped compare when the active unit has no valid feedback even if stale top-level feedback remains", () => {
+test("buildCompareFromPendingSpecialist suppresses grouped compare when the active unit has no valid feedback even if stale top-level feedback remains", () => {
   const helpers = buildHelpers(true);
-  const wordingChoice = helpers.buildWordingChoiceFromPendingSpecialist(
+  const compare = helpers.buildCompareFromPendingSpecialist(
     {
-      wording_choice_pending: "true",
-      wording_choice_mode: "list",
-      wording_choice_presentation: "picker",
-      wording_choice_target_field: "strategy",
-      wording_choice_variant: "grouped_list_units",
-      wording_choice_compare_mode: "grouped_units",
-      wording_choice_compare_cursor: "1",
-      wording_choice_compare_segments: [
+      compare_pending: "true",
+      compare_mode: "list",
+      compare_presentation: "picker",
+      compare_target_field: "strategy",
+      compare_variant: "grouped_list_units",
+      compare_compare_mode: "grouped_units",
+      compare_compare_cursor: "1",
+      compare_compare_segments: [
         { kind: "retained", items: ["Recurring revenue"] },
         { kind: "unit", unit_id: "unit_1" },
         { kind: "unit", unit_id: "unit_2" },
       ],
-      wording_choice_compare_units: [
+      compare_compare_units: [
         {
           id: "unit_1",
           user_items: ["Expert-led delivery"],
@@ -984,10 +984,10 @@ test("buildWordingChoiceFromPendingSpecialist suppresses grouped compare when th
           confidence: "anchored",
         },
       ],
-      wording_choice_user_items: ["Operational simplicity"],
-      wording_choice_suggestion_items: ["Operational focus"],
-      wording_choice_user_normalized: "Operational simplicity",
-      wording_choice_agent_current: "Operational focus",
+      compare_user_items: ["Operational simplicity"],
+      compare_suggestion_items: ["Operational focus"],
+      compare_user_normalized: "Operational simplicity",
+      compare_agent_current: "Operational focus",
       feedback_reason_text: "Earlier unit feedback should not stay on screen.",
     },
     { current_step: "strategy" } as any,
@@ -995,12 +995,12 @@ test("buildWordingChoiceFromPendingSpecialist suppresses grouped compare when th
     {}
   );
 
-  assert.equal(wordingChoice, null);
+  assert.equal(compare, null);
 });
 
-test("buildWordingChoiceFromTurn creates grouped compare unit for free-text strategy input and keeps agreed bullets visible", () => {
+test("buildCompareFromTurn creates grouped compare unit for free-text strategy input and keeps agreed bullets visible", () => {
   const helpers = buildHelpers(true);
-  const result = helpers.buildWordingChoiceFromTurn({
+  const result = helpers.buildCompareFromTurn({
     stepId: "strategy",
     state: {} as any,
     activeSpecialist: "Strategy",
@@ -1026,18 +1026,18 @@ test("buildWordingChoiceFromTurn creates grouped compare unit for free-text stra
     isOfftopic: false,
   });
 
-  assert.equal(result.wordingChoice, null);
-  assert.equal(result.wordingChoice?.user_label, "This is your compact wording:");
-  assert.equal(result.wordingChoice?.suggestion_label, "This is my suggestion:");
-  assert.deepEqual(result.wordingChoice?.user_items, ["Operational simplicity"]);
-  assert.deepEqual(result.wordingChoice?.suggestion_items, ["Operational focus"]);
-  assert.match(String(result.wordingChoice?.instruction || ""), /These points already stay in the final list:/);
-  assert.match(String(result.wordingChoice?.instruction || ""), /Recurring revenue/);
-  assert.match(String(result.wordingChoice?.instruction || ""), /Expert-led delivery/);
-  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_compare_mode || ""), "grouped_units");
+  assert.equal(result.compare, null);
+  assert.equal(result.compare?.user_label, "This is your compact wording:");
+  assert.equal(result.compare?.suggestion_label, "This is my suggestion:");
+  assert.deepEqual(result.compare?.user_items, ["Operational simplicity"]);
+  assert.deepEqual(result.compare?.suggestion_items, ["Operational focus"]);
+  assert.match(String(result.compare?.instruction || ""), /These points already stay in the final list:/);
+  assert.match(String(result.compare?.instruction || ""), /Recurring revenue/);
+  assert.match(String(result.compare?.instruction || ""), /Expert-led delivery/);
+  assert.equal(String((result.specialist as Record<string, unknown>).compare_compare_mode || ""), "grouped_units");
 });
 
-test("buildWordingChoiceFromTurn exposes dynamic feedback reason across the single-value feedback family", () => {
+test("buildCompareFromTurn exposes dynamic feedback reason across the single-value feedback family", () => {
   const scenarios = [
     {
       stepId: "dream" as const,
@@ -1109,7 +1109,7 @@ test("buildWordingChoiceFromTurn exposes dynamic feedback reason across the sing
       equivalent: false,
     });
 
-    const result = helpers.buildWordingChoiceFromTurn({
+    const result = helpers.buildCompareFromTurn({
       stepId: scenario.stepId,
       state: {} as any,
       activeSpecialist: scenario.activeSpecialist,
@@ -1125,15 +1125,15 @@ test("buildWordingChoiceFromTurn exposes dynamic feedback reason across the sing
       isOfftopic: false,
     });
 
-    assert.ok(result.wordingChoice);
-    const feedback = String(result.wordingChoice?.compare_feedback?.text || "");
+    assert.ok(result.compare);
+    const feedback = String(result.compare?.compare_feedback?.text || "");
     assert.match(feedback, new RegExp(scenario.expected.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"));
     assert.doesNotMatch(feedback, /(ik denk dat ik begrijp wat je bedoelt|i think i understand what you mean)/i);
-    assert.equal("feedback_reason_text" in (result.wordingChoice || {}), false);
+    assert.equal("feedback_reason_text" in (result.compare || {}), false);
   }
 });
 
-test("buildWordingChoiceFromTurn exposes dynamic feedback reason across grouped compare feedback family", () => {
+test("buildCompareFromTurn exposes dynamic feedback reason across grouped compare feedback family", () => {
   const helpers = buildHelpers(true);
   const scenarios = [
     {
@@ -1169,7 +1169,7 @@ test("buildWordingChoiceFromTurn exposes dynamic feedback reason across grouped 
   ] as const;
 
   for (const scenario of scenarios) {
-    const result = helpers.buildWordingChoiceFromTurn({
+    const result = helpers.buildCompareFromTurn({
       stepId: scenario.stepId,
       state: {} as any,
       activeSpecialist: scenario.activeSpecialist,
@@ -1187,15 +1187,15 @@ test("buildWordingChoiceFromTurn exposes dynamic feedback reason across grouped 
       isOfftopic: false,
     });
 
-    assert.ok(result.wordingChoice);
-    const feedback = String(result.wordingChoice?.compare_feedback?.text || "");
+    assert.ok(result.compare);
+    const feedback = String(result.compare?.compare_feedback?.text || "");
     assert.match(feedback, new RegExp(scenario.expected.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"));
     assert.doesNotMatch(feedback, /(ik denk dat ik begrijp wat je bedoelt|i think i understand what you mean)/i);
-    assert.equal("feedback_reason_text" in (result.wordingChoice || {}), false);
+    assert.equal("feedback_reason_text" in (result.compare || {}), false);
   }
 });
 
-test("buildWordingChoiceFromTurn suppresses single-value compare when the reason is only a generic acknowledgment", () => {
+test("buildCompareFromTurn suppresses single-value compare when the reason is only a generic acknowledgment", () => {
   const helpers = buildHeadingAwareSingleValueHelpers({
     stepId: "purpose",
     heading: "Je huidige bestaansreden voor Mindd is:",
@@ -1203,7 +1203,7 @@ test("buildWordingChoiceFromTurn suppresses single-value compare when the reason
     equivalent: false,
   });
 
-  const result = helpers.buildWordingChoiceFromTurn({
+  const result = helpers.buildCompareFromTurn({
     stepId: "purpose",
     state: {} as any,
     activeSpecialist: "Purpose",
@@ -1219,11 +1219,11 @@ test("buildWordingChoiceFromTurn suppresses single-value compare when the reason
     isOfftopic: false,
   });
 
-  assert.equal(result.wordingChoice, null);
-  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_presentation || ""), "canonical");
+  assert.equal(result.compare, null);
+  assert.equal(String((result.specialist as Record<string, unknown>).compare_presentation || ""), "canonical");
 });
 
-test("buildWordingChoiceFromTurn keeps the substantive reason when a generic acknowledgment comes first", () => {
+test("buildCompareFromTurn keeps the substantive reason when a generic acknowledgment comes first", () => {
   const helpers = buildHeadingAwareSingleValueHelpers({
     stepId: "purpose",
     heading: "Je huidige bestaansreden voor Mindd is:",
@@ -1231,7 +1231,7 @@ test("buildWordingChoiceFromTurn keeps the substantive reason when a generic ack
     equivalent: false,
   });
 
-  const result = helpers.buildWordingChoiceFromTurn({
+  const result = helpers.buildCompareFromTurn({
     stepId: "purpose",
     state: {} as any,
     activeSpecialist: "Purpose",
@@ -1249,14 +1249,14 @@ test("buildWordingChoiceFromTurn keeps the substantive reason when a generic ack
     isOfftopic: false,
   });
 
-  assert.ok(result.wordingChoice);
+  assert.ok(result.compare);
   assert.equal(
-    String(result.wordingChoice?.compare_feedback?.text || ""),
+    String(result.compare?.compare_feedback?.text || ""),
     "Your current wording is still too broad and does not yet show the concrete change Mindd creates."
   );
 });
 
-test("buildWordingChoiceFromTurn keeps encouragement wording when it contains a concrete rationale", () => {
+test("buildCompareFromTurn keeps encouragement wording when it contains a concrete rationale", () => {
   const helpers = buildHeadingAwareSingleValueHelpers({
     stepId: "purpose",
     heading: "Je huidige bestaansreden voor Mindd is:",
@@ -1264,7 +1264,7 @@ test("buildWordingChoiceFromTurn keeps encouragement wording when it contains a 
     equivalent: false,
   });
 
-  const result = helpers.buildWordingChoiceFromTurn({
+  const result = helpers.buildCompareFromTurn({
     stepId: "purpose",
     state: {} as any,
     activeSpecialist: "Purpose",
@@ -1282,14 +1282,14 @@ test("buildWordingChoiceFromTurn keeps encouragement wording when it contains a 
     isOfftopic: false,
   });
 
-  assert.ok(result.wordingChoice);
+  assert.ok(result.compare);
   assert.equal(
-    String(result.wordingChoice?.compare_feedback?.text || ""),
+    String(result.compare?.compare_feedback?.text || ""),
     "Dat is al een sterk beginpunt, maar je formulering blijft nog te algemeen en maakt niet concreet voor wie je verschil maakt."
   );
 });
 
-test("buildWordingChoiceFromTurn requires explicit valid compare feedback across the single-value wording family", () => {
+test("buildCompareFromTurn requires explicit valid compare feedback across the single-value compare family", () => {
   const scenarios = [
     {
       stepId: "dream" as const,
@@ -1349,13 +1349,13 @@ test("buildWordingChoiceFromTurn requires explicit valid compare feedback across
       equivalent: false,
     });
 
-    const result = helpers.buildWordingChoiceFromTurn({
+    const result = helpers.buildCompareFromTurn({
       stepId: scenario.stepId,
       state: {} as any,
       activeSpecialist: scenario.activeSpecialist,
       previousSpecialist: {},
       specialistResult: {
-        message: "I refined the wording.",
+        message: "I refined the compare.",
         feedback_reason_text: "",
         feedback_mode: "compare_suggestion",
         refined_formulation: scenario.suggestion,
@@ -1365,18 +1365,18 @@ test("buildWordingChoiceFromTurn requires explicit valid compare feedback across
       isOfftopic: false,
     });
 
-    assert.equal(result.wordingChoice, null, `expected ${scenario.stepId} to suppress compare without feedback`);
+    assert.equal(result.compare, null, `expected ${scenario.stepId} to suppress compare without feedback`);
     assert.equal(
-      String((result.specialist as Record<string, unknown>).wording_choice_presentation || ""),
+      String((result.specialist as Record<string, unknown>).compare_presentation || ""),
       "canonical",
       `expected ${scenario.stepId} to fall back to canonical presentation`
     );
   }
 });
 
-test("buildWordingChoiceFromTurn suppresses grouped compare when no explicit agent feedback is available", () => {
+test("buildCompareFromTurn suppresses grouped compare when no explicit agent feedback is available", () => {
   const helpers = buildHelpers(true);
-  const result = helpers.buildWordingChoiceFromTurn({
+  const result = helpers.buildCompareFromTurn({
     stepId: "productsservices",
     state: {} as any,
     activeSpecialist: "ProductsServices",
@@ -1393,12 +1393,12 @@ test("buildWordingChoiceFromTurn suppresses grouped compare when no explicit age
     isOfftopic: false,
   });
 
-  assert.equal(result.wordingChoice, null);
+  assert.equal(result.compare, null);
 });
 
-test("buildWordingChoiceFromTurn suppresses grouped compare when the reason sanitizes to no valid feedback", () => {
+test("buildCompareFromTurn suppresses grouped compare when the reason sanitizes to no valid feedback", () => {
   const helpers = buildHelpers(true);
-  const result = helpers.buildWordingChoiceFromTurn({
+  const result = helpers.buildCompareFromTurn({
     stepId: "strategy",
     state: {} as any,
     activeSpecialist: "Strategy",
@@ -1416,11 +1416,11 @@ test("buildWordingChoiceFromTurn suppresses grouped compare when the reason sani
     isOfftopic: false,
   });
 
-  assert.equal(result.wordingChoice, null);
-  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_presentation || ""), "canonical");
+  assert.equal(result.compare, null);
+  assert.equal(String((result.specialist as Record<string, unknown>).compare_presentation || ""), "canonical");
 });
 
-test("buildWordingChoiceFromTurn accepts explicit compare feedback across the grouped/list family without relying on feedback_mode", () => {
+test("buildCompareFromTurn accepts explicit compare feedback across the grouped/list family without relying on feedback_mode", () => {
   const scenarios = [
     {
       stepId: "strategy" as const,
@@ -1449,7 +1449,7 @@ test("buildWordingChoiceFromTurn accepts explicit compare feedback across the gr
   ];
 
   for (const scenario of scenarios) {
-    const result = buildHelpers(true).buildWordingChoiceFromTurn({
+    const result = buildHelpers(true).buildCompareFromTurn({
       stepId: scenario.stepId,
       state: {} as any,
       activeSpecialist: scenario.activeSpecialist,
@@ -1467,28 +1467,28 @@ test("buildWordingChoiceFromTurn accepts explicit compare feedback across the gr
       isOfftopic: false,
     });
 
-    assert.ok(result.wordingChoice, `expected ${scenario.stepId} to keep compare active`);
+    assert.ok(result.compare, `expected ${scenario.stepId} to keep compare active`);
     assert.equal(
-      String(result.wordingChoice?.compare_feedback?.text || ""),
+      String(result.compare?.compare_feedback?.text || ""),
       scenario.expected,
       `expected ${scenario.stepId} to preserve the explicit compare feedback`
     );
   }
 });
 
-test("buildWordingChoiceFromTurn suppresses forced grouped compare when no explicit agent feedback is available", () => {
+test("buildCompareFromTurn suppresses forced grouped compare when no explicit agent feedback is available", () => {
   const helpers = buildHelpers(true);
-  const result = helpers.buildWordingChoiceFromTurn({
+  const result = helpers.buildCompareFromTurn({
     stepId: "strategy",
     state: {} as any,
     activeSpecialist: "Strategy",
     previousSpecialist: {
       statements: ["Recurring revenue", "Expert-led delivery"],
       strategy: ["Recurring revenue", "Expert-led delivery"].join("\n"),
-      wording_choice_pending: "true",
-      wording_choice_mode: "list",
-      wording_choice_user_normalized: "Operational simplicity",
-      wording_choice_agent_current: ["Recurring revenue", "Expert-led delivery", "Operational focus"].join("\n"),
+      compare_pending: "true",
+      compare_mode: "list",
+      compare_user_normalized: "Operational simplicity",
+      compare_agent_current: ["Recurring revenue", "Expert-led delivery", "Operational focus"].join("\n"),
     },
     specialistResult: {
       message: "Okay.",
@@ -1502,10 +1502,10 @@ test("buildWordingChoiceFromTurn suppresses forced grouped compare when no expli
     submittedTextAnchor: "suggestion",
   });
 
-  assert.equal(result.wordingChoice, null);
+  assert.equal(result.compare, null);
 });
 
-test("buildWordingChoiceFromTurn groups overlapping strategy points on the user side against one merged suggestion", () => {
+test("buildCompareFromTurn groups overlapping strategy points on the user side against one merged suggestion", () => {
   const helpers = buildHelpers(true);
   const existingStatements = [
     "Altijd gericht investeren in relevante technologische innovaties die de impact van klantcommunicatie vergroten",
@@ -1515,7 +1515,7 @@ test("buildWordingChoiceFromTurn groups overlapping strategy points on the user 
     "Altijd gericht investeren in relevante AI-technologieen die de impact van klantcommunicatie vergroten",
     "Prototyping en MVP's bouwen als show what we can do for you",
   ];
-  const result = helpers.buildWordingChoiceFromTurn({
+  const result = helpers.buildCompareFromTurn({
     stepId: "strategy",
     state: {} as any,
     activeSpecialist: "Strategy",
@@ -1535,23 +1535,23 @@ test("buildWordingChoiceFromTurn groups overlapping strategy points on the user 
     isOfftopic: false,
   });
 
-  assert.ok(result.wordingChoice);
-  assert.equal(result.wordingChoice?.mode, "list");
-  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_variant || ""), "grouped_list_units");
-  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_compare_mode || ""), "grouped_units");
-  assert.deepEqual(result.wordingChoice?.user_items, [
+  assert.ok(result.compare);
+  assert.equal(result.compare?.mode, "list");
+  assert.equal(String((result.specialist as Record<string, unknown>).compare_variant || ""), "grouped_list_units");
+  assert.equal(String((result.specialist as Record<string, unknown>).compare_compare_mode || ""), "grouped_units");
+  assert.deepEqual(result.compare?.user_items, [
     "Altijd gericht investeren in relevante technologische innovaties die de impact van klantcommunicatie vergroten",
     "Altijd gericht investeren in AI-technologieen die de impact van klantcommunicatie vergroten",
   ]);
-  assert.deepEqual(result.wordingChoice?.suggestion_items, [
+  assert.deepEqual(result.compare?.suggestion_items, [
     "Altijd gericht investeren in relevante AI-technologieen die de impact van klantcommunicatie vergroten",
   ]);
-  assert.match(String(result.wordingChoice?.instruction || ""), /Prototyping en MVP's bouwen/i);
+  assert.match(String(result.compare?.instruction || ""), /Prototyping en MVP's bouwen/i);
   assert.deepEqual((result.specialist as Record<string, unknown>).statements, existingStatements);
   assert.equal(String((result.specialist as Record<string, unknown>).strategy || ""), existingStatements.join("\n"));
 });
 
-test("buildWordingChoiceFromTurn keeps strategy 7-to-8 overflow as a local consolidation suggestion with retained bullets", () => {
+test("buildCompareFromTurn keeps strategy 7-to-8 overflow as a local consolidation suggestion with retained bullets", () => {
   const helpers = buildHelpers(true);
   const previousStatements = [
     "Recurring revenue",
@@ -1562,7 +1562,7 @@ test("buildWordingChoiceFromTurn keeps strategy 7-to-8 overflow as a local conso
     "Measurable delivery",
     "Long-term partnerships",
   ];
-  const result = helpers.buildWordingChoiceFromTurn({
+  const result = helpers.buildCompareFromTurn({
     stepId: "strategy",
     state: {} as any,
     activeSpecialist: "Strategy",
@@ -1597,21 +1597,21 @@ test("buildWordingChoiceFromTurn keeps strategy 7-to-8 overflow as a local conso
     isOfftopic: false,
   });
 
-  assert.ok(result.wordingChoice);
-  assert.equal(result.wordingChoice?.mode, "list");
-  assert.equal(result.wordingChoice?.user_label, "This is your compact wording:");
-  assert.equal(result.wordingChoice?.suggestion_label, "This is my suggestion:");
-  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_compare_mode || ""), "grouped_units");
-  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_variant || ""), "grouped_list_units");
+  assert.ok(result.compare);
+  assert.equal(result.compare?.mode, "list");
+  assert.equal(result.compare?.user_label, "This is your compact wording:");
+  assert.equal(result.compare?.suggestion_label, "This is my suggestion:");
+  assert.equal(String((result.specialist as Record<string, unknown>).compare_compare_mode || ""), "grouped_units");
+  assert.equal(String((result.specialist as Record<string, unknown>).compare_variant || ""), "grouped_list_units");
   assert.deepEqual((result.specialist as Record<string, unknown>).statements, previousStatements);
-  assert.match(String(result.wordingChoice?.instruction || ""), /These points already stay in the final list:/);
-  assert.match(String(result.wordingChoice?.instruction || ""), /Recurring revenue/);
-  assert.match(String(result.wordingChoice?.instruction || ""), /Long-term partnerships/);
+  assert.match(String(result.compare?.instruction || ""), /These points already stay in the final list:/);
+  assert.match(String(result.compare?.instruction || ""), /Recurring revenue/);
+  assert.match(String(result.compare?.instruction || ""), /Long-term partnerships/);
 });
 
-test("buildWordingChoiceFromTurn supports 1 user sentence versus 2 suggestion bullets as one compare unit", () => {
+test("buildCompareFromTurn supports 1 user sentence versus 2 suggestion bullets as one compare unit", () => {
   const helpers = buildHelpers(true);
-  const result = helpers.buildWordingChoiceFromTurn({
+  const result = helpers.buildCompareFromTurn({
     stepId: "productsservices",
     state: {} as any,
     activeSpecialist: "ProductsServices",
@@ -1630,15 +1630,15 @@ test("buildWordingChoiceFromTurn supports 1 user sentence versus 2 suggestion bu
     isOfftopic: false,
   });
 
-  assert.ok(result.wordingChoice);
-  assert.deepEqual(result.wordingChoice?.user_items, ["AI audits and implementation guidance"]);
-  assert.deepEqual(result.wordingChoice?.suggestion_items, ["AI audits", "Implementation guidance"]);
-  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_compare_mode || ""), "grouped_units");
+  assert.ok(result.compare);
+  assert.deepEqual(result.compare?.user_items, ["AI audits and implementation guidance"]);
+  assert.deepEqual(result.compare?.suggestion_items, ["AI audits", "Implementation guidance"]);
+  assert.equal(String((result.specialist as Record<string, unknown>).compare_compare_mode || ""), "grouped_units");
 });
 
-test("buildWordingChoiceFromTurn supports 3 user bullets versus 1 compact suggestion as one compare unit", () => {
+test("buildCompareFromTurn supports 3 user bullets versus 1 compact suggestion as one compare unit", () => {
   const helpers = buildHelpers(true);
-  const result = helpers.buildWordingChoiceFromTurn({
+  const result = helpers.buildCompareFromTurn({
     stepId: "rulesofthegame",
     state: {} as any,
     activeSpecialist: "RulesOfTheGame",
@@ -1661,21 +1661,21 @@ test("buildWordingChoiceFromTurn supports 3 user bullets versus 1 compact sugges
     isOfftopic: false,
   });
 
-  assert.ok(result.wordingChoice);
-  assert.deepEqual(result.wordingChoice?.user_items, [
+  assert.ok(result.compare);
+  assert.deepEqual(result.compare?.user_items, [
     "We do what we promise.",
     "We follow up on ownership.",
     "We resolve blockers fast.",
   ]);
-  assert.deepEqual(result.wordingChoice?.suggestion_items, [
+  assert.deepEqual(result.compare?.suggestion_items, [
     "We keep each other accountable for delivery.",
   ]);
-  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_compare_mode || ""), "grouped_units");
+  assert.equal(String((result.specialist as Record<string, unknown>).compare_compare_mode || ""), "grouped_units");
 });
 
-test("buildWordingChoiceFromTurn keeps free-text strategy proposals pending instead of committing them", () => {
+test("buildCompareFromTurn keeps free-text strategy proposals pending instead of committing them", () => {
   const helpers = buildHelpers(true);
-  const result = helpers.buildWordingChoiceFromTurn({
+  const result = helpers.buildCompareFromTurn({
     stepId: "strategy",
     state: {} as any,
     activeSpecialist: "Strategy",
@@ -1701,16 +1701,16 @@ test("buildWordingChoiceFromTurn keeps free-text strategy proposals pending inst
     isOfftopic: false,
   });
 
-  assert.ok(result.wordingChoice);
-  assert.equal(result.wordingChoice?.mode, "list");
-  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "true");
+  assert.ok(result.compare);
+  assert.equal(result.compare?.mode, "list");
+  assert.equal(String((result.specialist as Record<string, unknown>).compare_pending || ""), "true");
   assert.deepEqual((result.specialist as Record<string, unknown>).statements, ["Recurring revenue"]);
   assert.equal(String((result.specialist as Record<string, unknown>).strategy || ""), "Recurring revenue");
 });
 
-test("buildWordingChoiceFromTurn keeps free-text rules proposals pending and local", () => {
+test("buildCompareFromTurn keeps free-text rules proposals pending and local", () => {
   const helpers = buildHelpers(true);
-  const result = helpers.buildWordingChoiceFromTurn({
+  const result = helpers.buildCompareFromTurn({
     stepId: "rulesofthegame",
     state: {} as any,
     activeSpecialist: "RulesOfTheGame",
@@ -1736,16 +1736,16 @@ test("buildWordingChoiceFromTurn keeps free-text rules proposals pending and loc
     isOfftopic: false,
   });
 
-  assert.ok(result.wordingChoice);
-  assert.equal(result.wordingChoice?.mode, "list");
-  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "true");
+  assert.ok(result.compare);
+  assert.equal(result.compare?.mode, "list");
+  assert.equal(String((result.specialist as Record<string, unknown>).compare_pending || ""), "true");
   assert.deepEqual((result.specialist as Record<string, unknown>).statements, ["We communicate proactively."]);
   assert.equal(String((result.specialist as Record<string, unknown>).rulesofthegame || ""), "We communicate proactively.");
 });
 
-test("buildWordingChoiceFromTurn keeps strategy anchorless 3-to-4 rewrites in grouped compare mode", () => {
+test("buildCompareFromTurn keeps strategy anchorless 3-to-4 rewrites in grouped compare mode", () => {
   const helpers = buildHelpers(true);
-  const result = helpers.buildWordingChoiceFromTurn({
+  const result = helpers.buildCompareFromTurn({
     stepId: "strategy",
     state: {} as any,
     activeSpecialist: "Strategy",
@@ -1778,13 +1778,13 @@ test("buildWordingChoiceFromTurn keeps strategy anchorless 3-to-4 rewrites in gr
     isOfftopic: false,
   });
 
-  assert.ok(result.wordingChoice);
-  assert.equal(result.wordingChoice?.user_label, "This is your compact wording:");
-  assert.equal(result.wordingChoice?.suggestion_label, "This is my suggestion:");
-  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_compare_mode || ""), "grouped_units");
-  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_variant || ""), "grouped_list_units");
-  assert.equal(Array.isArray((result.specialist as Record<string, unknown>).wording_choice_compare_units), true);
-  const compareUnits = ((result.specialist as Record<string, unknown>).wording_choice_compare_units as Array<Record<string, unknown>>) || [];
+  assert.ok(result.compare);
+  assert.equal(result.compare?.user_label, "This is your compact wording:");
+  assert.equal(result.compare?.suggestion_label, "This is my suggestion:");
+  assert.equal(String((result.specialist as Record<string, unknown>).compare_compare_mode || ""), "grouped_units");
+  assert.equal(String((result.specialist as Record<string, unknown>).compare_variant || ""), "grouped_list_units");
+  assert.equal(Array.isArray((result.specialist as Record<string, unknown>).compare_compare_units), true);
+  const compareUnits = ((result.specialist as Record<string, unknown>).compare_compare_units as Array<Record<string, unknown>>) || [];
   assert.equal(compareUnits.length >= 1, true);
   assert.deepEqual(
     compareUnits.flatMap((unit) => ((unit.user_items as string[]) || []).map((line) => String(line || ""))),
@@ -1803,13 +1803,13 @@ test("buildWordingChoiceFromTurn keeps strategy anchorless 3-to-4 rewrites in gr
       "Keep delivery practical and measurable from day one",
     ]
   );
-  assert.equal((result.wordingChoice?.user_items || []).length >= 1, true);
-  assert.equal((result.wordingChoice?.suggestion_items || []).length >= 1, true);
+  assert.equal((result.compare?.user_items || []).length >= 1, true);
+  assert.equal((result.compare?.suggestion_items || []).length >= 1, true);
 });
 
-test("buildWordingChoiceFromTurn keeps productsservices anchorless 2-to-3 rewrites in grouped compare mode", () => {
+test("buildCompareFromTurn keeps productsservices anchorless 2-to-3 rewrites in grouped compare mode", () => {
   const helpers = buildHelpers(true);
-  const result = helpers.buildWordingChoiceFromTurn({
+  const result = helpers.buildCompareFromTurn({
     stepId: "productsservices",
     state: {} as any,
     activeSpecialist: "ProductsServices",
@@ -1839,11 +1839,11 @@ test("buildWordingChoiceFromTurn keeps productsservices anchorless 2-to-3 rewrit
     isOfftopic: false,
   });
 
-  assert.ok(result.wordingChoice);
-  assert.equal(result.wordingChoice?.user_label, "This is your compact wording:");
-  assert.equal(result.wordingChoice?.suggestion_label, "This is my suggestion:");
-  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_compare_mode || ""), "grouped_units");
-  const compareUnits = ((result.specialist as Record<string, unknown>).wording_choice_compare_units as Array<Record<string, unknown>>) || [];
+  assert.ok(result.compare);
+  assert.equal(result.compare?.user_label, "This is your compact wording:");
+  assert.equal(result.compare?.suggestion_label, "This is my suggestion:");
+  assert.equal(String((result.specialist as Record<string, unknown>).compare_compare_mode || ""), "grouped_units");
+  const compareUnits = ((result.specialist as Record<string, unknown>).compare_compare_units as Array<Record<string, unknown>>) || [];
   assert.equal(compareUnits.length >= 1, true);
   assert.deepEqual(
     compareUnits.flatMap((unit) => ((unit.user_items as string[]) || []).map((line) => String(line || ""))),
@@ -1860,14 +1860,14 @@ test("buildWordingChoiceFromTurn keeps productsservices anchorless 2-to-3 rewrit
       "Brand strategy for technical companies",
     ]
   );
-  assert.equal((result.wordingChoice?.user_items || []).length >= 1, true);
-  assert.equal((result.wordingChoice?.suggestion_items || []).length >= 1, true);
+  assert.equal((result.compare?.user_items || []).length >= 1, true);
+  assert.equal((result.compare?.suggestion_items || []).length >= 1, true);
 });
 
-test("buildWordingChoiceFromTurn treats an implicit strategy line rewrite as one remaining compare unit instead of an additive list expansion", () => {
+test("buildCompareFromTurn treats an implicit strategy line rewrite as one remaining compare unit instead of an additive list expansion", () => {
   const helpers = buildHelpers(true);
   const originalTarget = "Werk alleen met klanten die groei vanuit wederzijds begrip nastreven";
-  const result = helpers.buildWordingChoiceFromTurn({
+  const result = helpers.buildCompareFromTurn({
     stepId: "strategy",
     state: {} as any,
     activeSpecialist: "Strategy",
@@ -1904,9 +1904,9 @@ test("buildWordingChoiceFromTurn treats an implicit strategy line rewrite as one
     isOfftopic: false,
   });
 
-  assert.ok(result.wordingChoice);
-  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_variant || ""), "grouped_list_units");
-  const compareUnits = ((result.specialist as Record<string, unknown>).wording_choice_compare_units as Array<Record<string, unknown>>) || [];
+  assert.ok(result.compare);
+  assert.equal(String((result.specialist as Record<string, unknown>).compare_variant || ""), "grouped_list_units");
+  const compareUnits = ((result.specialist as Record<string, unknown>).compare_compare_units as Array<Record<string, unknown>>) || [];
   assert.equal(compareUnits.length, 1);
   assert.deepEqual(compareUnits[0].user_items, [
     "Ik werk niet alleen met klanten die groei vanuit wederzijds begrip nastreven",
@@ -1915,17 +1915,17 @@ test("buildWordingChoiceFromTurn treats an implicit strategy line rewrite as one
   assert.deepEqual(compareUnits[0].suggestion_items, [
     "Sta open voor samenwerkingen met diverse klanten, mits er ruimte is voor echte verbinding",
   ]);
-  const compareSegments = ((result.specialist as Record<string, unknown>).wording_choice_compare_segments as Array<Record<string, unknown>>) || [];
+  const compareSegments = ((result.specialist as Record<string, unknown>).compare_compare_segments as Array<Record<string, unknown>>) || [];
   const retainedItems = compareSegments
     .filter((segment) => String(segment.kind || "") === "retained")
     .flatMap((segment) => ((segment.items as string[]) || []).map((line) => String(line || "")));
   assert.equal(retainedItems.includes(originalTarget), false);
 });
 
-test("buildWordingChoiceFromTurn keeps productsservices retained items with internal commas intact", () => {
+test("buildCompareFromTurn keeps productsservices retained items with internal commas intact", () => {
   const helpers = buildHelpers(true);
   const retainedItem = "Traditionele communicatiediensten (zoals DTP, posters, campagnes)";
-  const result = helpers.buildWordingChoiceFromTurn({
+  const result = helpers.buildCompareFromTurn({
     stepId: "productsservices",
     state: {} as any,
     activeSpecialist: "ProductsServices",
@@ -1953,19 +1953,19 @@ test("buildWordingChoiceFromTurn keeps productsservices retained items with inte
     isOfftopic: false,
   });
 
-  assert.ok(result.wordingChoice);
-  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_compare_mode || ""), "grouped_units");
+  assert.ok(result.compare);
+  assert.equal(String((result.specialist as Record<string, unknown>).compare_compare_mode || ""), "grouped_units");
   assert.deepEqual(
-    ((result.specialist as Record<string, unknown>).wording_choice_compare_segments as Array<Record<string, unknown>>)
+    ((result.specialist as Record<string, unknown>).compare_compare_segments as Array<Record<string, unknown>>)
       .filter((segment) => String(segment.kind || "") === "retained")
       .flatMap((segment) => ((segment.items as string[]) || []).map((line) => String(line || ""))),
     [retainedItem]
   );
 });
 
-test("buildWordingChoiceFromTurn falls back to legacy full-set compare when anchorless business list matching is too uncertain", () => {
+test("buildCompareFromTurn falls back to legacy full-set compare when anchorless business list matching is too uncertain", () => {
   const helpers = buildHelpers(true);
-  const result = helpers.buildWordingChoiceFromTurn({
+  const result = helpers.buildCompareFromTurn({
     stepId: "rulesofthegame",
     state: {} as any,
     activeSpecialist: "RulesOfTheGame",
@@ -1995,33 +1995,33 @@ test("buildWordingChoiceFromTurn falls back to legacy full-set compare when anch
     isOfftopic: false,
   });
 
-  assert.ok(result.wordingChoice);
-  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_compare_mode || ""), "");
-  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_variant || ""), "");
-  assert.equal(result.wordingChoice?.user_label, "This is what I took from your input:");
-  assert.equal(result.wordingChoice?.suggestion_label, "This would be my suggestion:");
+  assert.ok(result.compare);
+  assert.equal(String((result.specialist as Record<string, unknown>).compare_compare_mode || ""), "");
+  assert.equal(String((result.specialist as Record<string, unknown>).compare_variant || ""), "");
+  assert.equal(result.compare?.user_label, "This is what I took from your input:");
+  assert.equal(result.compare?.suggestion_label, "This would be my suggestion:");
 });
 
-test("buildWordingChoiceFromTurn directly accepts one valid strategy sentence when it already meets the step wording", () => {
+test("buildCompareFromTurn directly accepts one valid strategy sentence when it already meets the step wording", () => {
   const defaultUi: Record<string, string> = {
-    wordingChoiceHeading: "This is your input:",
-    wordingChoiceInterpretedListHeading: "This is what I took from your input:",
-    wordingChoiceGroupedCompareUserLabel: "This is your compact wording:",
-    wordingChoiceGroupedCompareSuggestionLabel: "This is my suggestion:",
-    wordingChoiceGroupedCompareInstruction: "Choose the version that fits best for the remaining difference.",
-    wordingChoiceGroupedCompareRetainedHeading: "These points already stay in the final list:",
-    wordingChoiceSuggestionLabel: "This would be my suggestion:",
-    wordingChoiceInstruction: "Please click what suits you best.",
-    "wording.choice.context.default": "Please choose the wording that fits best.",
-    "wording.feedback.compare.intro.template":
+    compareHeading: "This is your input:",
+    compareInterpretedListHeading: "This is what I took from your input:",
+    compareGroupedUserLabel: "This is your compact wording:",
+    compareGroupedCompareSuggestionLabel: "This is my suggestion:",
+    compareGroupedCompareInstruction: "Choose the version that fits best for the remaining difference.",
+    compareGroupedCompareRetainedHeading: "These points already stay in the final list:",
+    compareSuggestionLabel: "This would be my suggestion:",
+    compareInstruction: "Please click what suits you best.",
+    "compare.choice.context.default": "Please choose the wording that fits best.",
+    "compare.feedback.compare.intro.template":
       "I think I understand what you mean. For a stronger {0}, it helps to keep this in mind.",
-    "wording.feedback.user_pick.ack.default": "Your own wording is completely okay.",
-    "wording.feedback.user_pick.nudge.template":
+    "compare.feedback.user_pick.ack.default": "Your own wording is completely okay.",
+    "compare.feedback.user_pick.nudge.template":
       "At the same time, it helps to remember what usually makes a strong {0}.",
-    "wording.feedback.user_pick.reason.default":
+    "compare.feedback.user_pick.reason.default":
       "Keep in mind what makes this step strong, so your wording stays clear and aligned.",
-    "wordingChoice.chooseVersion": "Choose this version",
-    "wordingChoice.useInputFallback": "Use this input",
+    "compare.chooseVersion": "Choose this version",
+    "compare.useInputFallback": "Use this input",
   };
   const canonicalize = (input: string) =>
     String(input || "")
@@ -2029,7 +2029,7 @@ test("buildWordingChoiceFromTurn directly accepts one valid strategy sentence wh
       .replace(/[^a-z0-9\s]/gi, " ")
       .replace(/\s+/g, " ")
       .trim();
-  const helpers = createRunStepWordingHelpers({
+  const helpers = createRunStepCompareHelpers({
     step0Id: "step0",
     presentationStepId: "presentation",
     dreamStepId: "dream",
@@ -2070,7 +2070,7 @@ test("buildWordingChoiceFromTurn directly accepts one valid strategy sentence wh
     shouldTreatAsStepContributingInput: () => true,
     pickDualChoiceSuggestion: (_stepId, specialistResult) =>
       String((specialistResult as Record<string, unknown>)?.refined_formulation || "").trim(),
-    areEquivalentWordingVariants: ({ userItems, suggestionItems }) =>
+    areEquivalentCompareVariants: ({ userItems, suggestionItems }) =>
       JSON.stringify(userItems.map(canonicalize)) === JSON.stringify(suggestionItems.map(canonicalize)),
     normalizeEntityPhrase: (input: string) => String(input || "").trim(),
     withProvisionalValue: (state) => state,
@@ -2081,14 +2081,14 @@ test("buildWordingChoiceFromTurn directly accepts one valid strategy sentence wh
       textKeys: [],
     }),
     applyUiPhaseByStep: () => {},
-    isUiWordingFeedbackKeyedV1Enabled: () => false,
-    isWordingChoiceIntentV1Enabled: () => true,
+    isUiCompareFeedbackKeyedV1Enabled: () => false,
+    isCompareIntentV1Enabled: () => true,
     bumpUiI18nCounter: () => {},
-    wordingSelectionMessage: () => "",
+    compareSelectionMessage: () => "",
   });
 
   const line = "Focus on recurring revenue with implementation retainers";
-  const result = helpers.buildWordingChoiceFromTurn({
+  const result = helpers.buildCompareFromTurn({
     stepId: "strategy",
     state: {} as any,
     activeSpecialist: "Strategy",
@@ -2105,33 +2105,33 @@ test("buildWordingChoiceFromTurn directly accepts one valid strategy sentence wh
     isOfftopic: false,
   });
 
-  assert.equal(result.wordingChoice, null);
-  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "false");
+  assert.equal(result.compare, null);
+  assert.equal(String((result.specialist as Record<string, unknown>).compare_pending || ""), "false");
   assert.equal(String((result.specialist as Record<string, unknown>).refined_formulation || ""), line);
   assert.deepEqual((result.specialist as Record<string, unknown>).statements, [line]);
   assert.equal(String((result.specialist as Record<string, unknown>).strategy || ""), line);
 });
 
-test("applyWordingPickSelection resolves grouped compare units into one final productsservices list", () => {
+test("applyComparePickSelection resolves grouped compare units into one final productsservices list", () => {
   const helpers = buildHelpers(true);
   const preservedCommaItem = "Traditionele communicatiediensten (zoals DTP, posters, campagnes)";
   const state = {
     current_step: "productsservices",
     active_specialist: "ProductsServices",
     last_specialist_result: {
-      wording_choice_pending: "true",
-      wording_choice_mode: "list",
-      wording_choice_target_field: "productsservices",
-      wording_choice_presentation: "picker",
-      wording_choice_variant: "grouped_list_units",
-      wording_choice_compare_mode: "grouped_units",
-      wording_choice_compare_cursor: "0",
-      wording_choice_compare_segments: [
+      compare_pending: "true",
+      compare_mode: "list",
+      compare_target_field: "productsservices",
+      compare_presentation: "picker",
+      compare_variant: "grouped_list_units",
+      compare_compare_mode: "grouped_units",
+      compare_compare_cursor: "0",
+      compare_compare_segments: [
         { kind: "retained", items: ["Strategy workshops"] },
         { kind: "unit", unit_id: "unit_1" },
         { kind: "unit", unit_id: "unit_2" },
       ],
-      wording_choice_compare_units: [
+      compare_compare_units: [
         {
           id: "unit_1",
           user_items: ["AI websites"],
@@ -2155,33 +2155,33 @@ test("applyWordingPickSelection resolves grouped compare units into one final pr
           confidence: "anchored",
         },
       ],
-      wording_choice_user_items: ["AI websites"],
-      wording_choice_suggestion_items: ["AI-compatible websites"],
-      wording_choice_user_normalized: "AI websites",
-      wording_choice_agent_current: "AI-compatible websites",
-      wording_choice_user_label: "This is your compact wording:",
-      wording_choice_suggestion_label: "This is my suggestion:",
+      compare_user_items: ["AI websites"],
+      compare_suggestion_items: ["AI-compatible websites"],
+      compare_user_normalized: "AI websites",
+      compare_agent_current: "AI-compatible websites",
+      compare_user_label: "This is your compact wording:",
+      compare_suggestion_label: "This is my suggestion:",
     },
   } as any;
 
-  const first = helpers.applyWordingPickSelection({
+  const first = helpers.applyComparePickSelection({
     stepId: "productsservices",
-    routeToken: "__WORDING_PICK_USER__",
+    routeToken: "__COMPARE_PICK_USER__",
     state,
   });
 
   assert.equal(first.handled, true);
-  assert.equal(String(first.specialist.wording_choice_pending || ""), "true");
-  assert.deepEqual((first.specialist.wording_choice_user_items as string[]) || [], ["Branding retainers"]);
+  assert.equal(String(first.specialist.compare_pending || ""), "true");
+  assert.deepEqual((first.specialist.compare_user_items as string[]) || [], ["Branding retainers"]);
 
-  const second = helpers.applyWordingPickSelection({
+  const second = helpers.applyComparePickSelection({
     stepId: "productsservices",
-    routeToken: "__WORDING_PICK_SUGGESTION__",
+    routeToken: "__COMPARE_PICK_SUGGESTION__",
     state: first.nextState,
   });
 
   assert.equal(second.handled, true);
-  assert.equal(String(second.specialist.wording_choice_pending || ""), "false");
+  assert.equal(String(second.specialist.compare_pending || ""), "false");
   assert.deepEqual((second.specialist.statements as string[]) || [], [
     "Strategy workshops",
     "AI websites",
@@ -2193,11 +2193,11 @@ test("applyWordingPickSelection resolves grouped compare units into one final pr
   );
 });
 
-test("applyWordingPickSelection persists accepted Dream Builder statements into canonical state", () => {
+test("applyComparePickSelection persists accepted Dream Builder statements into canonical state", () => {
   const helpers = buildDreamBuilderHelpers(true);
-  const applyResult = helpers.applyWordingPickSelection({
+  const applyResult = helpers.applyComparePickSelection({
     stepId: "dream",
-    routeToken: "__WORDING_PICK_SUGGESTION__",
+    routeToken: "__COMPARE_PICK_SUGGESTION__",
     state: {
       current_step: "dream",
       active_specialist: "DreamExplainer",
@@ -2206,22 +2206,22 @@ test("applyWordingPickSelection persists accepted Dream Builder statements into 
         "Over 5 tot 10 jaar zullen meer mensen streven naar werk dat een positieve impact heeft op het leven van anderen.",
       ],
       last_specialist_result: {
-        wording_choice_pending: "true",
-        wording_choice_mode: "list",
-        wording_choice_target_field: "dream",
-        wording_choice_presentation: "picker",
-        wording_choice_base_items: [
+        compare_pending: "true",
+        compare_mode: "list",
+        compare_target_field: "dream",
+        compare_presentation: "picker",
+        compare_base_items: [
           "Over 5 tot 10 jaar zullen meer mensen streven naar werk dat een positieve impact heeft op het leven van anderen.",
         ],
-        wording_choice_user_items: [
+        compare_user_items: [
           "Over 5 tot 10 jaar zullen meer mensen streven naar werk dat een positieve impact heeft op het leven van anderen.",
         ],
-        wording_choice_suggestion_items: [
+        compare_suggestion_items: [
           "Er zal meer waarde worden gehecht aan het creëren van iets dat generaties overstijgt en blijvende betekenis heeft.",
         ],
-        wording_choice_user_normalized:
+        compare_user_normalized:
           "Over 5 tot 10 jaar zullen meer mensen streven naar werk dat een positieve impact heeft op het leven van anderen.",
-        wording_choice_agent_current:
+        compare_agent_current:
           "Er zal meer waarde worden gehecht aan het creëren van iets dat generaties overstijgt en blijvende betekenis heeft.",
         feedback_reason_text:
           "Deze suggestie vertaalt je wens naar een bredere maatschappelijke verandering.",
@@ -2242,9 +2242,9 @@ test("applyWordingPickSelection persists accepted Dream Builder statements into 
   ]);
 });
 
-test("buildWordingChoiceFromTurn opens a merge choice for a near-duplicate Dream Builder statement", () => {
+test("buildCompareFromTurn opens a merge choice for a near-duplicate Dream Builder statement", () => {
   const helpers = buildDreamBuilderHelpers(true);
-  const result = helpers.buildWordingChoiceFromTurn({
+  const result = helpers.buildCompareFromTurn({
     stepId: "dream",
     state: {
       current_step: "dream",
@@ -2278,8 +2278,8 @@ test("buildWordingChoiceFromTurn opens a merge choice for a near-duplicate Dream
     dreamRuntimeModeRaw: "builder_collect",
   });
 
-  assert.equal(result.wordingChoice, null);
-  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "false");
+  assert.equal(result.compare, null);
+  assert.equal(String((result.specialist as Record<string, unknown>).compare_pending || ""), "false");
   assert.equal(String((result.specialist as Record<string, unknown>).__dream_builder_compare_pending || ""), "true");
   assert.equal(String((result.specialist as Record<string, unknown>).__dream_builder_compare_kind || ""), "overlap_merge_compare");
   assert.deepEqual((result.specialist as Record<string, unknown>).statements, [
@@ -2301,9 +2301,9 @@ test("buildWordingChoiceFromTurn opens a merge choice for a near-duplicate Dream
   assert.ok(String((result.specialist as Record<string, unknown>).__dream_builder_compare_suggested_label || "").trim().length > 0);
 });
 
-test("buildWordingChoiceFromTurn opens a grouped compare for multiple Dream Builder wishes that are rewritten into future statements", () => {
+test("buildCompareFromTurn opens a grouped compare for multiple Dream Builder wishes that are rewritten into future statements", () => {
   const helpers = buildDreamBuilderHelpers(true);
-  const result = helpers.buildWordingChoiceFromTurn({
+  const result = helpers.buildCompareFromTurn({
     stepId: "dream",
     state: {
       current_step: "dream",
@@ -2339,8 +2339,8 @@ test("buildWordingChoiceFromTurn opens a grouped compare for multiple Dream Buil
     dreamRuntimeModeRaw: "builder_collect",
   });
 
-  assert.ok(result.wordingChoice);
-  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "false");
+  assert.ok(result.compare);
+  assert.equal(String((result.specialist as Record<string, unknown>).compare_pending || ""), "false");
   assert.equal(String((result.specialist as Record<string, unknown>).__dream_builder_compare_pending || ""), "true");
   assert.equal(String((result.specialist as Record<string, unknown>).__dream_builder_compare_kind || ""), "batch_rewrite_compare");
   assert.deepEqual((result.specialist as Record<string, unknown>).statements, []);
@@ -2360,9 +2360,9 @@ test("buildWordingChoiceFromTurn opens a grouped compare for multiple Dream Buil
   ]);
 });
 
-test("buildWordingChoiceFromTurn uses the real Dream Builder suggestion gate for multiline future-statement rewrites", () => {
+test("buildCompareFromTurn uses the real Dream Builder suggestion gate for multiline future-statement rewrites", () => {
   const helpers = buildDreamBuilderHelpersWithRealSuggestionGate();
-  const result = helpers.buildWordingChoiceFromTurn({
+  const result = helpers.buildCompareFromTurn({
     stepId: "dream",
     state: {
       current_step: "dream",
@@ -2397,8 +2397,8 @@ test("buildWordingChoiceFromTurn uses the real Dream Builder suggestion gate for
     dreamRuntimeModeRaw: "builder_collect",
   });
 
-  assert.ok(result.wordingChoice);
-  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "false");
+  assert.ok(result.compare);
+  assert.equal(String((result.specialist as Record<string, unknown>).compare_pending || ""), "false");
   assert.equal(String((result.specialist as Record<string, unknown>).__dream_builder_compare_pending || ""), "true");
   assert.deepEqual((result.specialist as Record<string, unknown>).__dream_builder_compare_current_items, [
     "I want my work to make a positive difference in people's lives.",
@@ -2416,9 +2416,9 @@ test("buildWordingChoiceFromTurn uses the real Dream Builder suggestion gate for
   ]);
 });
 
-test("buildWordingChoiceFromTurn keeps Dream Builder grouped compare active for multiple wishes even without explicit specialist feedback text", () => {
+test("buildCompareFromTurn keeps Dream Builder grouped compare active for multiple wishes even without explicit specialist feedback text", () => {
   const helpers = buildDreamBuilderHelpers(true);
-  const result = helpers.buildWordingChoiceFromTurn({
+  const result = helpers.buildCompareFromTurn({
     stepId: "dream",
     state: {
       current_step: "dream",
@@ -2453,8 +2453,8 @@ test("buildWordingChoiceFromTurn keeps Dream Builder grouped compare active for 
     dreamRuntimeModeRaw: "builder_collect",
   });
 
-  assert.ok(result.wordingChoice);
-  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "false");
+  assert.ok(result.compare);
+  assert.equal(String((result.specialist as Record<string, unknown>).compare_pending || ""), "false");
   assert.equal(String((result.specialist as Record<string, unknown>).__dream_builder_compare_pending || ""), "true");
   assert.match(
     String((result.specialist as Record<string, unknown>).__dream_builder_compare_rationale || ""),
@@ -2462,7 +2462,7 @@ test("buildWordingChoiceFromTurn keeps Dream Builder grouped compare active for 
   );
 });
 
-test("buildWordingChoiceFromTurn keeps existing Dream Builder statements retained while comparing new multi-line wishes against rewritten suggestions", () => {
+test("buildCompareFromTurn keeps existing Dream Builder statements retained while comparing new multi-line wishes against rewritten suggestions", () => {
   const helpers = buildDreamBuilderHelpersWithRealSuggestionGate();
   const previousStatements = [
     "Over 5 tot 10 jaar zal het voor mensen belangrijker zijn dat hun werk een positieve impact heeft op het leven van anderen.",
@@ -2471,7 +2471,7 @@ test("buildWordingChoiceFromTurn keeps existing Dream Builder statements retaine
     "Mensen zullen meer belang hechten aan trots kunnen zijn op hun werk en openlijk kunnen delen waar ze voor staan.",
     "Bedrijven zullen vaker een weerspiegeling zijn van persoonlijke waarden en identiteit, in plaats van alleen winstgedreven te zijn.",
   ];
-  const result = helpers.buildWordingChoiceFromTurn({
+  const result = helpers.buildCompareFromTurn({
     stepId: "dream",
     state: {
       current_step: "dream",
@@ -2507,7 +2507,7 @@ test("buildWordingChoiceFromTurn keeps existing Dream Builder statements retaine
     dreamRuntimeModeRaw: "builder_collect",
   });
 
-  assert.equal(result.wordingChoice, null);
+  assert.equal(result.compare, null);
   assert.deepEqual((result.specialist as Record<string, unknown>).__dream_builder_compare_current_items, [
     "I want to help people solve a problem they truly care about.",
     "I want to bring clarity and simplicity to a confusing area.",
@@ -2526,7 +2526,7 @@ test("buildWordingChoiceFromTurn keeps existing Dream Builder statements retaine
   assert.equal(instruction, "Choose the version that fits best for the remaining difference.");
 });
 
-test("buildWordingChoiceFromTurn keeps a full 14-line Dream Builder rewrite in one compare contract", () => {
+test("buildCompareFromTurn keeps a full 14-line Dream Builder rewrite in one compare contract", () => {
   const helpers = buildDreamBuilderHelpersWithRealSuggestionGate();
   const previousStatements = [
     "Over 5 tot 10 jaar zal het voor mensen belangrijker zijn dat hun werk een positieve impact heeft op het leven van anderen.",
@@ -2567,7 +2567,7 @@ test("buildWordingChoiceFromTurn keeps a full 14-line Dream Builder rewrite in o
     "Er zal meer aandacht komen voor bijdragen aan een toekomst waar mensen later trots op kunnen terugkijken.",
     "Eerlijkheid, vertrouwen en integriteit zullen zwaarder wegen in hoe bedrijven bekend willen staan.",
   ];
-  const result = helpers.buildWordingChoiceFromTurn({
+  const result = helpers.buildCompareFromTurn({
     stepId: "dream",
     state: {
       current_step: "dream",
@@ -2591,14 +2591,14 @@ test("buildWordingChoiceFromTurn keeps a full 14-line Dream Builder rewrite in o
     dreamRuntimeModeRaw: "builder_collect",
   });
 
-  assert.equal(result.wordingChoice, null);
+  assert.equal(result.compare, null);
   assert.deepEqual((result.specialist as Record<string, unknown>).__dream_builder_compare_current_items, userWishBatch);
   assert.deepEqual((result.specialist as Record<string, unknown>).__dream_builder_compare_suggested_items, rewrittenBatch);
   const instruction = String((result.specialist as Record<string, unknown>).__dream_builder_compare_instruction || "");
   assert.equal(instruction, "Choose the version that fits best for the remaining difference.");
 });
 
-test("buildWordingChoiceFromTurn uses the merged Dream Builder rewrite instead of unchanged statements when overlap requires REFINE", () => {
+test("buildCompareFromTurn uses the merged Dream Builder rewrite instead of unchanged statements when overlap requires REFINE", () => {
   const helpers = buildDreamBuilderHelpersWithRealSuggestionGate();
   const previousStatements = [
     "Over 5 tot 10 jaar zal het voor mensen belangrijker zijn dat hun werk een positieve impact heeft op het leven van anderen.",
@@ -2607,7 +2607,7 @@ test("buildWordingChoiceFromTurn uses the merged Dream Builder rewrite instead o
     "Mensen zullen meer belang hechten aan trots kunnen zijn op hun werk en openlijk kunnen delen waar ze voor staan.",
     "Bedrijven zullen vaker een weerspiegeling zijn van persoonlijke waarden en identiteit, in plaats van alleen winstgedreven te zijn.",
   ];
-  const result = helpers.buildWordingChoiceFromTurn({
+  const result = helpers.buildCompareFromTurn({
     stepId: "dream",
     state: {
       current_step: "dream",
@@ -2637,7 +2637,7 @@ test("buildWordingChoiceFromTurn uses the merged Dream Builder rewrite instead o
     dreamRuntimeModeRaw: "builder_collect",
   });
 
-  assert.equal(result.wordingChoice, null);
+  assert.equal(result.compare, null);
   assert.deepEqual((result.specialist as Record<string, unknown>).__dream_builder_compare_current_items, [
     "Bedrijven zullen vaker een weerspiegeling zijn van persoonlijke waarden en identiteit, in plaats van alleen winstgedreven te zijn.",
     "Ondernemingen worden een weerspiegeling van eigen waarden en identiteit, in plaats van alleen de focus te leggen op winst.",
@@ -2653,11 +2653,11 @@ test("buildWordingChoiceFromTurn uses the merged Dream Builder rewrite instead o
   );
 });
 
-test("applyWordingPickSelection can keep both Dream Builder near-duplicate statements", () => {
+test("applyComparePickSelection can keep both Dream Builder near-duplicate statements", () => {
   const helpers = buildDreamBuilderHelpers(true);
-  const applyResult = helpers.applyWordingPickSelection({
+  const applyResult = helpers.applyComparePickSelection({
     stepId: "dream",
-    routeToken: "__WORDING_PICK_USER__",
+    routeToken: "__COMPARE_PICK_USER__",
     state: {
       current_step: "dream",
       active_specialist: "DreamExplainer",
@@ -2699,11 +2699,11 @@ test("applyWordingPickSelection can keep both Dream Builder near-duplicate state
   ]);
 });
 
-test("applyWordingPickSelection can merge a Dream Builder near-duplicate into one stronger statement", () => {
+test("applyComparePickSelection can merge a Dream Builder near-duplicate into one stronger statement", () => {
   const helpers = buildDreamBuilderHelpers(true);
-  const applyResult = helpers.applyWordingPickSelection({
+  const applyResult = helpers.applyComparePickSelection({
     stepId: "dream",
-    routeToken: "__WORDING_PICK_SUGGESTION__",
+    routeToken: "__COMPARE_PICK_SUGGESTION__",
     state: {
       current_step: "dream",
       active_specialist: "DreamExplainer",
@@ -2744,25 +2744,25 @@ test("applyWordingPickSelection can merge a Dream Builder near-duplicate into on
   ]);
 });
 
-test("applyWordingPickSelection keeps explicit agent feedback available for the next grouped compare unit", () => {
+test("applyComparePickSelection keeps explicit agent feedback available for the next grouped compare unit", () => {
   const helpers = buildHelpers(true);
   const state = {
     current_step: "productsservices",
     active_specialist: "ProductsServices",
     last_specialist_result: {
-      wording_choice_pending: "true",
-      wording_choice_mode: "list",
-      wording_choice_target_field: "productsservices",
-      wording_choice_presentation: "picker",
-      wording_choice_variant: "grouped_list_units",
-      wording_choice_compare_mode: "grouped_units",
-      wording_choice_compare_cursor: "0",
-      wording_choice_compare_segments: [
+      compare_pending: "true",
+      compare_mode: "list",
+      compare_target_field: "productsservices",
+      compare_presentation: "picker",
+      compare_variant: "grouped_list_units",
+      compare_compare_mode: "grouped_units",
+      compare_compare_cursor: "0",
+      compare_compare_segments: [
         { kind: "retained", items: ["Strategy workshops"] },
         { kind: "unit", unit_id: "unit_1" },
         { kind: "unit", unit_id: "unit_2" },
       ],
-      wording_choice_compare_units: [
+      compare_compare_units: [
         {
           id: "unit_1",
           user_items: ["AI flows"],
@@ -2784,73 +2784,73 @@ test("applyWordingPickSelection keeps explicit agent feedback available for the 
           confidence: "anchored",
         },
       ],
-      wording_choice_user_items: ["AI flows"],
-      wording_choice_suggestion_items: ["AI-driven flows"],
-      wording_choice_user_normalized: "AI flows",
-      wording_choice_agent_current: "AI-driven flows",
+      compare_user_items: ["AI flows"],
+      compare_suggestion_items: ["AI-driven flows"],
+      compare_user_normalized: "AI flows",
+      compare_agent_current: "AI-driven flows",
       feedback_reason_text: "This suggestion keeps the service wording more precise.",
     },
   } as any;
 
-  const first = helpers.applyWordingPickSelection({
+  const first = helpers.applyComparePickSelection({
     stepId: "productsservices",
-    routeToken: "__WORDING_PICK_USER__",
+    routeToken: "__COMPARE_PICK_USER__",
     state,
   });
 
   assert.equal(first.handled, true);
-  assert.equal(String(first.specialist.wording_choice_pending || ""), "true");
+  assert.equal(String(first.specialist.compare_pending || ""), "true");
   assert.equal(
     String(first.specialist.feedback_reason_text || ""),
     "This suggestion keeps the service wording more precise."
   );
-  assert.deepEqual((first.specialist.wording_choice_user_items as string[]) || [], ["Production support"]);
-  const nextUnits = ((first.specialist.wording_choice_compare_units as unknown[]) || []) as Record<string, unknown>[];
+  assert.deepEqual((first.specialist.compare_user_items as string[]) || [], ["Production support"]);
+  const nextUnits = ((first.specialist.compare_compare_units as unknown[]) || []) as Record<string, unknown>[];
   assert.equal(
     String(nextUnits[1]?.feedback_reason_text || ""),
     "This suggestion keeps the service wording more precise."
   );
 });
 
-test("applyWordingPickSelection keeps removals when user picks own edited list", () => {
+test("applyComparePickSelection keeps removals when user picks own edited list", () => {
   const helpers = buildHelpers(true);
-  const applyResult = helpers.applyWordingPickSelection({
+  const applyResult = helpers.applyComparePickSelection({
     stepId: "productsservices",
-    routeToken: "__WORDING_PICK_USER__",
+    routeToken: "__COMPARE_PICK_USER__",
     state: {
       current_step: "productsservices",
       active_specialist: "ProductsAndServices",
       last_specialist_result: {
-        wording_choice_pending: "true",
-        wording_choice_mode: "list",
-        wording_choice_target_field: "productsservices",
-        wording_choice_list_semantics: "full",
-        wording_choice_base_items: [
+        compare_pending: "true",
+        compare_mode: "list",
+        compare_target_field: "productsservices",
+        compare_list_semantics: "full",
+        compare_base_items: [
           "AI-compatible websites and apps",
           "AI-tools and support",
           "Branding",
           "Strategy",
           "The rest we do not do",
         ],
-        wording_choice_user_items: [
+        compare_user_items: [
           "AI-compatible websites and apps",
           "AI-tools and support",
           "Branding",
           "Strategy",
         ],
-        wording_choice_suggestion_items: [
+        compare_suggestion_items: [
           "AI-compatible websites and apps",
           "AI-tools and support",
           "Branding",
           "Strategy",
         ],
-        wording_choice_user_normalized: [
+        compare_user_normalized: [
           "AI-compatible websites and apps",
           "AI-tools and support",
           "Branding",
           "Strategy",
         ].join("\n"),
-        wording_choice_agent_current: [
+        compare_agent_current: [
           "AI-compatible websites and apps",
           "AI-tools and support",
           "Branding",
@@ -2871,9 +2871,9 @@ test("applyWordingPickSelection keeps removals when user picks own edited list",
   );
 });
 
-test("buildWordingChoiceFromTurn never enables wording-choice for presentation step", () => {
+test("buildCompareFromTurn never enables compare for presentation step", () => {
   const helpers = buildHelpers(true);
-  const result = helpers.buildWordingChoiceFromTurn({
+  const result = helpers.buildCompareFromTurn({
     stepId: "presentation",
     state: {} as any,
     activeSpecialist: "Presentation",
@@ -2889,13 +2889,13 @@ test("buildWordingChoiceFromTurn never enables wording-choice for presentation s
     isOfftopic: false,
   });
 
-  assert.equal(result.wordingChoice, null);
-  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "false");
+  assert.equal(result.compare, null);
+  assert.equal(String((result.specialist as Record<string, unknown>).compare_pending || ""), "false");
 });
 
-test("buildWordingChoiceFromTurn strips markup from picker pending wording fields", () => {
+test("buildCompareFromTurn strips markup from picker pending compare fields", () => {
   const helpers = buildHelpers(true);
-  const result = helpers.buildWordingChoiceFromTurn({
+  const result = helpers.buildCompareFromTurn({
     stepId: "targetgroup",
     state: {} as any,
     activeSpecialist: "TargetGroup",
@@ -2912,32 +2912,32 @@ test("buildWordingChoiceFromTurn strips markup from picker pending wording field
     isOfftopic: false,
   });
 
-  assert.ok(result.wordingChoice);
-  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_presentation || ""), "picker");
+  assert.ok(result.compare);
+  assert.equal(String((result.specialist as Record<string, unknown>).compare_presentation || ""), "picker");
   assert.doesNotMatch(
-    String((result.specialist as Record<string, unknown>).wording_choice_user_normalized || ""),
+    String((result.specialist as Record<string, unknown>).compare_user_normalized || ""),
     /<[^>]+>/
   );
   assert.doesNotMatch(
-    String((result.specialist as Record<string, unknown>).wording_choice_agent_current || ""),
+    String((result.specialist as Record<string, unknown>).compare_agent_current || ""),
     /<[^>]+>/
   );
 });
 
-test("applyWordingPickSelection strips markup before committing selected wording", () => {
+test("applyComparePickSelection strips markup before committing selected compare result", () => {
   const helpers = buildHelpers(true);
-  const applyResult = helpers.applyWordingPickSelection({
+  const applyResult = helpers.applyComparePickSelection({
     stepId: "targetgroup",
-    routeToken: "__WORDING_PICK_SUGGESTION__",
+    routeToken: "__COMPARE_PICK_SUGGESTION__",
     state: {
       current_step: "targetgroup",
       active_specialist: "TargetGroup",
       last_specialist_result: {
-        wording_choice_pending: "true",
-        wording_choice_mode: "text",
-        wording_choice_target_field: "targetgroup",
-        wording_choice_user_normalized: "bedrijven met complexe producten",
-        wording_choice_agent_current: "<strong>Technische mkb-bedrijven</strong> met complexe vraagstukken.",
+        compare_pending: "true",
+        compare_mode: "text",
+        compare_target_field: "targetgroup",
+        compare_user_normalized: "bedrijven met complexe producten",
+        compare_agent_current: "<strong>Technische mkb-bedrijven</strong> met complexe vraagstukken.",
       },
     } as any,
   });
@@ -2947,7 +2947,7 @@ test("applyWordingPickSelection strips markup before committing selected wording
   assert.doesNotMatch(String(applyResult.specialist.targetgroup || ""), /<[^>]+>/);
 });
 
-test("buildWordingChoiceFromTurn unwraps current-context heading before equivalence check", () => {
+test("buildCompareFromTurn unwraps current-context heading before equivalence check", () => {
   const heading = "Je huidige bestaansreden voor Mindd is:";
   const value = "Mindd helpt ondernemers hun visie om te zetten in scherpe keuzes en consistente uitvoering.";
   const wrapped = `${heading}\n${value}`;
@@ -2956,7 +2956,7 @@ test("buildWordingChoiceFromTurn unwraps current-context heading before equivale
     heading,
     suggestion: wrapped,
   });
-  const result = helpers.buildWordingChoiceFromTurn({
+  const result = helpers.buildCompareFromTurn({
     stepId: "purpose",
     state: {} as any,
     activeSpecialist: "Purpose",
@@ -2969,13 +2969,13 @@ test("buildWordingChoiceFromTurn unwraps current-context heading before equivale
     userTextRaw: value,
     isOfftopic: false,
   });
-  assert.equal(result.wordingChoice, null);
-  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "false");
+  assert.equal(result.compare, null);
+  assert.equal(String((result.specialist as Record<string, unknown>).compare_pending || ""), "false");
   assert.equal(String((result.specialist as Record<string, unknown>).refined_formulation || ""), value);
   assert.equal(String((result.specialist as Record<string, unknown>).purpose || ""), value);
 });
 
-test("applyWordingPickSelection unwraps current-context heading before committing suggestion", () => {
+test("applyComparePickSelection unwraps current-context heading before committing suggestion", () => {
   const heading = "Je huidige bestaansreden voor Mindd is:";
   const value = "Mindd helpt ondernemers hun visie om te zetten in scherpe keuzes en consistente uitvoering.";
   const wrapped = `${heading}\n${value}`;
@@ -2985,18 +2985,18 @@ test("applyWordingPickSelection unwraps current-context heading before committin
     suggestion: wrapped,
     equivalent: false,
   });
-  const applyResult = helpers.applyWordingPickSelection({
+  const applyResult = helpers.applyComparePickSelection({
     stepId: "purpose",
-    routeToken: "__WORDING_PICK_SUGGESTION__",
+    routeToken: "__COMPARE_PICK_SUGGESTION__",
     state: {
       current_step: "purpose",
       active_specialist: "Purpose",
       last_specialist_result: {
-        wording_choice_pending: "true",
-        wording_choice_mode: "text",
-        wording_choice_target_field: "purpose",
-        wording_choice_user_normalized: value,
-        wording_choice_agent_current: wrapped,
+        compare_pending: "true",
+        compare_mode: "text",
+        compare_target_field: "purpose",
+        compare_user_normalized: value,
+        compare_agent_current: wrapped,
       },
     } as any,
   });
@@ -3004,10 +3004,10 @@ test("applyWordingPickSelection unwraps current-context heading before committin
   assert.equal(applyResult.handled, true);
   assert.equal(String(applyResult.specialist.refined_formulation || ""), value);
   assert.equal(String(applyResult.specialist.purpose || ""), value);
-  assert.equal(String(applyResult.specialist.wording_choice_agent_current || ""), value);
+  assert.equal(String(applyResult.specialist.compare_agent_current || ""), value);
 });
 
-test("buildWordingChoiceFromTurn unwraps autosuggest heading before equivalence check", () => {
+test("buildCompareFromTurn unwraps autosuggest heading before equivalence check", () => {
   const heading = "Based on your input I suggest the following Dream:";
   const value = "Mindd droomt van een wereld waarin mensen met vertrouwen keuzes maken.";
   const wrapped = `${heading}\n${value}`;
@@ -3016,7 +3016,7 @@ test("buildWordingChoiceFromTurn unwraps autosuggest heading before equivalence 
     heading: "Je huidige droom voor Mindd is:",
     suggestion: wrapped,
   });
-  const result = helpers.buildWordingChoiceFromTurn({
+  const result = helpers.buildCompareFromTurn({
     stepId: "dream",
     state: {} as any,
     activeSpecialist: "Dream",
@@ -3029,13 +3029,13 @@ test("buildWordingChoiceFromTurn unwraps autosuggest heading before equivalence 
     userTextRaw: value,
     isOfftopic: false,
   });
-  assert.equal(result.wordingChoice, null);
-  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "false");
+  assert.equal(result.compare, null);
+  assert.equal(String((result.specialist as Record<string, unknown>).compare_pending || ""), "false");
   assert.equal(String((result.specialist as Record<string, unknown>).refined_formulation || ""), value);
   assert.equal(String((result.specialist as Record<string, unknown>).dream || ""), value);
 });
 
-test("applyWordingPickSelection unwraps autosuggest heading before committing suggestion", () => {
+test("applyComparePickSelection unwraps autosuggest heading before committing suggestion", () => {
   const heading = "Based on your input I suggest the following Dream:";
   const value = "Mindd droomt van een wereld waarin mensen met vertrouwen keuzes maken.";
   const wrapped = `${heading}\n${value}`;
@@ -3045,18 +3045,18 @@ test("applyWordingPickSelection unwraps autosuggest heading before committing su
     suggestion: wrapped,
     equivalent: false,
   });
-  const applyResult = helpers.applyWordingPickSelection({
+  const applyResult = helpers.applyComparePickSelection({
     stepId: "dream",
-    routeToken: "__WORDING_PICK_SUGGESTION__",
+    routeToken: "__COMPARE_PICK_SUGGESTION__",
     state: {
       current_step: "dream",
       active_specialist: "Dream",
       last_specialist_result: {
-        wording_choice_pending: "true",
-        wording_choice_mode: "text",
-        wording_choice_target_field: "dream",
-        wording_choice_user_normalized: value,
-        wording_choice_agent_current: wrapped,
+        compare_pending: "true",
+        compare_mode: "text",
+        compare_target_field: "dream",
+        compare_user_normalized: value,
+        compare_agent_current: wrapped,
       },
     } as any,
   });
@@ -3064,24 +3064,24 @@ test("applyWordingPickSelection unwraps autosuggest heading before committing su
   assert.equal(applyResult.handled, true);
   assert.equal(String(applyResult.specialist.refined_formulation || ""), value);
   assert.equal(String(applyResult.specialist.dream || ""), value);
-  assert.equal(String(applyResult.specialist.wording_choice_agent_current || ""), value);
+  assert.equal(String(applyResult.specialist.compare_agent_current || ""), value);
 });
 
-test("applyWordingPickSelection clears stale current-value refinement context after suggestion pick", () => {
+test("applyComparePickSelection clears stale current-value refinement context after suggestion pick", () => {
   const helpers = buildHelpers(true);
   const chosen = "Retailbedrijven in de Randstad met marketingteams";
-  const applyResult = helpers.applyWordingPickSelection({
+  const applyResult = helpers.applyComparePickSelection({
     stepId: "targetgroup",
-    routeToken: "__WORDING_PICK_SUGGESTION__",
+    routeToken: "__COMPARE_PICK_SUGGESTION__",
     state: {
       current_step: "targetgroup",
       active_specialist: "TargetGroup",
       last_specialist_result: {
-        wording_choice_pending: "true",
-        wording_choice_mode: "text",
-        wording_choice_target_field: "targetgroup",
-        wording_choice_user_normalized: "Bedrijven in de retailsector",
-        wording_choice_agent_current: chosen,
+        compare_pending: "true",
+        compare_mode: "text",
+        compare_target_field: "targetgroup",
+        compare_user_normalized: "Bedrijven in de retailsector",
+        compare_agent_current: chosen,
         current_value_refinement_pending: "true",
         current_value_refinement_target_field: "targetgroup",
         current_value_refinement_feedback_text:
@@ -3096,7 +3096,7 @@ test("applyWordingPickSelection clears stale current-value refinement context af
   assert.equal(applyResult.handled, true);
   assert.equal(String(applyResult.specialist.refined_formulation || ""), chosen);
   assert.equal(String(applyResult.specialist.targetgroup || ""), chosen);
-  assert.equal(String(applyResult.specialist.wording_choice_selected || ""), "suggestion");
+  assert.equal(String(applyResult.specialist.compare_selected || ""), "suggestion");
   assert.equal(String(applyResult.specialist.current_value_refinement_pending || ""), "false");
   assert.equal(String(applyResult.specialist.current_value_refinement_target_field || ""), "");
   assert.equal(String(applyResult.specialist.current_value_refinement_feedback_text || ""), "");
@@ -3104,7 +3104,7 @@ test("applyWordingPickSelection clears stale current-value refinement context af
   assert.equal(String(applyResult.specialist.feedback_reason_text || ""), "");
 });
 
-test("applyWordingPickSelection strips stale autosuggest UI contracts after suggestion pick", () => {
+test("applyComparePickSelection strips stale autosuggest UI contracts after suggestion pick", () => {
   const heading = "Je huidige entiteit voor Mindd is:";
   const chosen = "strategisch communicatiebureau";
   const helpers = buildHeadingAwareSingleValueHelpers({
@@ -3112,18 +3112,18 @@ test("applyWordingPickSelection strips stale autosuggest UI contracts after sugg
     heading,
     suggestion: chosen,
   });
-  const applyResult = helpers.applyWordingPickSelection({
+  const applyResult = helpers.applyComparePickSelection({
     stepId: "entity",
-    routeToken: "__WORDING_PICK_SUGGESTION__",
+    routeToken: "__COMPARE_PICK_SUGGESTION__",
     state: {
       current_step: "entity",
       active_specialist: "Entity",
       last_specialist_result: {
-        wording_choice_pending: "true",
-        wording_choice_mode: "text",
-        wording_choice_target_field: "entity",
-        wording_choice_user_normalized: "gevoel voor communicatie",
-        wording_choice_agent_current: chosen,
+        compare_pending: "true",
+        compare_mode: "text",
+        compare_target_field: "entity",
+        compare_user_normalized: "gevoel voor communicatie",
+        compare_agent_current: chosen,
         ui_feedback_contract: {
           kind: "single_value_canonical_suggestion",
           heading: "OP BASIS VAN JE INPUT STEL IK DE VOLGENDE ENTITEIT VOOR:",
@@ -3141,7 +3141,7 @@ test("applyWordingPickSelection strips stale autosuggest UI contracts after sugg
   });
 
   assert.equal(applyResult.handled, true);
-  assert.equal(String(applyResult.specialist.wording_choice_selected || ""), "suggestion");
+  assert.equal(String(applyResult.specialist.compare_selected || ""), "suggestion");
   assert.equal(String(applyResult.specialist.entity || ""), chosen);
   assert.match(String(applyResult.specialist.message || ""), /je huidige entiteit voor mindd is:/i);
   assert.doesNotMatch(String(applyResult.specialist.message || ""), /op basis van je input stel ik/i);
@@ -3149,7 +3149,7 @@ test("applyWordingPickSelection strips stale autosuggest UI contracts after sugg
   assert.equal("ui_content" in applyResult.specialist, false);
 });
 
-test("applyWordingPickSelection preserves feedback reason when user picks own single-value wording", () => {
+test("applyComparePickSelection preserves feedback reason when user picks own single-value compare result", () => {
   const heading = "Je huidige droom voor Mindd is:";
   const userValue = "Mindd droomt van een wereld waarin mensen met vertrouwen keuzes maken.";
   const suggestionValue = "Mindd droomt van een wereld waarin mensen zonder zorgen complexe keuzes durven maken.";
@@ -3161,25 +3161,25 @@ test("applyWordingPickSelection preserves feedback reason when user picks own si
     suggestion: suggestionValue,
     equivalent: false,
   });
-  const applyResult = helpers.applyWordingPickSelection({
+  const applyResult = helpers.applyComparePickSelection({
     stepId: "dream",
-    routeToken: "__WORDING_PICK_USER__",
+    routeToken: "__COMPARE_PICK_USER__",
     state: {
       current_step: "dream",
       active_specialist: "Dream",
       last_specialist_result: {
-        wording_choice_pending: "true",
-        wording_choice_mode: "text",
-        wording_choice_target_field: "dream",
-        wording_choice_user_normalized: userValue,
-        wording_choice_agent_current: suggestionValue,
+        compare_pending: "true",
+        compare_mode: "text",
+        compare_target_field: "dream",
+        compare_user_normalized: userValue,
+        compare_agent_current: suggestionValue,
         feedback_reason_text: feedbackReason,
       },
     } as any,
   });
 
   assert.equal(applyResult.handled, true);
-  assert.equal(String(applyResult.specialist.wording_choice_selected || ""), "user");
+  assert.equal(String(applyResult.specialist.compare_selected || ""), "user");
   assert.equal(String(applyResult.specialist.feedback_reason_text || ""), feedbackReason);
   assert.match(String(applyResult.specialist.message || ""), /your own wording is completely okay/i);
   assert.match(String(applyResult.specialist.message || ""), /toekomstbeeld waarin mensen zich zekerder/i);
@@ -3187,7 +3187,7 @@ test("applyWordingPickSelection preserves feedback reason when user picks own si
   assert.match(String(applyResult.specialist.message || ""), /mindd droomt van een wereld waarin mensen met vertrouwen keuzes maken/i);
 });
 
-test("applyWordingPickSelection falls back to the user-pick reason when explicit feedback is missing", () => {
+test("applyComparePickSelection falls back to the user-pick reason when explicit feedback is missing", () => {
   const heading = "Je huidige droom voor Mindd is:";
   const userValue = "Mindd droomt van een wereld waarin mensen met vertrouwen keuzes maken.";
   const suggestionValue = "Mindd droomt van een wereld waarin mensen zonder zorgen complexe keuzes durven maken.";
@@ -3198,24 +3198,24 @@ test("applyWordingPickSelection falls back to the user-pick reason when explicit
     equivalent: false,
   });
 
-  const applyResult = helpers.applyWordingPickSelection({
+  const applyResult = helpers.applyComparePickSelection({
     stepId: "dream",
-    routeToken: "__WORDING_PICK_USER__",
+    routeToken: "__COMPARE_PICK_USER__",
     state: {
       current_step: "dream",
       active_specialist: "Dream",
       last_specialist_result: {
-        wording_choice_pending: "true",
-        wording_choice_mode: "text",
-        wording_choice_target_field: "dream",
-        wording_choice_user_normalized: userValue,
-        wording_choice_agent_current: suggestionValue,
+        compare_pending: "true",
+        compare_mode: "text",
+        compare_target_field: "dream",
+        compare_user_normalized: userValue,
+        compare_agent_current: suggestionValue,
       },
     } as any,
   });
 
   assert.equal(applyResult.handled, true);
-  assert.equal(String(applyResult.specialist.wording_choice_selected || ""), "user");
+  assert.equal(String(applyResult.specialist.compare_selected || ""), "user");
   assert.equal(
     String(applyResult.specialist.feedback_reason_text || ""),
     "Keep in mind what makes this step strong, so your wording stays clear and aligned."
@@ -3225,7 +3225,7 @@ test("applyWordingPickSelection falls back to the user-pick reason when explicit
   assert.match(String(applyResult.specialist.message || ""), /je huidige droom voor mindd is:/i);
 });
 
-test("applyWordingPickSelection replaces generic user-pick feedback with the fallback reason", () => {
+test("applyComparePickSelection replaces generic user-pick feedback with the fallback reason", () => {
   const heading = "Je huidige bestaansreden voor Mindd is:";
   const userValue = "Mindd bestaat om bij te dragen aan een wereld waarin communicatie en verhalen authentiek, eerlijk en origineel zijn.";
   const suggestionValue = "Mindd bestaat om communicatie en verhalen authentiek, eerlijk en origineel te maken, zodat echte mensen en echte waarden centraal staan.";
@@ -3236,21 +3236,21 @@ test("applyWordingPickSelection replaces generic user-pick feedback with the fal
     equivalent: false,
   });
 
-  const applyResult = helpers.applyWordingPickSelection({
+  const applyResult = helpers.applyComparePickSelection({
     stepId: "purpose",
-    routeToken: "__WORDING_PICK_USER__",
+    routeToken: "__COMPARE_PICK_USER__",
     state: {
       current_step: "purpose",
       active_specialist: "Purpose",
       ui_strings: {
-        "wording.feedback.reason.generic": "Ik denk dat ik begrijp wat je bedoelt.",
+        "compare.feedback.reason.generic": "Ik denk dat ik begrijp wat je bedoelt.",
       },
       last_specialist_result: {
-        wording_choice_pending: "true",
-        wording_choice_mode: "text",
-        wording_choice_target_field: "purpose",
-        wording_choice_user_normalized: userValue,
-        wording_choice_agent_current: suggestionValue,
+        compare_pending: "true",
+        compare_mode: "text",
+        compare_target_field: "purpose",
+        compare_user_normalized: userValue,
+        compare_agent_current: suggestionValue,
         feedback_reason_key: "generic",
         feedback_reason_text: "Ik denk dat ik begrijp wat je bedoelt.",
       },
@@ -3266,7 +3266,7 @@ test("applyWordingPickSelection replaces generic user-pick feedback with the fal
   assert.match(String(applyResult.specialist.message || ""), /keep in mind what makes this step strong/i);
 });
 
-test("buildWordingChoiceFromTurn keeps canonical pending during forced pending feedback even when suggestion is equivalent", () => {
+test("buildCompareFromTurn keeps canonical pending during forced pending feedback even when suggestion is equivalent", () => {
   const scenarios = [
     {
       stepId: "dream" as const,
@@ -3293,15 +3293,15 @@ test("buildWordingChoiceFromTurn keeps canonical pending during forced pending f
       suggestion: scenario.value,
       equivalent: true,
     });
-    const result = helpers.buildWordingChoiceFromTurn({
+    const result = helpers.buildCompareFromTurn({
       stepId: scenario.stepId,
       state: {} as any,
       activeSpecialist: scenario.activeSpecialist,
       previousSpecialist: {
-        wording_choice_pending: "true",
-        wording_choice_mode: "text",
-        wording_choice_user_normalized: scenario.value,
-        wording_choice_agent_current: scenario.value,
+        compare_pending: "true",
+        compare_mode: "text",
+        compare_user_normalized: scenario.value,
+        compare_agent_current: scenario.value,
       },
       specialistResult: {
         message: "Dat is een goed beginpunt.",
@@ -3315,27 +3315,27 @@ test("buildWordingChoiceFromTurn keeps canonical pending during forced pending f
       submittedFeedbackText: "Dit voelt nog te vlak.",
     });
 
-    assert.equal(result.wordingChoice, null);
-    assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "true");
-    assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_presentation || ""), "canonical");
+    assert.equal(result.compare, null);
+    assert.equal(String((result.specialist as Record<string, unknown>).compare_pending || ""), "true");
+    assert.equal(String((result.specialist as Record<string, unknown>).compare_presentation || ""), "canonical");
     assert.equal(String((result.specialist as Record<string, unknown>).pending_suggestion_anchor || ""), "suggestion");
     assert.equal(String((result.specialist as Record<string, unknown>).pending_suggestion_intent || ""), "feedback_on_suggestion");
     assert.equal(String((result.specialist as Record<string, unknown>).feedback_reason_text || "").trim(), "");
   }
 });
 
-test("buildWordingChoiceFromTurn bypasses contributing-input gate while forced pending feedback is active", () => {
+test("buildCompareFromTurn bypasses contributing-input gate while forced pending feedback is active", () => {
   const helpers = buildHelpers(true);
   const value = "Mindd bestaat om complexe keuzes begrijpelijk te maken.";
-  const result = helpers.buildWordingChoiceFromTurn({
+  const result = helpers.buildCompareFromTurn({
     stepId: "purpose",
     state: {} as any,
     activeSpecialist: "Purpose",
     previousSpecialist: {
-      wording_choice_pending: "true",
-      wording_choice_mode: "text",
-      wording_choice_user_normalized: value,
-      wording_choice_agent_current: value,
+      compare_pending: "true",
+      compare_mode: "text",
+      compare_user_normalized: value,
+      compare_agent_current: value,
     },
     specialistResult: {
       message: "Dat is een goed beginpunt.",
@@ -3350,14 +3350,14 @@ test("buildWordingChoiceFromTurn bypasses contributing-input gate while forced p
     submittedFeedbackText: "Dat is niet wat ik bedoel.",
   });
 
-  assert.equal(result.wordingChoice, null);
-  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "true");
-  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_presentation || ""), "canonical");
+  assert.equal(result.compare, null);
+  assert.equal(String((result.specialist as Record<string, unknown>).compare_pending || ""), "true");
+  assert.equal(String((result.specialist as Record<string, unknown>).compare_presentation || ""), "canonical");
 });
 
-test("buildWordingChoiceFromTurn does not open compare when feedback mode affirms the user input", () => {
+test("buildCompareFromTurn does not open compare when feedback mode affirms the user input", () => {
   const helpers = buildHelpers(true);
-  const result = helpers.buildWordingChoiceFromTurn({
+  const result = helpers.buildCompareFromTurn({
     stepId: "purpose",
     state: {} as any,
     activeSpecialist: "Purpose",
@@ -3381,8 +3381,8 @@ test("buildWordingChoiceFromTurn does not open compare when feedback mode affirm
     submittedFeedbackText: "",
   });
 
-  assert.equal(result.wordingChoice, null);
-  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "true");
-  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_presentation || ""), "canonical");
+  assert.equal(result.compare, null);
+  assert.equal(String((result.specialist as Record<string, unknown>).compare_pending || ""), "true");
+  assert.equal(String((result.specialist as Record<string, unknown>).compare_presentation || ""), "canonical");
   assert.equal(String((result.specialist as Record<string, unknown>).feedback_mode || ""), "affirm_input");
 });

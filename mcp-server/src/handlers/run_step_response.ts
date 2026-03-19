@@ -132,18 +132,14 @@ function stringArrayLength(value: unknown): number {
     : 0;
 }
 
-function feedbackContractRecord(ui: Record<string, unknown>): Record<string, unknown> {
-  return asLogRecord(ui.feedback_contract);
+function pendingInteractionRecord(ui: Record<string, unknown>): Record<string, unknown> {
+  return asLogRecord(ui.pending_interaction);
 }
 
-function feedbackContractIsCompare(feedbackContract: Record<string, unknown>): boolean {
-  const kind = trimmedString(feedbackContract.kind).toLowerCase();
-  return (
-    kind === "single_value_compare" ||
-    kind === "grouped_list_compare" ||
-    kind === "list_edit_compare" ||
-    kind === "list_duplicate_merge_compare"
-  );
+function pendingInteractionIsCompare(pendingInteraction: Record<string, unknown>): boolean {
+  const kind = trimmedString(pendingInteraction.kind).toLowerCase();
+  const status = trimmedString(pendingInteraction.status).toLowerCase();
+  return (kind === "text_compare" || kind === "list_compare") && status === "pending";
 }
 
 function dreamBuilderContractIsCompare(dreamBuilderContract: Record<string, unknown>): boolean {
@@ -153,33 +149,29 @@ function dreamBuilderContractIsCompare(dreamBuilderContract: Record<string, unkn
   return kind === "batch_rewrite_compare" || kind === "overlap_merge_compare";
 }
 
-function wordingChoiceModeForLogs(
-  uiWordingChoice: Record<string, unknown>,
-  feedbackContract: Record<string, unknown>,
+function compareModeForLogs(
+  pendingInteraction: Record<string, unknown>,
   specialist: Record<string, unknown>,
   dreamBuilderContract?: Record<string, unknown>
 ): string {
   if (dreamBuilderContractIsCompare(asLogRecord(dreamBuilderContract))) {
     return "list";
   }
-  return trimmedString(
-    uiWordingChoice.mode || feedbackContract.mode || specialist.wording_choice_mode
-  ).toLowerCase();
+  const renderModel = asLogRecord(pendingInteraction.render_model);
+  return trimmedString(renderModel.mode || specialist.compare_mode).toLowerCase();
 }
 
-function wordingChoiceVariantForLogs(
-  uiWordingChoice: Record<string, unknown>,
-  feedbackContract: Record<string, unknown>,
+function compareVariantForLogs(
+  pendingInteraction: Record<string, unknown>,
   specialist: Record<string, unknown>,
   dreamBuilderContract?: Record<string, unknown>
 ): string {
-  const explicit = trimmedString(uiWordingChoice.variant || specialist.wording_choice_variant).toLowerCase();
+  const renderModel = asLogRecord(pendingInteraction.render_model);
+  const explicit = trimmedString(renderModel.variant || specialist.compare_variant).toLowerCase();
   if (explicit) return explicit;
   if (dreamBuilderContractIsCompare(asLogRecord(dreamBuilderContract))) {
     return trimmedString(asLogRecord(asLogRecord(dreamBuilderContract).compare).kind).toLowerCase();
   }
-  const kind = trimmedString(feedbackContract.kind).toLowerCase();
-  if (kind === "grouped_list_compare") return "grouped_list_units";
   return "";
 }
 
@@ -195,9 +187,8 @@ function emitUsageAnalyticsEvents(
 ): void {
   const ui = asLogRecord(response.ui);
   const uiView = asLogRecord(ui.view);
-  const uiWordingChoice = asLogRecord(ui.wording_choice);
+  const uiPendingInteraction = pendingInteractionRecord(ui);
   const uiDreamBuilderContract = asLogRecord(ui.dream_builder_contract);
-  const uiFeedbackContract = feedbackContractRecord(ui);
   const specialist =
     Object.keys(asLogRecord(state.last_specialist_result)).length > 0
       ? asLogRecord(state.last_specialist_result)
@@ -206,27 +197,24 @@ function emitUsageAnalyticsEvents(
   const sessionTurnIndex = numericTurnIndex(state.__session_turn_index);
   const uiViewMode = trimmedString(uiView.mode).toLowerCase();
   const uiViewVariant = trimmedString(uiView.variant).toLowerCase();
-  const wordingChoicePending = trimmedString(specialist.wording_choice_pending).toLowerCase() === "true";
-  const wordingChoiceEnabled =
-    uiWordingChoice.enabled === true ||
-    feedbackContractIsCompare(uiFeedbackContract) ||
+  const comparePending = trimmedString(specialist.compare_pending).toLowerCase() === "true";
+  const compareEnabled =
+    pendingInteractionIsCompare(uiPendingInteraction) ||
     dreamBuilderContractIsCompare(uiDreamBuilderContract) ||
-    wordingChoicePending;
-  const wordingChoiceMode = wordingChoiceModeForLogs(
-    uiWordingChoice,
-    uiFeedbackContract,
+    comparePending;
+  const compareMode = compareModeForLogs(
+    uiPendingInteraction,
     specialist,
     uiDreamBuilderContract
   );
-  const wordingChoicePresentation = trimmedString(specialist.wording_choice_presentation).toLowerCase();
-  const wordingChoiceVariant = wordingChoiceVariantForLogs(
-    uiWordingChoice,
-    uiFeedbackContract,
+  const comparePresentation = trimmedString(specialist.compare_presentation).toLowerCase();
+  const compareVariant = compareVariantForLogs(
+    uiPendingInteraction,
     specialist,
     uiDreamBuilderContract
   );
-  const wordingChoiceTargetField = trimmedString(specialist.wording_choice_target_field).toLowerCase();
-  const wordingChoiceSelected = trimmedString(specialist.wording_choice_selected).toLowerCase();
+  const compareTargetField = trimmedString(specialist.compare_target_field).toLowerCase();
+  const compareSelected = trimmedString(specialist.compare_selected).toLowerCase();
   const analyticsBase = {
     analytics_schema: "bsc_app_usage_v1",
     session_turn_index: sessionTurnIndex,
@@ -242,27 +230,27 @@ function emitUsageAnalyticsEvents(
 
   logStructuredEvent("info", "app_usage_step_viewed", decisionContext, {
     ...analyticsBase,
-    wording_choice_enabled: wordingChoiceEnabled ? "true" : "false",
+    compare_enabled: compareEnabled ? "true" : "false",
   });
 
-  if (wordingChoiceEnabled) {
-    logStructuredEvent("info", "app_usage_wording_choice_shown", decisionContext, {
+  if (compareEnabled) {
+    logStructuredEvent("info", "app_usage_compare_shown", decisionContext, {
       ...analyticsBase,
-      wording_choice_mode: wordingChoiceMode,
-      wording_choice_presentation: wordingChoicePresentation,
-      wording_choice_variant: wordingChoiceVariant,
-      wording_choice_target_field: wordingChoiceTargetField,
+      compare_mode: compareMode,
+      compare_presentation: comparePresentation,
+      compare_variant: compareVariant,
+      compare_target_field: compareTargetField,
     });
   }
 
-  if (wordingChoiceSelected === "user" || wordingChoiceSelected === "suggestion") {
-    logStructuredEvent("info", "app_usage_wording_choice_selected", decisionContext, {
+  if (compareSelected === "user" || compareSelected === "suggestion") {
+    logStructuredEvent("info", "app_usage_compare_selected", decisionContext, {
       ...analyticsBase,
-      wording_choice_mode: wordingChoiceMode,
-      wording_choice_presentation: wordingChoicePresentation,
-      wording_choice_variant: wordingChoiceVariant,
-      wording_choice_target_field: wordingChoiceTargetField,
-      selection: wordingChoiceSelected,
+      compare_mode: compareMode,
+      compare_presentation: comparePresentation,
+      compare_variant: compareVariant,
+      compare_target_field: compareTargetField,
+      selection: compareSelected,
     });
   }
 }
@@ -273,17 +261,16 @@ function buildUiRenderDecisionLogDetails(
 ): Record<string, unknown> {
   const ui = asLogRecord(response.ui);
   const uiView = asLogRecord(ui.view);
-  const uiWordingChoice = asLogRecord(ui.wording_choice);
-  const uiFeedbackContract = feedbackContractRecord(ui);
+  const uiPendingInteraction = pendingInteractionRecord(ui);
   const specialist =
     Object.keys(asLogRecord(state.last_specialist_result)).length > 0
       ? asLogRecord(state.last_specialist_result)
       : asLogRecord(response.specialist);
   const promptText = trimmedString(response.prompt);
   const questionText = trimmedString(ui.questionText);
-  const wordingChoicePending = trimmedString(specialist.wording_choice_pending).toLowerCase() === "true";
-  const wordingChoiceEnabled =
-    uiWordingChoice.enabled === true || feedbackContractIsCompare(uiFeedbackContract) || wordingChoicePending;
+  const comparePending = trimmedString(specialist.compare_pending).toLowerCase() === "true";
+  const compareEnabled =
+    pendingInteractionIsCompare(uiPendingInteraction) || comparePending;
   return {
     ui_view_mode: trimmedString(uiView.mode).toLowerCase(),
     ui_view_variant: trimmedString(uiView.variant).toLowerCase(),
@@ -293,32 +280,32 @@ function buildUiRenderDecisionLogDetails(
     question_text: questionText,
     question_present: questionText ? "true" : "false",
     question_len: questionText.length,
-    wording_choice_enabled: wordingChoiceEnabled ? "true" : "false",
-    wording_choice_pending: wordingChoicePending ? "true" : "false",
-    wording_choice_mode: wordingChoiceModeForLogs(uiWordingChoice, uiFeedbackContract, specialist),
-    wording_choice_presentation: trimmedString(specialist.wording_choice_presentation).toLowerCase(),
-    wording_choice_variant: wordingChoiceVariantForLogs(uiWordingChoice, uiFeedbackContract, specialist),
-    wording_choice_compare_mode: trimmedString(specialist.wording_choice_compare_mode).toLowerCase(),
-    wording_choice_compare_cursor: trimmedString(specialist.wording_choice_compare_cursor),
-    wording_choice_compare_units_count: Array.isArray(specialist.wording_choice_compare_units)
-      ? specialist.wording_choice_compare_units.length
+    compare_enabled: compareEnabled ? "true" : "false",
+    compare_pending: comparePending ? "true" : "false",
+    compare_mode: compareModeForLogs(uiPendingInteraction, specialist),
+    compare_presentation: trimmedString(specialist.compare_presentation).toLowerCase(),
+    compare_variant: compareVariantForLogs(uiPendingInteraction, specialist),
+    compare_compare_mode: trimmedString(specialist.compare_compare_mode).toLowerCase(),
+    compare_compare_cursor: trimmedString(specialist.compare_compare_cursor),
+    compare_compare_units_count: Array.isArray(specialist.compare_compare_units)
+      ? specialist.compare_compare_units.length
       : 0,
-    wording_choice_compare_segments_count: Array.isArray(specialist.wording_choice_compare_segments)
-      ? specialist.wording_choice_compare_segments.length
+    compare_compare_segments_count: Array.isArray(specialist.compare_compare_segments)
+      ? specialist.compare_compare_segments.length
       : 0,
-    wording_choice_selected: trimmedString(specialist.wording_choice_selected).toLowerCase(),
-    wording_choice_user_label: trimmedString(
-      uiWordingChoice.user_label || uiFeedbackContract.current_label || specialist.wording_choice_user_label
+    compare_selected: trimmedString(specialist.compare_selected).toLowerCase(),
+    compare_user_label: trimmedString(
+      asLogRecord(uiPendingInteraction.render_model).user_label || specialist.compare_user_label
     ),
-    wording_choice_suggestion_label: trimmedString(
-      uiWordingChoice.suggestion_label || uiFeedbackContract.suggested_label || specialist.wording_choice_suggestion_label
+    compare_suggestion_label: trimmedString(
+      asLogRecord(uiPendingInteraction.render_model).suggestion_label || specialist.compare_suggestion_label
     ),
-    wording_choice_instruction: trimmedString(uiWordingChoice.instruction || uiFeedbackContract.instruction),
-    wording_choice_user_items_count: stringArrayLength(
-      uiWordingChoice.user_items || uiFeedbackContract.current_items || specialist.wording_choice_user_items
+    compare_instruction: trimmedString(asLogRecord(uiPendingInteraction.render_model).instruction),
+    compare_user_items_count: stringArrayLength(
+      asLogRecord(uiPendingInteraction.render_model).user_items || specialist.compare_user_items
     ),
-    wording_choice_suggestion_items_count: stringArrayLength(
-      uiWordingChoice.suggestion_items || uiFeedbackContract.suggested_items || specialist.wording_choice_suggestion_items
+    compare_suggestion_items_count: stringArrayLength(
+      asLogRecord(uiPendingInteraction.render_model).suggestion_items || specialist.compare_suggestion_items
     ),
   };
 }

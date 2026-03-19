@@ -89,7 +89,7 @@ export function createRunStepRuntimeSpecialistHelpers(deps: CreateRunStepRuntime
       "productsservices",
       "rulesofthegame",
       "presentation_brief",
-      "wording_choice_agent_current",
+      "compare_agent_current",
     ];
     for (const key of localizableKeys) {
       const raw = String(next[key] || "");
@@ -102,8 +102,8 @@ export function createRunStepRuntimeSpecialistHelpers(deps: CreateRunStepRuntime
         .map((line) => String(line || "").trim())
         .filter(Boolean);
     }
-    if (Array.isArray(next.wording_choice_suggestion_items)) {
-      next.wording_choice_suggestion_items = (next.wording_choice_suggestion_items as unknown[])
+    if (Array.isArray(next.compare_suggestion_items)) {
+      next.compare_suggestion_items = (next.compare_suggestion_items as unknown[])
         .map((line) => localizeText(line))
         .map((line) => String(line || "").trim())
         .filter(Boolean);
@@ -149,7 +149,7 @@ export function createRunStepRuntimeSpecialistHelpers(deps: CreateRunStepRuntime
       currentStepId: string;
       activeSpecialist: string;
       canonicalStatementCount: number;
-      wordingChoicePending: boolean;
+      comparePending: boolean;
       state: CanvasState;
     }
   ): Record<string, unknown> {
@@ -172,8 +172,8 @@ export function createRunStepRuntimeSpecialistHelpers(deps: CreateRunStepRuntime
     const hasCollectedInput =
       params.canonicalStatementCount > 0 ||
       specialistStatementsCount > 0 ||
-      params.wordingChoicePending ||
-      String(specialist.wording_choice_pending || "").trim() === "true";
+      params.comparePending ||
+      String(specialist.compare_pending || "").trim() === "true";
     const stage = String((params.state as Record<string, unknown>).__dream_builder_prompt_stage || "").trim();
 
     const baseQuestion = deps.uiStringFromStateMap(

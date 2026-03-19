@@ -29,8 +29,8 @@ test("presentation make route keeps recap visible while adding presentation asse
       switchToSelfDreamToken: "__SWITCH_TO_SELF_DREAM__",
       dreamStartExerciseRouteToken: "__ROUTE__DREAM_START_EXERCISE__",
     },
-    wording: {
-      wordingSelectionMessage: () => "",
+    compare: {
+      compareSelectionMessage: () => "",
       pickPrompt: (specialist: Record<string, unknown>) => String(specialist.question || ""),
       buildTextForWidget: ({ specialist }: { specialist: Record<string, unknown> }) =>
         String(specialist.message || ""),
@@ -162,7 +162,7 @@ test("presentation make route keeps recap visible while adding presentation asse
       actionCodeRaw: "ACTION_PRESENTATION_MAKE",
       responseUiFlags: null,
       inputMode: "widget",
-      wordingChoiceEnabled: true,
+      compareEnabled: true,
       languageResolvedThisTurn: true,
       isBootstrapPollCall: false,
       motivationQuotesEnabled: true,
@@ -218,8 +218,8 @@ test("presentation make route rebuilds a flattened stored recap into structured 
       switchToSelfDreamToken: "__SWITCH_TO_SELF_DREAM__",
       dreamStartExerciseRouteToken: "__ROUTE__DREAM_START_EXERCISE__",
     },
-    wording: {
-      wordingSelectionMessage: () => "",
+    compare: {
+      compareSelectionMessage: () => "",
       pickPrompt: (specialist: Record<string, unknown>) => String(specialist.question || ""),
       buildTextForWidget: ({ specialist }: { specialist: Record<string, unknown> }) =>
         String(specialist.message || ""),
@@ -361,7 +361,7 @@ test("presentation make route rebuilds a flattened stored recap into structured 
       actionCodeRaw: "ACTION_PRESENTATION_MAKE",
       responseUiFlags: null,
       inputMode: "widget",
-      wordingChoiceEnabled: true,
+      compareEnabled: true,
       languageResolvedThisTurn: true,
       isBootstrapPollCall: false,
       motivationQuotesEnabled: true,
@@ -421,8 +421,8 @@ test("presentation make route logs privacy-minimized usage analytics on success"
         switchToSelfDreamToken: "__SWITCH_TO_SELF_DREAM__",
         dreamStartExerciseRouteToken: "__ROUTE__DREAM_START_EXERCISE__",
       },
-      wording: {
-        wordingSelectionMessage: () => "",
+      compare: {
+        compareSelectionMessage: () => "",
         pickPrompt: (specialist: Record<string, unknown>) => String(specialist.question || ""),
         buildTextForWidget: ({ specialist }: { specialist: Record<string, unknown> }) =>
           String(specialist.message || ""),
@@ -545,7 +545,7 @@ test("presentation make route logs privacy-minimized usage analytics on success"
         actionCodeRaw: "ACTION_PRESENTATION_MAKE",
         responseUiFlags: null,
         inputMode: "widget",
-        wordingChoiceEnabled: true,
+        compareEnabled: true,
         languageResolvedThisTurn: true,
         isBootstrapPollCall: false,
         motivationQuotesEnabled: true,
@@ -616,8 +616,8 @@ test("presentation make route logs privacy-minimized usage analytics on failure"
         switchToSelfDreamToken: "__SWITCH_TO_SELF_DREAM__",
         dreamStartExerciseRouteToken: "__ROUTE__DREAM_START_EXERCISE__",
       },
-      wording: {
-        wordingSelectionMessage: () => "",
+      compare: {
+        compareSelectionMessage: () => "",
         pickPrompt: (specialist: Record<string, unknown>) => String(specialist.question || ""),
         buildTextForWidget: ({ specialist }: { specialist: Record<string, unknown> }) =>
           String(specialist.message || ""),
@@ -737,7 +737,7 @@ test("presentation make route logs privacy-minimized usage analytics on failure"
         actionCodeRaw: "ACTION_PRESENTATION_MAKE",
         responseUiFlags: null,
         inputMode: "widget",
-        wordingChoiceEnabled: true,
+        compareEnabled: true,
         languageResolvedThisTurn: true,
         isBootstrapPollCall: false,
         motivationQuotesEnabled: true,

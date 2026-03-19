@@ -384,7 +384,7 @@ Near-duplicate statements against PREVIOUS_STATEMENTS
 - Before appending a new Dream Builder statement, check whether it strongly overlaps with an existing statement in PREVIOUS_STATEMENTS.
 - If the new line is mainly a paraphrase, tense variant, or lightly reworded version of an existing statement, do NOT append it directly.
 - Instead, output action="REFINE" with one merged stronger statement in refined_formulation.
-- In that overlap case, statements MUST stay equal to PREVIOUS_STATEMENTS unchanged until the user confirms or picks the merged wording.
+- In that overlap case, statements MUST stay equal to PREVIOUS_STATEMENTS unchanged until the user confirms or picks the merged compare.
 - Only use direct add (ASK) when the new statement is meaningfully distinct from existing statements.
 
 Multiple personal wishes in one message

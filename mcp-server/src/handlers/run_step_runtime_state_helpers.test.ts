@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { RECAP_INSTRUCTION, createRunStepRuntimeStateHelpers } from "./run_step_runtime_state_helpers.js";
-import { canonicalizeComparableText, parseListItems } from "./run_step_wording_heuristics.js";
+import { canonicalizeComparableText, parseListItems } from "./run_step_compare_heuristics.js";
 
 function buildHelpers() {
   const defaults: Record<string, string> = {
@@ -40,7 +40,7 @@ test("RECAP_INSTRUCTION marks presentation as a persistent recap context", () =>
   assert.match(RECAP_INSTRUCTION, /do NOT restate the full recap in message/i);
 });
 
-test("wordingSelectionMessage normalizes explicit strategy selection to bullets", () => {
+test("compareSelectionMessage normalizes explicit strategy selection to bullets", () => {
   const helpers = buildHelpers();
   const runOn = [
     "Focussen op opdrachten voor grote ondernemingen met complexe diensten of producten",
@@ -50,7 +50,7 @@ test("wordingSelectionMessage normalizes explicit strategy selection to bullets"
     "Gratis demo's en mock-ups uitsluitend inzetten als strategisch middel om langdurige samenwerkingen te initiëren",
   ].join(" ");
 
-  const output = helpers.wordingSelectionMessage(
+  const output = helpers.compareSelectionMessage(
     "strategy",
     { business_name: "Mindd" } as any,
     "Strategy",
@@ -67,11 +67,11 @@ test("clearStepInteractiveState clears wording metadata but keeps provisional st
     {
       current_step: "entity",
       provisional_by_step: { entity: "Mindd is een digitale innovatiepartner voor mkb-bedrijven." },
-      provisional_source_by_step: { entity: "wording_pick" },
+      provisional_source_by_step: { entity: "compare_pick" },
       last_specialist_result: {
-        wording_choice_pending: "true",
-        wording_choice_target_field: "entity",
-        wording_choice_agent_current: "Mindd is een digitale innovatiepartner voor mkb-bedrijven.",
+        compare_pending: "true",
+        compare_target_field: "entity",
+        compare_agent_current: "Mindd is een digitale innovatiepartner voor mkb-bedrijven.",
       },
     } as any,
     "entity"
@@ -81,16 +81,16 @@ test("clearStepInteractiveState clears wording metadata but keeps provisional st
     String((next.provisional_by_step || {}).entity || ""),
     "Mindd is een digitale innovatiepartner voor mkb-bedrijven."
   );
-  assert.equal(String((next.provisional_source_by_step || {}).entity || ""), "wording_pick");
-  assert.equal(String((next.last_specialist_result || {}).wording_choice_pending || ""), "false");
-  assert.equal(String((next.last_specialist_result || {}).wording_choice_agent_current || ""), "");
+  assert.equal(String((next.provisional_source_by_step || {}).entity || ""), "compare_pick");
+  assert.equal(String((next.last_specialist_result || {}).compare_pending || ""), "false");
+  assert.equal(String((next.last_specialist_result || {}).compare_agent_current || ""), "");
 });
 
-test("wordingSelectionMessage normalizes explicit products/services selection to bullets", () => {
+test("compareSelectionMessage normalizes explicit products/services selection to bullets", () => {
   const helpers = buildHelpers();
   const runOn = "AI-compatible websites en apps AI-tools en ondersteuning Branding Strategie";
 
-  const output = helpers.wordingSelectionMessage(
+  const output = helpers.compareSelectionMessage(
     "productsservices",
     { business_name: "Mindd" } as any,
     "ProductsAndServices",
@@ -101,9 +101,9 @@ test("wordingSelectionMessage normalizes explicit products/services selection to
   assert.equal((output.match(/^• /gm) || []).length, 4);
 });
 
-test("wordingSelectionMessage keeps a products/services item with internal commas intact", () => {
+test("compareSelectionMessage keeps a products/services item with internal commas intact", () => {
   const helpers = buildHelpers();
-  const output = helpers.wordingSelectionMessage(
+  const output = helpers.compareSelectionMessage(
     "productsservices",
     { business_name: "Mindd" } as any,
     "ProductsAndServices",
@@ -114,11 +114,11 @@ test("wordingSelectionMessage keeps a products/services item with internal comma
   assert.match(output, /• Traditionele communicatiediensten \(zoals DTP, posters, campagnes\)/);
 });
 
-test("wordingSelectionMessage normalizes explicit rules selection to bullets", () => {
+test("compareSelectionMessage normalizes explicit rules selection to bullets", () => {
   const helpers = buildHelpers();
   const runOn = "We leveren op afspraken We communiceren direct We kiezen kwaliteit boven snelheid";
 
-  const output = helpers.wordingSelectionMessage(
+  const output = helpers.compareSelectionMessage(
     "rulesofthegame",
     { business_name: "Mindd" } as any,
     "RulesOfTheGame",
@@ -129,9 +129,9 @@ test("wordingSelectionMessage normalizes explicit rules selection to bullets", (
   assert.equal((output.match(/^• /gm) || []).length, 3);
 });
 
-test("wordingSelectionMessage uses localized plural rules heading outside Dutch", () => {
+test("compareSelectionMessage uses localized plural rules heading outside Dutch", () => {
   const helpers = buildHelpers();
-  const output = helpers.wordingSelectionMessage(
+  const output = helpers.compareSelectionMessage(
     "rulesofthegame",
     {
       business_name: "Mindd",

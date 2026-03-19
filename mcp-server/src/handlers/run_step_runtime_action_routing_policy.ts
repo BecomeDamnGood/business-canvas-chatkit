@@ -93,7 +93,7 @@ export function resolveRequiredFinalValue(params: {
       provisionalValue,
       previousSpecialist[specialistField],
       previousSpecialist.refined_formulation,
-      previousSpecialist.wording_choice_agent_current,
+      previousSpecialist.compare_agent_current,
       previousCanonicalText,
       state[finalField]
     ),

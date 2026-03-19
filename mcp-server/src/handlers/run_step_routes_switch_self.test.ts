@@ -24,8 +24,8 @@ test("dream_switch_to_self uses catalog copy for switch-to-self body", async () 
       switchToSelfDreamToken: "__SWITCH_TO_SELF_DREAM__",
       dreamStartExerciseRouteToken: "__ROUTE__DREAM_START_EXERCISE__",
     },
-    wording: {
-      wordingSelectionMessage: () => "",
+    compare: {
+      compareSelectionMessage: () => "",
       pickPrompt: (specialist: Record<string, unknown>) => String(specialist.question || ""),
       buildTextForWidget: ({ specialist }: { specialist: Record<string, unknown> }) => String(specialist.message || ""),
     },
@@ -135,7 +135,7 @@ test("dream_switch_to_self uses catalog copy for switch-to-self body", async () 
       actionCodeRaw: "ACTION_DREAM_SWITCH_TO_SELF",
       responseUiFlags: null,
       inputMode: "widget",
-      wordingChoiceEnabled: true,
+      compareEnabled: true,
       languageResolvedThisTurn: true,
       isBootstrapPollCall: false,
       motivationQuotesEnabled: true,
@@ -202,8 +202,8 @@ test("dream_switch_to_self clears staged dream value but preserves Dream Builder
       switchToSelfDreamToken: "__SWITCH_TO_SELF_DREAM__",
       dreamStartExerciseRouteToken: "__ROUTE__DREAM_START_EXERCISE__",
     },
-    wording: {
-      wordingSelectionMessage: () => "",
+    compare: {
+      compareSelectionMessage: () => "",
       pickPrompt: (specialist: Record<string, unknown>) => String(specialist.question || ""),
       buildTextForWidget: ({ specialist }: { specialist: Record<string, unknown> }) => String(specialist.message || ""),
     },
@@ -314,7 +314,7 @@ test("dream_switch_to_self clears staged dream value but preserves Dream Builder
       actionCodeRaw: "ACTION_DREAM_SWITCH_TO_SELF",
       responseUiFlags: null,
       inputMode: "widget",
-      wordingChoiceEnabled: true,
+      compareEnabled: true,
       languageResolvedThisTurn: true,
       isBootstrapPollCall: false,
       motivationQuotesEnabled: true,
@@ -407,8 +407,8 @@ test("dream_switch_to_self marks the Dream intro as already shown for the next f
       switchToSelfDreamToken: "__SWITCH_TO_SELF_DREAM__",
       dreamStartExerciseRouteToken: "__ROUTE__DREAM_START_EXERCISE__",
     },
-    wording: {
-      wordingSelectionMessage: () => "",
+    compare: {
+      compareSelectionMessage: () => "",
       pickPrompt: (specialist: Record<string, unknown>) => String(specialist.question || ""),
       buildTextForWidget: ({ specialist }: { specialist: Record<string, unknown> }) => String(specialist.message || ""),
     },
@@ -511,7 +511,7 @@ test("dream_switch_to_self marks the Dream intro as already shown for the next f
       actionCodeRaw: "ACTION_DREAM_SWITCH_TO_SELF",
       responseUiFlags: null,
       inputMode: "widget",
-      wordingChoiceEnabled: true,
+      compareEnabled: true,
       languageResolvedThisTurn: true,
       isBootstrapPollCall: false,
       motivationQuotesEnabled: true,
@@ -565,8 +565,8 @@ test("dream_start_exercise reuses saved Dream Builder score context when it stil
       switchToSelfDreamToken: "__SWITCH_TO_SELF_DREAM__",
       dreamStartExerciseRouteToken: "__ROUTE__DREAM_START_EXERCISE__",
     },
-    wording: {
-      wordingSelectionMessage: () => "",
+    compare: {
+      compareSelectionMessage: () => "",
       pickPrompt: (specialist: Record<string, unknown>) => String(specialist.question || ""),
       buildTextForWidget: ({ specialist }: { specialist: Record<string, unknown> }) => String(specialist.message || ""),
     },
@@ -696,7 +696,7 @@ test("dream_start_exercise reuses saved Dream Builder score context when it stil
       actionCodeRaw: "ACTION_DREAM_START_EXERCISE",
       responseUiFlags: null,
       inputMode: "widget",
-      wordingChoiceEnabled: true,
+      compareEnabled: true,
       languageResolvedThisTurn: true,
       isBootstrapPollCall: false,
       motivationQuotesEnabled: true,
@@ -764,8 +764,8 @@ test("dream_submit_scores immediately transitions into Dream formulation with st
       switchToSelfDreamToken: "__SWITCH_TO_SELF_DREAM__",
       dreamStartExerciseRouteToken: "__ROUTE__DREAM_START_EXERCISE__",
     },
-    wording: {
-      wordingSelectionMessage: () => "",
+    compare: {
+      compareSelectionMessage: () => "",
       pickPrompt: (specialist: Record<string, unknown>) => String(specialist.question || ""),
       buildTextForWidget: ({ specialist }: { specialist: Record<string, unknown> }) => String(specialist.message || ""),
     },
@@ -896,7 +896,7 @@ test("dream_submit_scores immediately transitions into Dream formulation with st
       actionCodeRaw: "ACTION_DREAM_EXPLAINER_SUBMIT_SCORES",
       responseUiFlags: null,
       inputMode: "widget",
-      wordingChoiceEnabled: true,
+      compareEnabled: true,
       languageResolvedThisTurn: true,
       isBootstrapPollCall: false,
       motivationQuotesEnabled: true,
@@ -988,8 +988,8 @@ test("dream_submit_scores formulates a Dream when the first two scores are 9 and
       switchToSelfDreamToken: "__SWITCH_TO_SELF_DREAM__",
       dreamStartExerciseRouteToken: "__ROUTE__DREAM_START_EXERCISE__",
     },
-    wording: {
-      wordingSelectionMessage: () => "",
+    compare: {
+      compareSelectionMessage: () => "",
       pickPrompt: (specialist: Record<string, unknown>) => String(specialist.question || ""),
       buildTextForWidget: ({ specialist }: { specialist: Record<string, unknown> }) => String(specialist.message || ""),
     },
@@ -1117,7 +1117,7 @@ test("dream_submit_scores formulates a Dream when the first two scores are 9 and
       actionCodeRaw: "ACTION_DREAM_EXPLAINER_SUBMIT_SCORES",
       responseUiFlags: null,
       inputMode: "widget",
-      wordingChoiceEnabled: true,
+      compareEnabled: true,
       languageResolvedThisTurn: true,
       isBootstrapPollCall: false,
       motivationQuotesEnabled: true,
@@ -1203,8 +1203,8 @@ test("dream_submit_scores rejects incomplete score matrices before Dream formula
       switchToSelfDreamToken: "__SWITCH_TO_SELF_DREAM__",
       dreamStartExerciseRouteToken: "__ROUTE__DREAM_START_EXERCISE__",
     },
-    wording: {
-      wordingSelectionMessage: () => "",
+    compare: {
+      compareSelectionMessage: () => "",
       pickPrompt: (specialist: Record<string, unknown>) => String(specialist.question || ""),
       buildTextForWidget: ({ specialist }: { specialist: Record<string, unknown> }) => String(specialist.message || ""),
     },
@@ -1332,7 +1332,7 @@ test("dream_submit_scores rejects incomplete score matrices before Dream formula
       actionCodeRaw: "ACTION_DREAM_EXPLAINER_SUBMIT_SCORES",
       responseUiFlags: null,
       inputMode: "widget",
-      wordingChoiceEnabled: true,
+      compareEnabled: true,
       languageResolvedThisTurn: true,
       isBootstrapPollCall: false,
       motivationQuotesEnabled: true,
@@ -1397,8 +1397,8 @@ test("dream_start_exercise drops stale score context when statements no longer m
       switchToSelfDreamToken: "__SWITCH_TO_SELF_DREAM__",
       dreamStartExerciseRouteToken: "__ROUTE__DREAM_START_EXERCISE__",
     },
-    wording: {
-      wordingSelectionMessage: () => "",
+    compare: {
+      compareSelectionMessage: () => "",
       pickPrompt: (specialist: Record<string, unknown>) => String(specialist.question || ""),
       buildTextForWidget: ({ specialist }: { specialist: Record<string, unknown> }) => String(specialist.message || ""),
     },
@@ -1528,7 +1528,7 @@ test("dream_start_exercise drops stale score context when statements no longer m
       actionCodeRaw: "ACTION_DREAM_START_EXERCISE",
       responseUiFlags: null,
       inputMode: "widget",
-      wordingChoiceEnabled: true,
+      compareEnabled: true,
       languageResolvedThisTurn: true,
       isBootstrapPollCall: false,
       motivationQuotesEnabled: true,

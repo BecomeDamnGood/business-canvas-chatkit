@@ -277,7 +277,7 @@ export function decorateStructuredSuggestionItemsForStep(params: {
   };
 }
 
-export function shouldSuppressMainCardForWordingChoice(
+export function shouldSuppressMainCardForCompare(
   uiPayloadRaw: Record<string, unknown> | null | undefined,
   uiViewVariantRaw: string | null | undefined
 ): boolean {
@@ -286,72 +286,72 @@ export function shouldSuppressMainCardForWordingChoice(
   return Boolean(readPendingInteraction(uiPayload));
 }
 
-export function shouldSuppressPromptForWordingChoice(params: {
+export function shouldSuppressPromptForCompare(params: {
   uiViewVariant?: string | null;
-  wordingChoiceActive?: boolean;
-  requireWordingPick?: boolean;
+  compareActive?: boolean;
+  requireComparePick?: boolean;
 }): boolean {
   return (
     String(params.uiViewVariant || "").trim() === "text_compare" ||
-    params.wordingChoiceActive === true ||
-    params.requireWordingPick === true
+    params.compareActive === true ||
+    params.requireComparePick === true
   );
 }
 
-export function shouldShowTextInputForWordingChoice(params: {
+export function shouldShowTextInputForCompare(params: {
   textSubmitAvailable?: boolean;
   uiViewVariant?: string | null;
-  wordingChoiceActive?: boolean;
-  requireWordingPick?: boolean;
+  compareActive?: boolean;
+  requireComparePick?: boolean;
 }): boolean {
   if (params.textSubmitAvailable !== true) return false;
-  if (params.requireWordingPick === true) return true;
-  return !shouldSuppressPromptForWordingChoice({
+  if (params.requireComparePick === true) return true;
+  return !shouldSuppressPromptForCompare({
     uiViewVariant: params.uiViewVariant,
-    wordingChoiceActive: params.wordingChoiceActive,
-    requireWordingPick: params.requireWordingPick,
+    compareActive: params.compareActive,
+    requireComparePick: params.requireComparePick,
   });
 }
 
-export function shouldDisableTextInputForWordingChoice(params: {
-  requireWordingPick?: boolean;
+export function shouldDisableTextInputForCompare(params: {
+  requireComparePick?: boolean;
 }): boolean {
-  return params.requireWordingPick === true;
+  return params.requireComparePick === true;
 }
 
 export function shouldRenderPurposeStepIntroVideo(params: {
   currentStep?: string | null;
   showStepIntroChrome?: boolean;
-  wordingChoiceActive?: boolean;
+  compareActive?: boolean;
   lang?: string | null;
 }): boolean {
   if (String(params.currentStep || "").trim() !== "purpose") return false;
   if (params.showStepIntroChrome !== true) return false;
-  if (params.wordingChoiceActive === true) return false;
+  if (params.compareActive === true) return false;
   return Boolean(purposeStepVideoUrlForLang(params.lang));
 }
 
 export function shouldRenderBigWhyStepIntroVideo(params: {
   currentStep?: string | null;
   showStepIntroChrome?: boolean;
-  wordingChoiceActive?: boolean;
+  compareActive?: boolean;
   lang?: string | null;
 }): boolean {
   if (String(params.currentStep || "").trim() !== "bigwhy") return false;
   if (params.showStepIntroChrome !== true) return false;
-  if (params.wordingChoiceActive === true) return false;
+  if (params.compareActive === true) return false;
   return Boolean(bigWhyStepVideoUrlForLang(params.lang));
 }
 
 export function shouldRenderRoleStepIntroVideo(params: {
   currentStep?: string | null;
   showStepIntroChrome?: boolean;
-  wordingChoiceActive?: boolean;
+  compareActive?: boolean;
   lang?: string | null;
 }): boolean {
   if (String(params.currentStep || "").trim() !== "role") return false;
   if (params.showStepIntroChrome !== true) return false;
-  if (params.wordingChoiceActive === true) return false;
+  if (params.compareActive === true) return false;
   return Boolean(roleStepVideoUrlForLang(params.lang));
 }
 
@@ -420,8 +420,8 @@ function readPendingInteraction(
       .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry))
     : [];
   if (allowedActions.length === 0) return null;
-  const hasUserPickAction = allowedActions.some((action) => action.role === "wording_pick_user");
-  const hasSuggestionPickAction = allowedActions.some((action) => action.role === "wording_pick_suggestion");
+  const hasUserPickAction = allowedActions.some((action) => action.role === "compare_pick_user");
+  const hasSuggestionPickAction = allowedActions.some((action) => action.role === "compare_pick_suggestion");
   if (!hasUserPickAction || !hasSuggestionPickAction) return null;
   const userLabel = String(renderModelRaw.user_label || "").trim();
   const suggestionLabel = String(renderModelRaw.suggestion_label || "").trim();
@@ -491,8 +491,8 @@ const ACTION_ROLE_BY_STATE_KEY: Record<string, string> = {
   ui_action_start: "start",
   ui_action_text_submit: "text_submit",
   ui_action_score_submit: "score_submit",
-  ui_action_wording_pick_user: "wording_pick_user",
-  ui_action_wording_pick_suggestion: "wording_pick_suggestion",
+  ui_action_compare_pick_user: "compare_pick_user",
+  ui_action_compare_pick_suggestion: "compare_pick_suggestion",
   ui_action_dream_start_exercise: "dream_start_exercise",
   ui_action_dream_switch_to_self: "dream_switch_to_self",
 };
@@ -559,7 +559,7 @@ function defaultSurfaceForActionRole(role: string): string {
   if (normalizedRole === "start") return "primary";
   if (normalizedRole === "text_submit") return "text_input";
   if (normalizedRole === "score_submit") return "primary";
-  if (normalizedRole === "wording_pick_user" || normalizedRole === "wording_pick_suggestion") {
+  if (normalizedRole === "compare_pick_user" || normalizedRole === "compare_pick_suggestion") {
     return "compare_pick";
   }
   if (normalizedRole === "dream_start_exercise") {
@@ -719,7 +719,7 @@ function uiText(lang: string | null | undefined, key: string, _fallback: string)
   return "";
 }
 
-export function parseWordingChoiceInstruction(instructionRaw: string): {
+export function parseCompareInstruction(instructionRaw: string): {
   retainedHeading: string;
   retainedItems: string[];
   instructionText: string;
@@ -1011,10 +1011,10 @@ function normalizeChoiceLine(value: string): string {
 
 export function stripStructuredChoiceLines(promptRaw: string, lang?: string | null): string {
   const blockedLines = [
-    t(lang, "wordingChoiceInstruction"),
+    t(lang, "compareInstruction"),
     t(lang, "invariant.prompt.ask.default"),
     t(lang, "generic.choicePrompt.shareOrOption"),
-    t(lang, "wording.choice.context.default"),
+    t(lang, "compare.choice.context.default"),
   ]
     .map((line) => normalizeChoiceLine(line))
     .filter(Boolean);
@@ -1300,19 +1300,19 @@ export function renderChoiceButtons(choices: Choice[] | null | undefined, result
   }
 }
 
-function renderWordingChoicePanel(resultData: Record<string, unknown>, lang: string): boolean {
-  const wrap = document.getElementById("wordingChoiceWrap");
-  const feedbackEl = document.getElementById("wordingChoiceFeedback");
-  const userTextEl = document.getElementById("wordingChoiceUserText");
-  const userListEl = document.getElementById("wordingChoiceUserList");
-  const suggestionTextEl = document.getElementById("wordingChoiceSuggestionText");
-  const suggestionListEl = document.getElementById("wordingChoiceSuggestionList");
-  const retainedWrapEl = document.getElementById("wordingChoiceRetained");
-  const retainedHeadingEl = document.getElementById("wordingChoiceRetainedHeading");
-  const retainedListEl = document.getElementById("wordingChoiceRetainedList");
-  const instructionEl = document.getElementById("wordingChoiceInstruction");
-  const userBtn = document.getElementById("wordingChoicePickUser") as HTMLButtonElement | null;
-  const suggestionBtn = document.getElementById("wordingChoicePickSuggestion") as HTMLButtonElement | null;
+function renderComparePanel(resultData: Record<string, unknown>, lang: string): boolean {
+  const wrap = document.getElementById("compareWrap");
+  const feedbackEl = document.getElementById("compareFeedback");
+  const userTextEl = document.getElementById("compareUserText");
+  const userListEl = document.getElementById("compareUserList");
+  const suggestionTextEl = document.getElementById("compareSuggestionText");
+  const suggestionListEl = document.getElementById("compareSuggestionList");
+  const retainedWrapEl = document.getElementById("compareRetained");
+  const retainedHeadingEl = document.getElementById("compareRetainedHeading");
+  const retainedListEl = document.getElementById("compareRetainedList");
+  const instructionEl = document.getElementById("compareInstruction");
+  const userBtn = document.getElementById("comparePickUser") as HTMLButtonElement | null;
+  const suggestionBtn = document.getElementById("comparePickSuggestion") as HTMLButtonElement | null;
   if (
     !wrap ||
     !feedbackEl ||
@@ -1348,7 +1348,7 @@ function renderWordingChoicePanel(resultData: Record<string, unknown>, lang: str
   const suggestionLabelFromPayload = pendingInteraction.renderModel.suggestionLabel;
   const userItems = pendingInteraction.renderModel.userItems;
   const suggestionItems = pendingInteraction.renderModel.suggestionItems;
-  const instruction = pendingInteraction.renderModel.instruction || t(lang, "wordingChoiceInstruction");
+  const instruction = pendingInteraction.renderModel.instruction || t(lang, "compareInstruction");
   const instructionParts = {
     retainedHeading: pendingInteraction.renderModel.retainedHeading,
     retainedItems: pendingInteraction.renderModel.retainedItems,
@@ -1362,13 +1362,13 @@ function renderWordingChoicePanel(resultData: Record<string, unknown>, lang: str
   const userLabel = userLabelFromPayload
     ? ensureLabelColon(userLabelFromPayload)
     : variant === "clarify_dual"
-      ? ensureLabelColon(t(lang, "wordingChoiceHeading"))
-      : ensureLabelColon(t(lang, "wordingChoiceHeading"));
+      ? ensureLabelColon(t(lang, "compareHeading"))
+      : ensureLabelColon(t(lang, "compareHeading"));
   const suggestionLabel = suggestionLabelFromPayload
     ? ensureLabelColon(suggestionLabelFromPayload)
     : variant === "clarify_dual"
-      ? ensureLabelColon(t(lang, "wordingChoiceSuggestionLabel"))
-      : ensureLabelColon(t(lang, "wordingChoiceSuggestionLabel"));
+      ? ensureLabelColon(t(lang, "compareSuggestionLabel"))
+      : ensureLabelColon(t(lang, "compareSuggestionLabel"));
   const normalizeListItem = (value: unknown): string =>
     String(value || "")
       .replace(/^\s*(?:[-*•·]\s+|\d+[\.\)]\s+)/, "")
@@ -1389,9 +1389,9 @@ function renderWordingChoicePanel(resultData: Record<string, unknown>, lang: str
   (retainedWrapEl as HTMLElement).style.display =
     instructionParts.retainedHeading && instructionParts.retainedItems.length > 0 ? "block" : "none";
   instructionEl.textContent = instructionParts.instructionText || instruction;
-  userTextEl.textContent = userLabel || uiText(lang, "wordingChoiceHeading", "");
+  userTextEl.textContent = userLabel || uiText(lang, "compareHeading", "");
   suggestionTextEl.textContent =
-    suggestionLabel || uiText(lang, "wordingChoiceSuggestionLabel", "");
+    suggestionLabel || uiText(lang, "compareSuggestionLabel", "");
 
   if (mode === "list") {
     (userTextEl as HTMLElement).style.display = "block";
@@ -1410,8 +1410,8 @@ function renderWordingChoicePanel(resultData: Record<string, unknown>, lang: str
       li.textContent = normalizeListItem(item);
       suggestionListEl.appendChild(li);
     }
-    userBtn.textContent = uiText(lang, "wordingChoice.chooseVersion", "");
-    suggestionBtn.textContent = uiText(lang, "wordingChoice.chooseVersion", "");
+    userBtn.textContent = uiText(lang, "compare.chooseVersion", "");
+    suggestionBtn.textContent = uiText(lang, "compare.chooseVersion", "");
   } else {
     (userTextEl as HTMLElement).style.display = "block";
     (suggestionTextEl as HTMLElement).style.display = "block";
@@ -1419,7 +1419,7 @@ function renderWordingChoicePanel(resultData: Record<string, unknown>, lang: str
     (suggestionListEl as HTMLElement).style.display = "none";
     userListEl.innerHTML = "";
     suggestionListEl.innerHTML = "";
-    userBtn.textContent = userText || uiText(lang, "wordingChoice.useInputFallback", "");
+    userBtn.textContent = userText || uiText(lang, "compare.useInputFallback", "");
     suggestionBtn.textContent = suggestionText || suggestionLabel;
   }
   userBtn.disabled = getIsLoading();
@@ -1530,14 +1530,14 @@ export function render(overrideToolOutput?: unknown): void {
       bootstrap_phase: String((state?.bootstrap_phase || "")).trim().toLowerCase(),
     });
     const choiceWrap = document.getElementById("choiceWrap");
-    const wordingChoiceWrap = document.getElementById("wordingChoiceWrap");
+    const compareWrap = document.getElementById("compareWrap");
     const cardDesc = document.getElementById("cardDesc");
     const prompt = document.getElementById("prompt");
     const uiSubtitle = document.getElementById("uiSubtitle");
     const sectionTitleEl = document.getElementById("sectionTitle");
     inputWrap.style.display = "none";
     if (choiceWrap) choiceWrap.style.display = "none";
-    if (wordingChoiceWrap) wordingChoiceWrap.style.display = "none";
+    if (compareWrap) compareWrap.style.display = "none";
     if (primaryActionWrap) (primaryActionWrap as HTMLElement).style.display = "none";
     if (auxiliaryActionWrap) (auxiliaryActionWrap as HTMLElement).style.display = "none";
     if (prompt) prompt.textContent = "";
@@ -1613,8 +1613,8 @@ export function render(overrideToolOutput?: unknown): void {
     inputWrap.style.display = "none";
     const choiceWrap = document.getElementById("choiceWrap");
     if (choiceWrap) choiceWrap.style.display = "none";
-    const wordingChoiceWrap = document.getElementById("wordingChoiceWrap");
-    if (wordingChoiceWrap) wordingChoiceWrap.style.display = "none";
+    const compareWrap = document.getElementById("compareWrap");
+    if (compareWrap) compareWrap.style.display = "none";
     const cardDesc = document.getElementById("cardDesc");
     const prompt = document.getElementById("prompt");
     const uiSubtitle = document.getElementById("uiSubtitle");
@@ -1648,8 +1648,8 @@ export function render(overrideToolOutput?: unknown): void {
     inputWrap.style.display = "none";
     const choiceWrap = document.getElementById("choiceWrap");
     if (choiceWrap) choiceWrap.style.display = "none";
-    const wordingChoiceWrap = document.getElementById("wordingChoiceWrap");
-    if (wordingChoiceWrap) wordingChoiceWrap.style.display = "none";
+    const compareWrap = document.getElementById("compareWrap");
+    if (compareWrap) compareWrap.style.display = "none";
     const cardDesc = document.getElementById("cardDesc");
     const prompt = document.getElementById("prompt");
     const uiSubtitle = document.getElementById("uiSubtitle");
@@ -1719,8 +1719,8 @@ export function render(overrideToolOutput?: unknown): void {
     inputWrap.style.display = "none";
     const choiceWrap = document.getElementById("choiceWrap");
     if (choiceWrap) choiceWrap.style.display = "none";
-    const wordingChoiceWrap = document.getElementById("wordingChoiceWrap");
-    if (wordingChoiceWrap) wordingChoiceWrap.style.display = "none";
+    const compareWrap = document.getElementById("compareWrap");
+    if (compareWrap) compareWrap.style.display = "none";
     (btnStart as HTMLElement).style.display = "none";
     renderActionSurfaceButtons({
       containerId: "primaryActionWrap",
@@ -1767,7 +1767,7 @@ export function render(overrideToolOutput?: unknown): void {
   const uiViewVariant = String((uiView.variant || "")).trim();
   const dreamBuilderContract = readDreamBuilderContract(uiPayload);
   const dreamBuilderPhase = dreamBuilderContract?.phase || "";
-  const isViewModeWordingChoice = uiViewVariant === "text_compare";
+  const isViewModeCompare = uiViewVariant === "text_compare";
   const isViewModeDreamBuilderCollect =
     uiViewVariant === "dream_builder_collect" || dreamBuilderPhase === "collect";
   const isViewModeDreamBuilderRefine =
@@ -1776,9 +1776,9 @@ export function render(overrideToolOutput?: unknown): void {
     uiViewVariant === "dream_builder_scoring" || dreamBuilderPhase === "scoring";
   const dreamBuilderViewContract = readDreamBuilderViewContract(uiView);
   const uiQuestionText = String(uiPayload.questionText || "").trim();
-  const wordingChoiceActive = shouldSuppressMainCardForWordingChoice(uiPayload, uiViewVariant);
-  const singleValueContent = wordingChoiceActive ? null : readSingleValueCardContent(uiPayload);
-  const structuredSuggestionsContent = wordingChoiceActive
+  const compareActive = shouldSuppressMainCardForCompare(uiPayload, uiViewVariant);
+  const singleValueContent = compareActive ? null : readSingleValueCardContent(uiPayload);
+  const structuredSuggestionsContent = compareActive
     ? null
     : decorateStructuredSuggestionItemsForStep({
         stepId: current,
@@ -1836,26 +1836,26 @@ export function render(overrideToolOutput?: unknown): void {
       showStepIntroChrome &&
       dreamRuntimeMode === "self" &&
       !isDreamDirectionView &&
-      !wordingChoiceActive;
+      !compareActive;
     const shouldAppendPurposeStepVideo =
       shouldRenderPurposeStepIntroVideo({
         currentStep: current,
         showStepIntroChrome,
-        wordingChoiceActive,
+        compareActive,
         lang,
       });
     const shouldAppendBigWhyStepVideo =
       shouldRenderBigWhyStepIntroVideo({
         currentStep: current,
         showStepIntroChrome,
-        wordingChoiceActive,
+        compareActive,
         lang,
       });
     const shouldAppendRoleStepVideo =
       shouldRenderRoleStepIntroVideo({
         currentStep: current,
         showStepIntroChrome,
-        wordingChoiceActive,
+        compareActive,
         lang,
       });
     cardDescEl.classList.toggle("is-step0-ask-layout", isStep0AskLayout);
@@ -1863,7 +1863,7 @@ export function render(overrideToolOutput?: unknown): void {
     const renderedSemanticContent =
       renderStructuredSuggestionsCardContent(cardDescEl, structuredSuggestionsContent) ||
       renderSingleValueCardContent(cardDescEl, singleValueContent);
-    if (!renderedSemanticContent && !wordingChoiceActive) {
+    if (!renderedSemanticContent && !compareActive) {
       renderStructuredText(cardDescEl, body || "");
       if (shouldAppendDreamStepVideo) {
         appendDreamStepIntroVideo(cardDescEl, lang);
@@ -1966,8 +1966,8 @@ export function render(overrideToolOutput?: unknown): void {
     if (statementsPanelEl) statementsPanelEl.style.display = "none";
     const choiceWrap = document.getElementById("choiceWrap");
     if (choiceWrap) choiceWrap.style.display = "none";
-    const wordingChoiceWrap = document.getElementById("wordingChoiceWrap");
-    if (wordingChoiceWrap) wordingChoiceWrap.style.display = "none";
+    const compareWrap = document.getElementById("compareWrap");
+    if (compareWrap) compareWrap.style.display = "none";
     const showPrompt = document.getElementById("prompt");
     if (showPrompt) {
       showPrompt.textContent = t(lang, "scoringDreamQuestion");
@@ -2191,7 +2191,7 @@ export function render(overrideToolOutput?: unknown): void {
   const promptPost = document.getElementById("prompt");
   if (promptPost) promptPost.style.display = "block";
 
-  if (isViewModeWordingChoice) {
+  if (isViewModeCompare) {
     if (statementsPanelEl) statementsPanelEl.style.display = "none";
   } else if (isDreamDirectionView) {
     if (statementsPanelEl) statementsPanelEl.style.display = "none";
@@ -2243,18 +2243,18 @@ export function render(overrideToolOutput?: unknown): void {
     if (statementsPanelEl) statementsPanelEl.style.display = "none";
   }
 
-  let requireWordingPick = false;
-  const suppressWordingChoice = isViewModeDreamBuilderScoring;
-  if (!suppressWordingChoice) {
-    requireWordingPick = renderWordingChoicePanel(result, lang);
+  let requireComparePick = false;
+  const suppressCompare = isViewModeDreamBuilderScoring;
+  if (!suppressCompare) {
+    requireComparePick = renderComparePanel(result, lang);
   } else {
-    const wordingChoiceWrap = document.getElementById("wordingChoiceWrap");
-    if (wordingChoiceWrap) wordingChoiceWrap.style.display = "none";
+    const compareWrap = document.getElementById("compareWrap");
+    if (compareWrap) compareWrap.style.display = "none";
   }
 
   let choicesArr: Choice[] = [];
   let promptText = isDreamDirectionView ? "" : promptSource;
-  const shouldStripStructuredPrompt = isViewModeWordingChoice || !hasStructuredActions;
+  const shouldStripStructuredPrompt = isViewModeCompare || !hasStructuredActions;
   if (shouldStripStructuredPrompt) {
     promptText = isDreamDirectionView ? "" : stripStructuredChoiceLines(promptSource, lang);
   } else if (hasStructuredActions) {
@@ -2263,10 +2263,10 @@ export function render(overrideToolOutput?: unknown): void {
     choicesArr = [];
     promptText = isDreamDirectionView ? "" : promptSource;
   }
-  if (shouldSuppressPromptForWordingChoice({
+  if (shouldSuppressPromptForCompare({
     uiViewVariant,
-    wordingChoiceActive,
-    requireWordingPick,
+    compareActive,
+    requireComparePick,
   })) {
     promptText = "";
   }
@@ -2277,10 +2277,10 @@ export function render(overrideToolOutput?: unknown): void {
     const hasBodyText = stripInlineText(String(body || "")).trim().length > 0;
     const showPromptDivider = hasPromptText && hasBodyText;
     promptEl.classList.toggle("with-divider", showPromptDivider);
-    promptEl.classList.toggle("choice-pending", requireWordingPick);
+    promptEl.classList.toggle("choice-pending", requireComparePick);
     renderInlineText(promptEl, promptText || "");
   }
-  if (requireWordingPick) {
+  if (requireComparePick) {
     const choiceWrap = document.getElementById("choiceWrap");
     if (choiceWrap) {
       choiceWrap.innerHTML = "";
@@ -2296,18 +2296,18 @@ export function render(overrideToolOutput?: unknown): void {
     return choiceWrap.childNodes.length > 0;
   })();
   const choiceMode =
-    !requireWordingPick && (renderedChoiceButtons || hasStructuredActions);
+    !requireComparePick && (renderedChoiceButtons || hasStructuredActions);
 
   const textSubmitActionCode = actionCodeForRole(result, "text_submit");
   const textSubmitAvailable = textSubmitActionCode.length > 0;
-  const showTextSubmit = shouldShowTextInputForWordingChoice({
+  const showTextSubmit = shouldShowTextInputForCompare({
     textSubmitAvailable,
     uiViewVariant,
-    wordingChoiceActive,
-    requireWordingPick,
+    compareActive,
+    requireComparePick,
   });
-  const disableTextSubmit = shouldDisableTextInputForWordingChoice({
-    requireWordingPick,
+  const disableTextSubmit = shouldDisableTextInputForCompare({
+    requireComparePick,
   });
   inputWrap.style.display = showTextSubmit ? "flex" : "none";
   const inputEl = document.getElementById("input") as HTMLTextAreaElement | null;
@@ -2326,12 +2326,12 @@ export function render(overrideToolOutput?: unknown): void {
     const choiceWrap = document.getElementById("choiceWrap");
     if (choiceWrap) choiceWrap.style.display = "none";
   }
-  const primaryActions = requireWordingPick
+  const primaryActions = requireComparePick
     ? []
     : surfaceActionsForResult(result, "primary", lang).filter(
         (action) => action.role !== "start" && action.role !== "score_submit"
       );
-  const auxiliaryActions = requireWordingPick
+  const auxiliaryActions = requireComparePick
     ? []
     : surfaceActionsForResult(result, "auxiliary", lang);
   renderActionSurfaceButtons({

@@ -56,37 +56,37 @@ export function parseRetainedInstruction(rawInstruction: unknown): {
   return { retainedHeading, retainedItems, instructionText: instructionText || instruction };
 }
 
-export function resolveWordingChoiceFeedbackSource(
-  wordingChoiceRaw: unknown,
+export function resolveCompareFeedbackSource(
+  compareRaw: unknown,
   specialistRaw?: unknown
 ): Record<string, unknown> {
-  const wordingChoice = toRecord(wordingChoiceRaw);
-  if (Object.keys(wordingChoice).length === 0) return wordingChoice;
+  const compare = toRecord(compareRaw);
+  if (Object.keys(compare).length === 0) return compare;
 
   const specialist = toRecord(specialistRaw);
   const userText = String(
-    wordingChoice.user_text ||
-      specialist.wording_choice_user_normalized ||
-      specialist.wording_choice_user_raw ||
+    compare.user_text ||
+      specialist.compare_user_normalized ||
+      specialist.compare_user_raw ||
       ""
   ).trim();
   const suggestionText = String(
-    wordingChoice.suggestion_text ||
-      specialist.wording_choice_agent_current ||
+    compare.suggestion_text ||
+      specialist.compare_agent_current ||
       specialist.refined_formulation ||
       ""
   ).trim();
   const userItems =
-    normalizeStringArray(wordingChoice.user_items).length > 0
-      ? normalizeStringArray(wordingChoice.user_items)
-      : normalizeStringArray(specialist.wording_choice_user_items);
+    normalizeStringArray(compare.user_items).length > 0
+      ? normalizeStringArray(compare.user_items)
+      : normalizeStringArray(specialist.compare_user_items);
   const suggestionItems =
-    normalizeStringArray(wordingChoice.suggestion_items).length > 0
-      ? normalizeStringArray(wordingChoice.suggestion_items)
-      : normalizeStringArray(specialist.wording_choice_suggestion_items);
+    normalizeStringArray(compare.suggestion_items).length > 0
+      ? normalizeStringArray(compare.suggestion_items)
+      : normalizeStringArray(specialist.compare_suggestion_items);
 
   return {
-    ...wordingChoice,
+    ...compare,
     user_text: userText,
     suggestion_text: suggestionText,
     user_items: userItems,
@@ -94,33 +94,33 @@ export function resolveWordingChoiceFeedbackSource(
   };
 }
 
-export function synthesizeUiFeedbackContractFromWordingChoice(
-  wordingChoiceRaw: unknown,
+export function synthesizeUiFeedbackContractFromCompare(
+  compareRaw: unknown,
   uiFlagsRaw?: unknown,
   specialistRaw?: unknown
 ): Record<string, unknown> | undefined {
-  const wordingChoice = resolveWordingChoiceFeedbackSource(wordingChoiceRaw, specialistRaw);
+  const compare = resolveCompareFeedbackSource(compareRaw, specialistRaw);
   const uiFlags = toRecord(uiFlagsRaw);
   const wordingEnabled =
-    wordingChoice.enabled === true ||
-    String(uiFlags.require_wording_pick || "").trim().toLowerCase() === "true";
+    compare.enabled === true ||
+    String(uiFlags.require_compare_pick || "").trim().toLowerCase() === "true";
   if (!wordingEnabled) return undefined;
 
   const feedbackReasonText = String(
-    wordingChoice.feedback_reason_text ||
-      toRecord(wordingChoice.compare_feedback).text ||
+    compare.feedback_reason_text ||
+      toRecord(compare.compare_feedback).text ||
       ""
   ).trim();
-  const userLabel = String(wordingChoice.user_label || "").trim();
-  const suggestionLabel = String(wordingChoice.suggestion_label || "").trim();
-  const userText = String(wordingChoice.user_text || "").trim();
-  const suggestionText = String(wordingChoice.suggestion_text || "").trim();
-  const userItems = normalizeStringArray(wordingChoice.user_items);
-  const suggestionItems = normalizeStringArray(wordingChoice.suggestion_items);
-  const wordingInstruction = String(wordingChoice.instruction || "").trim();
+  const userLabel = String(compare.user_label || "").trim();
+  const suggestionLabel = String(compare.suggestion_label || "").trim();
+  const userText = String(compare.user_text || "").trim();
+  const suggestionText = String(compare.suggestion_text || "").trim();
+  const userItems = normalizeStringArray(compare.user_items);
+  const suggestionItems = normalizeStringArray(compare.suggestion_items);
+  const wordingInstruction = String(compare.instruction || "").trim();
   const parsedInstruction = parseRetainedInstruction(wordingInstruction);
-  const wordingMode = String(wordingChoice.mode || "text").trim().toLowerCase() === "list" ? "list" : "text";
-  const wordingVariant = String(wordingChoice.variant || "").trim().toLowerCase();
+  const wordingMode = String(compare.mode || "text").trim().toLowerCase() === "list" ? "list" : "text";
+  const wordingVariant = String(compare.variant || "").trim().toLowerCase();
 
   if (
     wordingMode === "text" &&
@@ -197,13 +197,13 @@ export function normalizeUiFeedbackContractSource(
   const currentValue = trimString(
     record.current_value ||
       currentItems.join("\n") ||
-      specialist.wording_choice_user_normalized ||
-      specialist.wording_choice_user_raw
+      specialist.compare_user_normalized ||
+      specialist.compare_user_raw
   );
   const suggestedValue = trimString(
     record.suggested_value ||
       suggestedItems.join("\n") ||
-      specialist.wording_choice_agent_current ||
+      specialist.compare_agent_current ||
       specialist.refined_formulation
   );
 

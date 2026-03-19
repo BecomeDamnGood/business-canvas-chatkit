@@ -1,7 +1,7 @@
 import type { CanvasState } from "../core/state.js";
 import { isValidStepValueForStorage, looksLikeExamplesFramingLine } from "./run_step_value_shape.js";
 
-type WordingChoiceMode = "text" | "list";
+type CompareMode = "text" | "list";
 
 export function normalizeLightUserInput(input: string): string {
   const collapsed = String(input || "")
@@ -188,17 +188,17 @@ export function shouldTreatAsStepContributingInput(input: string, stepId: string
   return words.length >= 5;
 }
 
-export type PendingWordingChoiceTextIntent =
+export type PendingCompareTextIntent =
   | "accept_suggestion_explicit"
   | "reject_suggestion_explicit"
   | "feedback_on_suggestion"
   | "content_input";
 
-export type PendingWordingChoiceTextAnchor = "suggestion" | "user_input";
+export type PendingCompareTextAnchor = "suggestion" | "user_input";
 
-export type PendingWordingChoiceIntentResolution = {
-  intent: PendingWordingChoiceTextIntent;
-  anchor: PendingWordingChoiceTextAnchor;
+export type PendingCompareIntentResolution = {
+  intent: PendingCompareTextIntent;
+  anchor: PendingCompareTextAnchor;
 };
 
 export type CurrentValueFeedbackIntent = "feedback_on_current_value" | "content_input";
@@ -244,7 +244,7 @@ export function resolveCurrentValueFeedbackIntent(params: {
   const comparable = normalizeIntentComparable(input);
   if (!comparable) return "content_input";
 
-  const wordingFeedbackPattern =
+  const compareFeedbackPattern =
     /\b(formulering|bewoording|zin|sentence|wording|phrasing|saaie|saai|vlak|wollig|abstract|concreet|krachtig|krachtiger|helder|helderder|duidelijker|inspirerend|inspirerender)\b/i;
   const technologyCorrectionPattern =
     /\b(ai|technologie|technology|tool|platform)\b/i;
@@ -255,7 +255,7 @@ export function resolveCurrentValueFeedbackIntent(params: {
   const demonstrativePattern = /\b(dit|deze|this|current|huidige)\b/i;
   const opinionPattern = /^(ik vind|i find|dit is|this is|dit voelt|this feels|dit klinkt|this sounds)\b/i;
 
-  if (wordingFeedbackPattern.test(input)) return "feedback_on_current_value";
+  if (compareFeedbackPattern.test(input)) return "feedback_on_current_value";
   if (technologyCorrectionPattern.test(input) && reductionPattern.test(input)) {
     return "feedback_on_current_value";
   }
@@ -312,11 +312,11 @@ function shouldAnchorToSuggestion(params: {
   return false;
 }
 
-export function resolvePendingWordingChoiceIntent(params: {
+export function resolvePendingCompareIntent(params: {
   input: string;
   pendingSuggestion?: string;
   pendingUserInput?: string;
-}): PendingWordingChoiceIntentResolution {
+}): PendingCompareIntentResolution {
   const comparable = normalizeIntentComparable(params.input);
   const tokens = tokenizeWords(comparable);
   if (!comparable) return { intent: "content_input", anchor: "user_input" };
@@ -373,8 +373,8 @@ export function resolvePendingWordingChoiceIntent(params: {
   return { intent: "content_input", anchor };
 }
 
-export function classifyPendingWordingChoiceTextIntent(input: string): PendingWordingChoiceTextIntent {
-  return resolvePendingWordingChoiceIntent({ input }).intent;
+export function classifyPendingCompareTextIntent(input: string): PendingCompareTextIntent {
+  return resolvePendingCompareIntent({ input }).intent;
 }
 
 function extractSuggestionFromMessage(message: string): string {
@@ -778,8 +778,8 @@ export function canonicalizeComparableText(input: string): string {
   return normalizeSurfaceSignature(normalizeLightUserInput(input));
 }
 
-export function areEquivalentWordingVariants(params: {
-  mode: WordingChoiceMode;
+export function areEquivalentCompareVariants(params: {
+  mode: CompareMode;
   userRaw: string;
   suggestionRaw: string;
   userItems: string[];
@@ -809,7 +809,7 @@ export function areEquivalentWordingVariants(params: {
   return isSpellingOnlyCorrection(userRaw, suggestionRaw);
 }
 
-type RunStepWordingHeuristicDeps = {
+type RunStepCompareHeuristicDeps = {
   entityStepId: string;
   dreamStepId: string;
   bigwhyStepId: string;
@@ -819,7 +819,7 @@ type RunStepWordingHeuristicDeps = {
   ensureSentenceEnd: (value: string) => string;
 };
 
-export function createRunStepWordingHeuristicHelpers(deps: RunStepWordingHeuristicDeps) {
+export function createRunStepCompareHeuristicHelpers(deps: RunStepCompareHeuristicDeps) {
   function pickDreamSuggestionFromPreviousState(
     state: CanvasState,
     previousSpecialist: Record<string, unknown>
@@ -1023,7 +1023,7 @@ export function createRunStepWordingHeuristicHelpers(deps: RunStepWordingHeurist
       );
     }
 
-    pushCandidate(String(previousSpecialist?.wording_choice_agent_current || previousSpecialist?.refined_formulation || ""));
+    pushCandidate(String(previousSpecialist?.compare_agent_current || previousSpecialist?.refined_formulation || ""));
     const messageCandidate = extractSuggestionFromMessage(String(specialistResult?.message || ""));
     const userComparableForMessage = String(userRaw || "").trim();
     if (messageCandidate) {

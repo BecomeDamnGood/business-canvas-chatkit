@@ -2,9 +2,9 @@ import type { CanvasState } from "../core/state.js";
 import type { OrchestratorOutput } from "../core/orchestrator.js";
 import type { LLMUsage } from "./run_step_dependencies.js";
 import type {
-  PendingWordingChoiceTextAnchor,
-  PendingWordingChoiceTextIntent,
-} from "./run_step_wording_heuristics.js";
+  PendingCompareTextAnchor,
+  PendingCompareTextIntent,
+} from "./run_step_compare_heuristics.js";
 
 import type { RunStepContext } from "./run_step_context.js";
 import type { RunStepRoutePorts } from "./run_step_ports.js";
@@ -22,15 +22,15 @@ export async function runStepRuntimeSpecialRoutesLayer<TPayload extends Record<s
     actionCodeRaw: string;
     responseUiFlags: Record<string, boolean | string> | null;
     inputMode: "widget" | "chat";
-    wordingChoiceEnabled: boolean;
+    compareEnabled: boolean;
     languageResolvedThisTurn: boolean;
     isBootstrapPollCall: boolean;
     motivationQuotesEnabled: boolean;
     uiI18nTelemetry: unknown;
     transientPendingScores: number[][] | null;
     submittedUserText: string;
-    submittedTextIntent: PendingWordingChoiceTextIntent | "";
-    submittedTextAnchor: PendingWordingChoiceTextAnchor | "";
+    submittedTextIntent: PendingCompareTextIntent | "";
+    submittedTextAnchor: PendingCompareTextAnchor | "";
     rawNormalized: string;
     pristineAtEntry: boolean;
     lang: string;
@@ -50,7 +50,7 @@ export async function runStepRuntimeSpecialRoutesLayer<TPayload extends Record<s
       actionCodeRaw: params.runtime.actionCodeRaw,
       responseUiFlags: params.runtime.responseUiFlags,
       inputMode: params.runtime.inputMode,
-      wordingChoiceEnabled: params.runtime.wordingChoiceEnabled,
+      compareEnabled: params.runtime.compareEnabled,
       languageResolvedThisTurn: params.runtime.languageResolvedThisTurn,
       isBootstrapPollCall: params.runtime.isBootstrapPollCall,
       motivationQuotesEnabled: params.runtime.motivationQuotesEnabled,

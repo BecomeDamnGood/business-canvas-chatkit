@@ -439,11 +439,10 @@ test("dream canonical refine recovers missing menu actions from the final contra
           mode: "interactive",
         },
         contract_id: "dream::valid_output::DREAM_MENU_REFINE",
-        feedback_contract: {
-          version: "2026-03-16.feedback_contract.v1",
-          kind: "single_value_canonical_suggestion",
+        content: {
+          kind: "single_value",
           heading: "Op basis van je input stel ik de volgende droom voor",
-          suggested_value: "Mindd droomt van een wereld waarin mensen zich verbonden voelen.",
+          canonical_text: "Mindd droomt van een wereld waarin mensen zich verbonden voelen.",
         },
       },
     } as any,
@@ -531,34 +530,33 @@ test("dream builder interactive variants suppress the start-exercise action once
   );
 });
 
-test("pending interaction derives text_compare from wording-choice text", () => {
+test("pending interaction derives text_compare from compare text", () => {
   const response = finalizeResponseContractInternals(
     {
       ok: true,
       current_step_id: "bigwhy",
       text: "",
       prompt: "",
-      specialist: {},
+      specialist: {
+        compare_pending: "true",
+        compare_mode: "text",
+        compare_presentation: "picker",
+        feedback_reason_text: "Je huidige formulering blijft te beschrijvend en nog niet richtinggevend genoeg.",
+        compare_user_label: "Your input",
+        compare_suggestion_label: "My suggestion",
+        compare_user_normalized: "Wij zijn er om mooie merken te bouwen.",
+        compare_agent_current: "Wij bestaan om merken te bouwen die zichtbaar het leven van mensen verbeteren.",
+        compare_instruction: "Choose the version that fits best.",
+      },
       state: {
         started: "true",
         current_step: "bigwhy",
-        ui_action_wording_pick_user: "ACTION_WORDING_PICK_USER",
-        ui_action_wording_pick_suggestion: "ACTION_WORDING_PICK_SUGGESTION",
+        ui_action_compare_pick_user: "ACTION_COMPARE_PICK_USER",
+        ui_action_compare_pick_suggestion: "ACTION_COMPARE_PICK_SUGGESTION",
       } as any,
       ui: {
         view: {
           mode: "interactive",
-          variant: "text_compare",
-        },
-        wording_choice: {
-          enabled: true,
-          mode: "text",
-          feedback_reason_text: "Je huidige formulering blijft te beschrijvend en nog niet richtinggevend genoeg.",
-          user_label: "Your input",
-          suggestion_label: "My suggestion",
-          user_text: "Wij zijn er om mooie merken te bouwen.",
-          suggestion_text: "Wij bestaan om merken te bouwen die zichtbaar het leven van mensen verbeteren.",
-          instruction: "Choose the version that fits best.",
         },
       },
     } as any,
@@ -576,7 +574,7 @@ test("pending interaction derives text_compare from wording-choice text", () => 
   const renderModel = ((pending.render_model || {}) as Record<string, unknown>);
   assert.equal(String(ui.view && (ui.view as Record<string, unknown>).variant || ""), "text_compare");
   assert.equal("feedback_contract" in ui, false);
-  assert.equal("wording_choice" in ui, false);
+  assert.equal("compare" in ui, false);
   assert.equal(String(pending.kind || ""), "text_compare");
   assert.equal(String(renderModel.feedback_reason_text || ""), "Je huidige formulering blijft te beschrijvend en nog niet richtinggevend genoeg.");
   assert.equal(String(renderModel.user_label || ""), "Your input");
@@ -588,7 +586,7 @@ test("pending interaction derives text_compare from wording-choice text", () => 
   );
 });
 
-test("final response pending interaction backfills user_text from specialist wording-choice state when legacy user_text is blank", () => {
+test("final response pending interaction backfills user_text from specialist compare state when legacy user_text is blank", () => {
   const userInput = "Dit gaat over dat mensen het beu zijn om verkeerd voorgelicht te worden.";
   const canonical =
     "Mindd droomt van een wereld waarin mensen zich zeker voelen omdat ze eerlijk geinformeerd worden.";
@@ -600,30 +598,26 @@ test("final response pending interaction backfills user_text from specialist wor
       text: "",
       prompt: "",
       specialist: {
-        wording_choice_user_normalized: userInput,
-        wording_choice_agent_current: canonical,
+        compare_pending: "true",
+        compare_mode: "text",
+        compare_presentation: "picker",
+        feedback_reason_text:
+          "Je input benoemt het probleem van verkeerde voorlichting, maar een Droom vraagt om een positief toekomstbeeld met duidelijk menselijk effect.",
+        compare_user_label: "Dit is jouw input",
+        compare_suggestion_label: "Dit zou mijn suggestie zijn",
+        compare_instruction: "Klik alsjeblieft wat het beste bij je past.",
+        compare_user_normalized: userInput,
+        compare_agent_current: canonical,
       },
       state: {
         started: "true",
         current_step: "dream",
-        ui_action_wording_pick_user: "ACTION_WORDING_PICK_USER",
-        ui_action_wording_pick_suggestion: "ACTION_WORDING_PICK_SUGGESTION",
+        ui_action_compare_pick_user: "ACTION_COMPARE_PICK_USER",
+        ui_action_compare_pick_suggestion: "ACTION_COMPARE_PICK_SUGGESTION",
       } as any,
       ui: {
         view: {
           mode: "interactive",
-          variant: "text_compare",
-        },
-        wording_choice: {
-          enabled: true,
-          mode: "text",
-          feedback_reason_text:
-            "Je input benoemt het probleem van verkeerde voorlichting, maar een Droom vraagt om een positief toekomstbeeld met duidelijk menselijk effect.",
-          user_label: "Dit is jouw input",
-          suggestion_label: "Dit zou mijn suggestie zijn",
-          user_text: "",
-          suggestion_text: canonical,
-          instruction: "Klik alsjeblieft wat het beste bij je past.",
         },
       },
     } as any,
@@ -643,7 +637,7 @@ test("final response pending interaction backfills user_text from specialist wor
   assert.equal(String(renderModel.suggestion_text || ""), canonical);
 });
 
-test("final response repairs explicit single-value compare contracts into pending interaction when current_value is missing", () => {
+test("final response derives compare pending interaction directly from specialist state", () => {
   const userInput = "Dit gaat over dat mensen het beu zijn om verkeerd voorgelicht te worden.";
   const canonical =
     "Mindd droomt van een wereld waarin mensen zich zeker voelen omdat ze eerlijk geinformeerd worden.";
@@ -655,31 +649,26 @@ test("final response repairs explicit single-value compare contracts into pendin
       text: "",
       prompt: "",
       specialist: {
-        wording_choice_user_normalized: userInput,
-        wording_choice_agent_current: canonical,
+        compare_pending: "true",
+        compare_mode: "text",
+        compare_presentation: "picker",
+        feedback_reason_text:
+          "Je input benoemt het probleem van verkeerde voorlichting, maar een Droom vraagt om een positief toekomstbeeld met duidelijk menselijk effect.",
+        compare_user_label: "Dit is jouw input",
+        compare_suggestion_label: "Dit zou mijn suggestie zijn",
+        compare_instruction: "Klik alsjeblieft wat het beste bij je past.",
+        compare_user_normalized: userInput,
+        compare_agent_current: canonical,
       },
       state: {
         started: "true",
         current_step: "dream",
-        ui_action_wording_pick_user: "ACTION_WORDING_PICK_USER",
-        ui_action_wording_pick_suggestion: "ACTION_WORDING_PICK_SUGGESTION",
+        ui_action_compare_pick_user: "ACTION_COMPARE_PICK_USER",
+        ui_action_compare_pick_suggestion: "ACTION_COMPARE_PICK_SUGGESTION",
       } as any,
       ui: {
         view: {
           mode: "interactive",
-          variant: "text_compare",
-        },
-        feedback_contract: {
-          version: "2026-03-16.feedback_contract.v1",
-          kind: "single_value_compare",
-          mode: "text",
-          rationale:
-            "Je input benoemt het probleem van verkeerde voorlichting, maar een Droom vraagt om een positief toekomstbeeld met duidelijk menselijk effect.",
-          current_label: "Dit is jouw input",
-          suggested_label: "Dit zou mijn suggestie zijn",
-          current_value: "",
-          suggested_value: canonical,
-          instruction: "Klik alsjeblieft wat het beste bij je past.",
         },
       },
     } as any,
@@ -701,86 +690,36 @@ test("final response repairs explicit single-value compare contracts into pendin
   assert.equal(String(renderModel.suggestion_text || ""), canonical);
 });
 
-test("legacy canonical single-value suggestions migrate into ui.content before compare shadows are stripped", () => {
-  const response = finalizeResponseContractInternals(
-    {
-      ok: true,
-      current_step_id: "purpose",
-      text: "",
-      prompt: "",
-      specialist: {},
-      state: {
-        started: "true",
-        current_step: "purpose",
-      } as any,
-      ui: {
-        view: {
-          mode: "interactive",
-        },
-        feedback_contract: {
-          version: "2026-03-16.feedback_contract.v1",
-          kind: "single_value_canonical_suggestion",
-          heading: "OP BASIS VAN JE INPUT STEL IK DE VOLGENDE BESTAANSREDEN VOOR",
-          suggested_value: "Wij bestaan om mensen op een positieve manier te inspireren om hun volledige potentieel te ontdekken.",
-          rationale: "Je huidige formulering blijft nog te algemeen.",
-        },
-      },
-    } as any,
-    {
-      applyUiClientActionContract: () => {},
-      parseMenuFromContractIdForStep: () => "",
-      labelKeysForMenuActionCodes: () => [],
-      onUiParityError: () => {},
-      attachRegistryPayload: (payload) => payload,
-    }
-  );
-
-  const ui = ((response.ui || {}) as Record<string, unknown>);
-  const content = ((ui.content || {}) as Record<string, unknown>);
-  assert.equal("feedback_contract" in ui, false);
-  assert.equal(String(content.kind || ""), "single_value");
-  assert.equal(
-    String(content.heading || ""),
-    "OP BASIS VAN JE INPUT STEL IK DE VOLGENDE BESTAANSREDEN VOOR"
-  );
-  assert.equal(
-    String(content.canonical_text || ""),
-    "Wij bestaan om mensen op een positieve manier te inspireren om hun volledige potentieel te ontdekken."
-  );
-  assert.equal(String(content.feedback_reason_text || ""), "Je huidige formulering blijft nog te algemeen.");
-});
-
-test("pending interaction derives list_compare from wording-choice list feedback", () => {
+test("pending interaction derives list_compare from compare list feedback", () => {
   const response = finalizeResponseContractInternals(
     {
       ok: true,
       current_step_id: "productsservices",
       text: "",
       prompt: "",
-      specialist: {},
+      specialist: {
+        compare_pending: "true",
+        compare_mode: "list",
+        compare_presentation: "picker",
+        feedback_reason_text: "Ik heb de servicebenaming specifieker gemaakt.",
+        compare_user_label: "Your input",
+        compare_suggestion_label: "My suggestion",
+        compare_user_items: ["AI flows", "Production support"],
+        compare_suggestion_items: ["AI-driven flows", "Production guidance"],
+        compare_instruction: "Choose the version that fits best for the remaining difference.",
+      },
       state: {
         started: "true",
         current_step: "productsservices",
-        ui_action_wording_pick_user: "ACTION_WORDING_PICK_USER",
-        ui_action_wording_pick_suggestion: "ACTION_WORDING_PICK_SUGGESTION",
+        ui_action_compare_pick_user: "ACTION_COMPARE_PICK_USER",
+        ui_action_compare_pick_suggestion: "ACTION_COMPARE_PICK_SUGGESTION",
       } as any,
       ui: {
         view: {
           mode: "interactive",
-          variant: "text_compare",
         },
         flags: {
-          require_wording_pick: true,
-        },
-        wording_choice: {
-          enabled: true,
-          mode: "list",
-          feedback_reason_text: "Ik heb de servicebenaming specifieker gemaakt.",
-          user_label: "Your input",
-          suggestion_label: "My suggestion",
-          user_items: ["AI flows", "Production support"],
-          suggestion_items: ["AI-driven flows", "Production guidance"],
-          instruction: "Choose the version that fits best for the remaining difference.",
+          require_compare_pick: true,
         },
       },
     } as any,
@@ -811,42 +750,41 @@ test("pending interaction derives grouped list compare into list_compare render 
       current_step_id: "dream",
       text: "",
       prompt: "",
-      specialist: {},
+      specialist: {
+        compare_pending: "true",
+        compare_mode: "list",
+        compare_presentation: "picker",
+        compare_variant: "grouped_list_units",
+        feedback_reason_text: "Je hebt al iets soortgelijks gezegd, dus een samengevoegde regel houdt je lijst scherper.",
+        compare_user_label: "Keep both statements",
+        compare_suggestion_label: "Merge into one statement",
+        compare_user_items: [
+          "Meer mensen zoeken werk dat impact heeft.",
+          "Werk moet zichtbaar iets goeds doen voor anderen.",
+        ],
+        compare_suggestion_items: [
+          "Meer mensen zoeken werk dat zichtbaar impact heeft op het leven van anderen.",
+        ],
+        compare_instruction: [
+          "These points already stay in the final list:",
+          "",
+          "• Er zal meer behoefte zijn aan bedrijven die blijvende waarde nalaten.",
+          "",
+          "Choose the version that fits best for the remaining difference.",
+        ].join("\n"),
+      },
       state: {
         started: "true",
         current_step: "dream",
-        ui_action_wording_pick_user: "ACTION_WORDING_PICK_USER",
-        ui_action_wording_pick_suggestion: "ACTION_WORDING_PICK_SUGGESTION",
+        ui_action_compare_pick_user: "ACTION_COMPARE_PICK_USER",
+        ui_action_compare_pick_suggestion: "ACTION_COMPARE_PICK_SUGGESTION",
       } as any,
       ui: {
         view: {
           mode: "interactive",
-          variant: "text_compare",
         },
         flags: {
-          require_wording_pick: true,
-        },
-        wording_choice: {
-          enabled: true,
-          mode: "list",
-          variant: "grouped_list_units",
-          feedback_reason_text: "Je hebt al iets soortgelijks gezegd, dus een samengevoegde regel houdt je lijst scherper.",
-          user_label: "Keep both statements",
-          suggestion_label: "Merge into one statement",
-          user_items: [
-            "Meer mensen zoeken werk dat impact heeft.",
-            "Werk moet zichtbaar iets goeds doen voor anderen.",
-          ],
-          suggestion_items: [
-            "Meer mensen zoeken werk dat zichtbaar impact heeft op het leven van anderen.",
-          ],
-          instruction: [
-            "These points already stay in the final list:",
-            "",
-            "• Er zal meer behoefte zijn aan bedrijven die blijvende waarde nalaten.",
-            "",
-            "Choose the version that fits best for the remaining difference.",
-          ].join("\n"),
+          require_compare_pick: true,
         },
       },
     } as any,
@@ -885,14 +823,22 @@ test("pending interaction derives grouped list compare into list_compare render 
   );
 });
 
-test("compare contracts fail closed when pending interaction actions are missing", () => {
+test("compare contracts self-heal when pending interaction actions are missing", () => {
   const response = finalizeResponseContractInternals(
     {
       ok: true,
       current_step_id: "purpose",
       text: "",
       prompt: "",
-      specialist: {},
+      specialist: {
+        compare_pending: "true",
+        compare_mode: "text",
+        compare_presentation: "picker",
+        feedback_reason_text: "We exist to make complex choices understandable.",
+        compare_user_normalized: "We want to do something good.",
+        compare_agent_current: "We exist to make complex choices understandable.",
+        compare_instruction: "Choose the wording that fits best.",
+      },
       state: {
         started: "true",
         current_step: "purpose",
@@ -902,13 +848,6 @@ test("compare contracts fail closed when pending interaction actions are missing
         view: {
           mode: "interactive",
           variant: "text_compare",
-        },
-        feedback_contract: {
-          kind: "single_value_compare",
-          mode: "text",
-          current_value: "We want to do something good.",
-          suggested_value: "We exist to make complex choices understandable.",
-          instruction: "Choose the wording that fits best.",
         },
       },
     } as any,
@@ -921,9 +860,10 @@ test("compare contracts fail closed when pending interaction actions are missing
     }
   );
 
-  assert.equal(response.ok, false);
-  assert.equal(String((response.error as Record<string, unknown> | undefined)?.type || ""), "contract_warning");
-  assert.equal(String(((response.state as any) || {}).reason_code || ""), "ui_pending_interaction_missing_for_compare");
+  assert.equal(response.ok, true);
+  assert.equal(String((response.error as Record<string, unknown> | undefined)?.type || ""), "");
+  assert.equal(String((((response.ui as any) || {}).view || {}).variant || ""), "");
+  assert.equal(String((((response.ui as any) || {}).pending_interaction || {}).kind || ""), "");
 });
 
 test("dream compare contracts fail closed when generic card content is still present", () => {
@@ -933,12 +873,20 @@ test("dream compare contracts fail closed when generic card content is still pre
       current_step_id: "dream",
       text: "",
       prompt: "",
-      specialist: {},
+      specialist: {
+        compare_pending: "true",
+        compare_mode: "text",
+        compare_presentation: "picker",
+        feedback_reason_text: "Deze droomformulering maakt het toekomstbeeld scherper.",
+        compare_user_normalized: "Wij willen bedrijven helpen groeien.",
+        compare_agent_current: "Mindd droomt van een wereld waarin mensen zich verbonden voelen.",
+        compare_instruction: "Choose the wording that fits best.",
+      },
       state: {
         started: "true",
         current_step: "dream",
-        ui_action_wording_pick_user: "ACTION_WORDING_PICK_USER",
-        ui_action_wording_pick_suggestion: "ACTION_WORDING_PICK_SUGGESTION",
+        ui_action_compare_pick_user: "ACTION_COMPARE_PICK_USER",
+        ui_action_compare_pick_suggestion: "ACTION_COMPARE_PICK_SUGGESTION",
       } as any,
       ui: {
         contract_id: "dream:interactive:refine",
@@ -950,13 +898,6 @@ test("dream compare contracts fail closed when generic card content is still pre
           kind: "single_value",
           heading: "JE HUIDIGE DROOM VOOR MINDD IS",
           canonical_text: "Mindd droomt van een wereld waarin mensen zich verbonden voelen.",
-        },
-        feedback_contract: {
-          kind: "single_value_compare",
-          mode: "text",
-          current_value: "Wij willen bedrijven helpen groeien.",
-          suggested_value: "Mindd droomt van een wereld waarin mensen zich verbonden voelen.",
-          instruction: "Choose the wording that fits best.",
         },
       },
     } as any,
@@ -984,42 +925,41 @@ test("final response publishes a single server-owned pending interaction for com
       prompt: "",
       specialist: {
         action: "ASK",
-        wording_choice_pending: "true",
-        wording_choice_mode: "text",
-        wording_choice_target_field: "dream",
-        wording_choice_user_normalized: "Mijn versie",
-        wording_choice_agent_current: "De suggestie",
+        compare_pending: "true",
+        compare_mode: "text",
+        compare_presentation: "picker",
+        compare_target_field: "dream",
+        feedback_reason_text: "Deze suggestie maakt de formulering scherper.",
+        compare_user_label: "Dit is jouw input:",
+        compare_suggestion_label: "Dit zou mijn suggestie zijn:",
+        compare_instruction: "Klik alsjeblieft wat het beste bij je past.",
+        compare_user_normalized: "Mijn versie",
+        compare_agent_current: "De suggestie",
       },
       state: {
         started: "true",
         current_step: "dream",
         active_specialist: "Dream",
-        ui_action_wording_pick_user: "ACTION_WORDING_PICK_USER",
-        ui_action_wording_pick_suggestion: "ACTION_WORDING_PICK_SUGGESTION",
+        ui_action_compare_pick_user: "ACTION_COMPARE_PICK_USER",
+        ui_action_compare_pick_suggestion: "ACTION_COMPARE_PICK_SUGGESTION",
         last_specialist_result: {
           action: "ASK",
-          wording_choice_pending: "true",
-          wording_choice_mode: "text",
-          wording_choice_target_field: "dream",
-          wording_choice_user_normalized: "Mijn versie",
-          wording_choice_agent_current: "De suggestie",
+          compare_pending: "true",
+          compare_mode: "text",
+          compare_presentation: "picker",
+          compare_target_field: "dream",
+          feedback_reason_text: "Deze suggestie maakt de formulering scherper.",
+          compare_user_label: "Dit is jouw input:",
+          compare_suggestion_label: "Dit zou mijn suggestie zijn:",
+          compare_instruction: "Klik alsjeblieft wat het beste bij je past.",
+          compare_user_normalized: "Mijn versie",
+          compare_agent_current: "De suggestie",
         },
       } as any,
       ui: {
         contract_id: "dream:interactive:refine",
         view: {
           mode: "interactive",
-          variant: "text_compare",
-        },
-        feedback_contract: {
-          kind: "single_value_compare",
-          mode: "text",
-          rationale: "Deze suggestie maakt de formulering scherper.",
-          current_label: "Dit is jouw input:",
-          suggested_label: "Dit zou mijn suggestie zijn:",
-          current_value: "Mijn versie",
-          suggested_value: "De suggestie",
-          instruction: "Klik alsjeblieft wat het beste bij je past.",
         },
       },
     } as any,
@@ -1035,7 +975,7 @@ test("final response publishes a single server-owned pending interaction for com
   const ui = ((response.ui || {}) as Record<string, unknown>);
   const pending = ((ui.pending_interaction || {}) as Record<string, unknown>);
   assert.equal("feedback_contract" in ui, false);
-  assert.equal("wording_choice" in ui, false);
+  assert.equal("compare" in ui, false);
   assert.equal(String(pending.kind || ""), "text_compare");
   assert.equal(String(pending.status || ""), "pending");
   assert.deepEqual(
@@ -1049,32 +989,32 @@ test("final response publishes a single server-owned pending interaction for com
   );
 });
 
-test("feedback compare contract keeps wording pick actions and default labels even without explicit compare view variant", () => {
+test("specialist compare state keeps compare pick actions and default labels even without explicit compare view variant", () => {
   const response = finalizeResponseContractInternals(
     {
       ok: true,
       current_step_id: "dream",
       text: "",
       prompt: "",
-      specialist: {},
+      specialist: {
+        compare_pending: "true",
+        compare_mode: "text",
+        compare_presentation: "picker",
+        feedback_reason_text: "De suggestie maakt de droom concreter.",
+        compare_user_normalized: "Wij willen betere bedrijven bouwen.",
+        compare_agent_current: "Mindd droomt van bedrijven die vanuit betekenis echte verandering brengen.",
+        compare_instruction: "Choose the version that fits best.",
+      },
       state: {
         started: "true",
         current_step: "dream",
-        ui_action_wording_pick_user: "ACTION_WORDING_PICK_USER",
-        ui_action_wording_pick_suggestion: "ACTION_WORDING_PICK_SUGGESTION",
+        ui_action_compare_pick_user: "ACTION_COMPARE_PICK_USER",
+        ui_action_compare_pick_suggestion: "ACTION_COMPARE_PICK_SUGGESTION",
       } as any,
       ui: {
         contract_id: "dream:interactive:refine",
         view: {
           mode: "interactive",
-        },
-        feedback_contract: {
-          kind: "single_value_compare",
-          mode: "text",
-          rationale: "De suggestie maakt de droom concreter.",
-          current_value: "Wij willen betere bedrijven bouwen.",
-          suggested_value: "Mindd droomt van bedrijven die vanuit betekenis echte verandering brengen.",
-          instruction: "Choose the version that fits best.",
         },
       },
     } as any,
@@ -1091,7 +1031,7 @@ test("feedback compare contract keeps wording pick actions and default labels ev
   const roles = Array.isArray(actionContract.actions)
     ? (actionContract.actions as Array<Record<string, unknown>>).map((action) => String(action.role || ""))
     : [];
-  assert.deepEqual(roles, ["wording_pick_user", "wording_pick_suggestion"]);
+  assert.deepEqual(roles, ["compare_pick_user", "compare_pick_suggestion"]);
 
   const ui = ((response.ui || {}) as Record<string, unknown>);
   const view = ((ui.view || {}) as Record<string, unknown>);

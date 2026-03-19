@@ -1333,7 +1333,7 @@ test("widget continuity retains accepted canonical step state when a later same-
               dream: "Mindd droomt van een wereld waarin mensen met vertrouwen keuzes maken.",
             },
             provisional_source_by_step: {
-              dream: "wording_pick",
+              dream: "compare_pick",
             },
             bootstrap_session_id: "sess-1",
             bootstrap_epoch: 1,
@@ -1376,7 +1376,7 @@ test("widget continuity retains accepted canonical step state when a later same-
       dream: "Mindd droomt van een wereld waarin mensen met vertrouwen keuzes maken.",
     });
     assert.deepEqual((persisted.provisional_source_by_step || {}) as Record<string, unknown>, {
-      dream: "wording_pick",
+      dream: "compare_pick",
     });
   } finally {
     if (originalOpenAi === undefined) delete (globalThis as unknown as { openai?: unknown }).openai;
@@ -1416,7 +1416,7 @@ test("widget continuity respects explicit canonical clears in the same session",
               dream: "Mindd droomt van een wereld waarin mensen met vertrouwen keuzes maken.",
             },
             provisional_source_by_step: {
-              dream: "wording_pick",
+              dream: "compare_pick",
             },
             bootstrap_session_id: "sess-1",
             bootstrap_epoch: 1,
@@ -1579,7 +1579,7 @@ test("callRunStep keeps accepted canonical step continuity in outbound state whe
           dream: "Mindd droomt van een wereld waarin mensen met vertrouwen keuzes maken.",
         },
         provisional_source_by_step: {
-          dream: "wording_pick",
+          dream: "compare_pick",
         },
         bootstrap_session_id: "sess-1",
         bootstrap_epoch: 1,
@@ -1648,7 +1648,7 @@ test("callRunStep keeps accepted canonical step continuity in outbound state whe
       dream: "Mindd droomt van een wereld waarin mensen met vertrouwen keuzes maken.",
     });
     assert.deepEqual((outboundState.provisional_source_by_step || {}) as Record<string, unknown>, {
-      dream: "wording_pick",
+      dream: "compare_pick",
     });
   } finally {
     setIsLoading(false);
@@ -2422,26 +2422,26 @@ test("bundled runtime fail-closes missing canonical widget payloads", () => {
   assert.match(source, /widget_result:/);
 });
 
-test("bundled wording-choice view prefers the server feedback contract over legacy wording-choice shadows", () => {
+test("bundled compare view prefers the server feedback contract over legacy compare shadows", () => {
   const source = fs.readFileSync(new URL("../ui/step-card.bundled.html", import.meta.url), "utf8");
-  assert.match(source, /class="wordingChoiceFeedback" id="wordingChoiceFeedback"/);
+  assert.match(source, /class="compareFeedback" id="compareFeedback"/);
   assert.match(source, /function readFeedbackContract\(uiPayloadRaw\)/);
   assert.match(source, /function readPendingInteraction\(uiPayloadRaw\)/);
-  assert.match(source, /const feedbackEl = document\.getElementById\("wordingChoiceFeedback"\);/);
-  assert.doesNotMatch(source, /function readWordingChoiceCompareFeedbackText\(wordingChoiceRaw\)/);
+  assert.match(source, /const feedbackEl = document\.getElementById\("compareFeedback"\);/);
+  assert.doesNotMatch(source, /function readCompareCompareFeedbackText\(compareRaw\)/);
   assert.match(source, /const pendingInteraction = readPendingInteraction\(uiPayload\);/);
   assert.match(source, /const feedbackReasonText = pendingInteraction\.renderModel\.feedbackReasonText;/);
   assert.match(source, /renderStructuredText\(feedbackEl, feedbackReasonText\);/);
   assert.match(source, /feedbackContract = readFeedbackContract\(uiPayload\);/);
   assert.match(source, /retainedHeading: pendingInteraction\.renderModel\.retainedHeading,/);
   assert.match(source, /feedbackEl\.style\.display = feedbackReasonText \? "block" : "none";/);
-  assert.match(source, /\.wordingChoiceFeedback p,/);
+  assert.match(source, /\.compareFeedback p,/);
   assert.match(source, /\.cardDesc \.cardFeedbackNote/);
 });
 
-test("bundled wording-choice picker keeps text input visible but inert until a choice is made", () => {
+test("bundled compare picker keeps text input visible but inert until a choice is made", () => {
   const source = fs.readFileSync(new URL("../ui/step-card.bundled.html", import.meta.url), "utf8");
-  assert.match(source, /const disableTextSubmit = shouldDisableTextInputForWordingChoice\(\{/);
+  assert.match(source, /const disableTextSubmit = shouldDisableTextInputForCompare\(\{/);
   assert.match(source, /inputEl2\.disabled = disableTextSubmit;/);
   assert.match(source, /inputEl2\.readOnly = disableTextSubmit;/);
   assert.match(source, /inputEl2\.tabIndex = disableTextSubmit \? -1 : 0;/);
@@ -2492,7 +2492,7 @@ test("bundled dream-step intro movie uses language-mapped SSOT links and hides w
   assert.match(source, /fr:\s*"https:\/\/mycanvasvideos\.s3\.amazonaws\.com\/dream\/A%CC%80%20propos%20du%20Re%CC%82ve\.mp4"/);
   assert.match(source, /ru:\s*"https:\/\/mycanvasvideos\.s3\.amazonaws\.com\/dream\/%D0%9E%20%D1%88%D0%B0%D0%B3%D0%B5%20%C2%AB%D0%9C%D0%B5%D1%87%D1%82%D0%B0%C2%BB\.mp4"/);
   assert.match(source, /function dreamStepVideoUrlForLang\(lang\)/);
-  assert.match(source, /const shouldAppendDreamStepVideo = current === "dream" && showStepIntroChrome && dreamRuntimeMode === "self" && !isDreamDirectionView && !wordingChoiceActive;/);
+  assert.match(source, /const shouldAppendDreamStepVideo = current === "dream" && showStepIntroChrome && dreamRuntimeMode === "self" && !isDreamDirectionView && !compareActive;/);
   assert.match(source, /appendDreamStepIntroVideo\(cardDescEl, lang\);/);
   assert.match(source, /const videoUrl = dreamStepVideoUrlForLang\(lang\);/);
   assert.match(source, /if \(!videoUrl\) return;/);

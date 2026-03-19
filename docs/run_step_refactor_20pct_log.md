@@ -228,7 +228,7 @@ Completed:
   - step-contributing/offtopic heuristics.
   - suggestion-pick heuristics (`pickDualChoiceSuggestion`, dream/role previous-state suggestion pickers).
 - Updated `mcp-server/src/handlers/run_step_modules.ts` export surface for `createRunStepStep0DisplayHelpers` and `createRunStepWordingHeuristicHelpers`.
-- Rewired `mcp-server/src/handlers/run_step.ts` facade to consume new helpers and kept compatibility exports used by tests (`normalizeStep0AskDisplayContract`, `normalizeStep0OfftopicToAsk`, `isMaterialRewriteCandidate`, `areEquivalentWordingVariants`, `isClearlyGeneralOfftopicInput`, `shouldTreatAsStepContributingInput`, `pickDualChoiceSuggestion`).
+- Rewired `mcp-server/src/handlers/run_step.ts` facade to consume new helpers and kept compatibility exports used by tests (`normalizeStep0AskDisplayContract`, `normalizeStep0OfftopicToAsk`, `isMaterialRewriteCandidate`, `areEquivalentCompareVariants`, `isClearlyGeneralOfftopicInput`, `shouldTreatAsStepContributingInput`, `pickDualChoiceSuggestion`).
 - 70% rule decision: continue to completion (metrics before decision: files=4, adds+dels=789, `run_step.ts` hunks=9, `run_step.ts` LOC=3905).
 Pending:
 - PR6 presentation + preflight extraction.

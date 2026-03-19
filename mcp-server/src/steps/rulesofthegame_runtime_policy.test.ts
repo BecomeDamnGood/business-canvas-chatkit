@@ -16,7 +16,7 @@ test("rules runtime gate blocks confirm when accepted list has fewer than 3 rule
       "We communiceren proactief.",
       "We komen afspraken na.",
     ],
-    wordingChoicePending: false,
+    comparePending: false,
   });
 
   assert.equal(gate.count, 2);
@@ -40,9 +40,9 @@ test("rules runtime policy enforces explicit choice when list exceeds maximum", 
   });
 
   assert.equal(result.requiresChoice, true);
-  assert.equal(String(result.specialist.wording_choice_pending || ""), "true");
-  assert.equal(Array.isArray(result.specialist.wording_choice_suggestion_items), true);
-  assert.equal((result.specialist.wording_choice_suggestion_items as string[]).length <= RULESOFTHEGAME_MAX_RULES, true);
+  assert.equal(String(result.specialist.compare_pending || ""), "true");
+  assert.equal(Array.isArray(result.specialist.compare_suggestion_items), true);
+  assert.equal((result.specialist.compare_suggestion_items as string[]).length <= RULESOFTHEGAME_MAX_RULES, true);
 });
 
 test("rules runtime policy enforces internal suggestion for external phrasing", () => {
@@ -59,8 +59,8 @@ test("rules runtime policy enforces internal suggestion for external phrasing", 
   });
 
   assert.equal(result.requiresChoice, true);
-  const suggestions = Array.isArray(result.specialist.wording_choice_suggestion_items)
-    ? (result.specialist.wording_choice_suggestion_items as string[])
+  const suggestions = Array.isArray(result.specialist.compare_suggestion_items)
+    ? (result.specialist.compare_suggestion_items as string[])
     : [];
   assert.equal(suggestions.some((line) => /prijsafspraken|pricing rules/i.test(String(line || ""))), true);
 });

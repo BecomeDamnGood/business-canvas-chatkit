@@ -168,14 +168,14 @@ export const ACTIONCODE_REGISTRY: ActionCodeRegistryShape = {
     // Generic/system
     ACTION_START: { route: "", step: "system", dispatch_owner: "state_action", status: "system" },
     ACTION_TEXT_SUBMIT: { route: "", step: "system", dispatch_owner: "state_action", status: "system" },
-    ACTION_WORDING_PICK_USER: {
-      route: "__WORDING_PICK_USER__",
+    ACTION_COMPARE_PICK_USER: {
+      route: "__COMPARE_PICK_USER__",
       step: "system",
       dispatch_owner: "state_action",
       status: "system",
     },
-    ACTION_WORDING_PICK_SUGGESTION: {
-      route: "__WORDING_PICK_SUGGESTION__",
+    ACTION_COMPARE_PICK_SUGGESTION: {
+      route: "__COMPARE_PICK_SUGGESTION__",
       step: "system",
       dispatch_owner: "state_action",
       status: "system",

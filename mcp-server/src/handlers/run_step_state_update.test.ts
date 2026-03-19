@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { createRunStepStateUpdateHelpers } from "./run_step_state_update.js";
-import { parseListItems } from "./run_step_wording_heuristics.js";
+import { parseListItems } from "./run_step_compare_heuristics.js";
 import { applyDreamRuntimePolicy } from "../steps/dream_runtime_policy.js";
 
 function buildHelpers() {

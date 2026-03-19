@@ -595,7 +595,7 @@ const CANONICAL_FINAL_FIELD_BY_STEP_ID: Record<CanonicalContinuityStep, string> 
 
 const ACCEPTED_CANONICAL_PROVISIONAL_SOURCES = new Set([
   "user_input",
-  "wording_pick",
+  "compare_pick",
   "action_route",
 ]);
 
@@ -2175,14 +2175,14 @@ export function setLoading(next: boolean): void {
   const inputEl = document.getElementById("input");
   const sendEl = document.getElementById("send");
   const btnStart = document.getElementById("btnStart") as HTMLButtonElement | null;
-  const wordingChoicePickUser = document.getElementById("wordingChoicePickUser") as HTMLButtonElement | null;
-  const wordingChoicePickSuggestion = document.getElementById("wordingChoicePickSuggestion") as HTMLButtonElement | null;
+  const comparePickUser = document.getElementById("comparePickUser") as HTMLButtonElement | null;
+  const comparePickSuggestion = document.getElementById("comparePickSuggestion") as HTMLButtonElement | null;
 
   if (inputEl) (inputEl as HTMLInputElement).disabled = loading;
   if (sendEl) (sendEl as HTMLButtonElement).disabled = loading;
   if (btnStart) btnStart.disabled = loading;
-  if (wordingChoicePickUser) wordingChoicePickUser.disabled = loading;
-  if (wordingChoicePickSuggestion) wordingChoicePickSuggestion.disabled = loading;
+  if (comparePickUser) comparePickUser.disabled = loading;
+  if (comparePickSuggestion) comparePickSuggestion.disabled = loading;
 
   document.querySelectorAll("#choiceWrap button").forEach((b) => {
     (b as HTMLButtonElement).disabled = loading;

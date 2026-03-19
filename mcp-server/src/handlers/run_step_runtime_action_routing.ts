@@ -3,13 +3,13 @@ import type { TurnOutputStatus } from "../core/turn_policy_renderer.js";
 import type { OrchestratorOutput } from "../core/orchestrator.js";
 import type { RunStepAttachRegistryPayload } from "./run_step_ports.js";
 import type { TurnResponseEngine } from "./run_step_turn_response_engine.js";
-import type { WordingChoiceUiPayload } from "./run_step_runtime_action_helpers.js";
+import type { CompareUiPayload } from "./run_step_runtime_action_helpers.js";
 import type { AcceptedOutputUserTurnClassification } from "./run_step_accepted_output_semantics.js";
 import type {
-  PendingWordingChoiceIntentResolution,
-  PendingWordingChoiceTextAnchor,
-  PendingWordingChoiceTextIntent,
-} from "./run_step_wording_heuristics.js";
+  PendingCompareIntentResolution,
+  PendingCompareTextAnchor,
+  PendingCompareTextIntent,
+} from "./run_step_compare_heuristics.js";
 import {
   BIGWHY_MAX_WORDS,
   buildActionCodeStepTransitions,
@@ -17,8 +17,8 @@ import {
   pickBigWhyCandidate,
   resolveRequiredFinalValue,
 } from "./run_step_runtime_action_routing_policy.js";
-import { normalizePendingPickerSpecialistContract } from "./run_step_wording_picker_contract.js";
-import { isSingleValueTextPickerStep } from "./run_step_wording_picker_contract.js";
+import { normalizePendingPickerSpecialistContract } from "./run_step_compare_picker_contract.js";
+import { isSingleValueTextPickerStep } from "./run_step_compare_picker_contract.js";
 import {
   evaluateRulesRuntimeGate,
   RULESOFTHEGAME_MIN_RULES,
@@ -29,8 +29,8 @@ export type RunStepRuntimeActionRoutingOutput<TPayload extends Record<string, un
   response: TPayload | null;
   state: CanvasState;
   userMessage: string;
-  submittedTextIntent: PendingWordingChoiceTextIntent | "";
-  submittedTextAnchor: PendingWordingChoiceTextAnchor | "";
+  submittedTextIntent: PendingCompareTextIntent | "";
+  submittedTextAnchor: PendingCompareTextAnchor | "";
   acceptedOutputUserTurnClassification: AcceptedOutputUserTurnClassification | null;
   responseUiFlags: Record<string, boolean | string> | null;
   bigwhyMaxWords: number;
@@ -47,8 +47,8 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     lastSpecialistResult: Record<string, unknown>;
     model: string;
     inputMode: "widget" | "chat";
-    wordingChoiceEnabled: boolean;
-    wordingChoiceIntentV1: boolean;
+    compareEnabled: boolean;
+    compareIntentV1: boolean;
     uiI18nTelemetry: unknown;
   };
   ids: {
@@ -119,12 +119,12 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     isUiStateHygieneSwitchV1Enabled: () => boolean;
     isClearlyGeneralOfftopicInput: (userMessage: string) => boolean;
     shouldTreatAsStepContributingInput: (userMessage: string, stepId: string) => boolean;
-    resolvePendingWordingChoiceIntent: (params: {
+    resolvePendingCompareIntent: (params: {
       userMessage: string;
       stepId: string;
       pendingSuggestion: string;
       pendingUserInput: string;
-    }) => Promise<PendingWordingChoiceIntentResolution> | PendingWordingChoiceIntentResolution;
+    }) => Promise<PendingCompareIntentResolution> | PendingCompareIntentResolution;
     bumpUiI18nCounter: (telemetry: unknown, key: string) => void;
     classifyAcceptedOutputUserTurn: (params: {
       model: string;
@@ -136,23 +136,23 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
       language?: string;
     }) => Promise<AcceptedOutputUserTurnClassification>;
   };
-  wording: {
-    isWordingChoiceEligibleContext: (
+  compare: {
+    isCompareEligibleContext: (
       stepId: string,
       activeSpecialist: string,
       specialist?: Record<string, unknown> | null,
       previousSpecialist?: Record<string, unknown> | null,
       dreamRuntimeModeRaw?: unknown
     ) => boolean;
-    buildWordingChoiceFromPendingSpecialist: (
+    buildCompareFromPendingSpecialist: (
       specialistResult: Record<string, unknown>,
       state: CanvasState | null | undefined,
       activeSpecialist: string,
       previousSpecialist: Record<string, unknown>,
       stepId: string,
       dreamRuntimeModeRaw?: unknown
-    ) => WordingChoiceUiPayload | null;
-    applyWordingPickSelection: (params: {
+    ) => CompareUiPayload | null;
+    applyComparePickSelection: (params: {
       stepId: string;
       routeToken: string;
       state: CanvasState;
@@ -162,9 +162,9 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
       specialist: Record<string, unknown>;
       nextState: CanvasState;
     };
-    isWordingPickRouteToken: (raw: string) => boolean;
+    isComparePickRouteToken: (raw: string) => boolean;
     isRefineAdjustRouteToken: (raw: string) => boolean;
-    buildWordingChoiceFromTurn: (params: {
+    buildCompareFromTurn: (params: {
       stepId: string;
       state: CanvasState;
       activeSpecialist: string;
@@ -176,10 +176,10 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
       dreamRuntimeModeRaw?: unknown;
     }) => {
       specialist: Record<string, unknown>;
-      wordingChoice?: WordingChoiceUiPayload | null;
+      compare?: CompareUiPayload | null;
     };
-    pickWordingAgentBase: (specialist: Record<string, unknown>) => string;
-    copyPendingWordingChoiceState: (
+    pickCompareAgentBase: (specialist: Record<string, unknown>) => string;
+    copyPendingCompareState: (
       specialistResult: Record<string, unknown>,
       previousSpecialist: Record<string, unknown>
     ) => Record<string, unknown>;
@@ -216,7 +216,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     ids,
     action,
     state: statePorts,
-    wording,
+    compare,
     behavior,
   } = params;
 
@@ -224,8 +224,8 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
   let userMessage = runtime.userMessage;
   let forcedProceed = false;
   let forcedProceedPreviousSpecialist: Record<string, unknown> = {};
-  let submittedTextIntent: PendingWordingChoiceTextIntent | "" = "";
-  let submittedTextAnchor: PendingWordingChoiceTextAnchor | "" = "";
+  let submittedTextIntent: PendingCompareTextIntent | "" = "";
+  let submittedTextAnchor: PendingCompareTextAnchor | "" = "";
   let acceptedOutputUserTurnClassification: AcceptedOutputUserTurnClassification | null = null;
 
   const normalizeItems = (raw: unknown): string[] =>
@@ -233,89 +233,89 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
       ? raw.map((line) => String(line || "").trim()).filter(Boolean)
       : [];
 
-  const clearDreamBuilderLegacyWordingChoiceFields = (
+  const clearDreamBuilderLegacyCompareFields = (
     specialist: Record<string, unknown>
   ): Record<string, unknown> => ({
     ...specialist,
-    wording_choice_pending: "false",
-    wording_choice_selected: "",
-    wording_choice_user_raw: "",
-    wording_choice_user_normalized: "",
-    wording_choice_user_items: [],
-    wording_choice_suggestion_items: [],
-    wording_choice_base_items: [],
-    wording_choice_list_semantics: "delta",
-    wording_choice_agent_current: "",
-    wording_choice_mode: "",
-    wording_choice_target_field: "",
-    wording_choice_presentation: "",
-    wording_choice_variant: "",
-    wording_choice_user_label: "",
-    wording_choice_suggestion_label: "",
-    wording_choice_compare_mode: "",
-    wording_choice_compare_cursor: "",
-    wording_choice_compare_units: [],
-    wording_choice_compare_segments: [],
-    wording_choice_user_variant_semantics: "",
-    wording_choice_user_variant_stepworthy: "",
+    compare_pending: "false",
+    compare_selected: "",
+    compare_user_raw: "",
+    compare_user_normalized: "",
+    compare_user_items: [],
+    compare_suggestion_items: [],
+    compare_base_items: [],
+    compare_list_semantics: "delta",
+    compare_agent_current: "",
+    compare_mode: "",
+    compare_target_field: "",
+    compare_presentation: "",
+    compare_variant: "",
+    compare_user_label: "",
+    compare_suggestion_label: "",
+    compare_compare_mode: "",
+    compare_compare_cursor: "",
+    compare_compare_units: [],
+    compare_compare_segments: [],
+    compare_user_variant_semantics: "",
+    compare_user_variant_stepworthy: "",
     pending_suggestion_intent: "",
     pending_suggestion_anchor: "",
     pending_suggestion_feedback_text: "",
     pending_suggestion_presentation_mode: "",
   });
 
-  const hasRenderablePendingWordingChoice = (specialist: Record<string, unknown>): boolean => {
-    if (String(specialist.wording_choice_pending || "").trim() !== "true") return false;
-    const mode = String(specialist.wording_choice_mode || "text").trim() === "list" ? "list" : "text";
-    const stepId = String(specialist.wording_choice_target_field || "").trim();
+  const hasRenderablePendingCompare = (specialist: Record<string, unknown>): boolean => {
+    if (String(specialist.compare_pending || "").trim() !== "true") return false;
+    const mode = String(specialist.compare_mode || "text").trim() === "list" ? "list" : "text";
+    const stepId = String(specialist.compare_target_field || "").trim();
     const dreamRuntimeMode = action.getDreamRuntimeMode(state);
     const dreamBuilderFlowActive = String(state.current_step || "") === ids.dreamStepId && dreamRuntimeMode !== "self";
     if (dreamBuilderFlowActive && stepId === ids.dreamStepId) return false;
     const hasExplicitFeedbackReason = Boolean(String(specialist.feedback_reason_text || "").trim());
-    const userText = String(specialist.wording_choice_user_normalized || specialist.wording_choice_user_raw || "").trim();
-    const suggestionText = String(specialist.wording_choice_agent_current || specialist.refined_formulation || "").trim();
-    const userItems = normalizeItems(specialist.wording_choice_user_items);
-    const suggestionItems = normalizeItems(specialist.wording_choice_suggestion_items);
+    const userText = String(specialist.compare_user_normalized || specialist.compare_user_raw || "").trim();
+    const suggestionText = String(specialist.compare_agent_current || specialist.refined_formulation || "").trim();
+    const userItems = normalizeItems(specialist.compare_user_items);
+    const suggestionItems = normalizeItems(specialist.compare_suggestion_items);
     if (mode === "list") {
       const hasUser = userItems.length > 0 || Boolean(userText);
       const hasSuggestion = suggestionItems.length > 0 || Boolean(suggestionText);
       return hasUser && hasSuggestion && hasExplicitFeedbackReason;
     }
     if (
-      pendingWordingChoicePresentation(specialist) === "picker" &&
+      pendingComparePresentation(specialist) === "picker" &&
       isSingleValueTextPickerStep(stepId, mode) &&
-      String(specialist.wording_choice_user_variant_stepworthy || "").trim() !== "true"
+      String(specialist.compare_user_variant_stepworthy || "").trim() !== "true"
     ) {
       return false;
     }
     return Boolean(userText && suggestionText && hasExplicitFeedbackReason);
   };
 
-  const pendingWordingChoicePresentation = (specialist: Record<string, unknown>): "picker" | "canonical" =>
-    String(specialist.wording_choice_presentation || "").trim() === "canonical" ? "canonical" : "picker";
+  const pendingComparePresentation = (specialist: Record<string, unknown>): "picker" | "canonical" =>
+    String(specialist.compare_presentation || "").trim() === "canonical" ? "canonical" : "picker";
 
-  const hasPickerPendingWordingChoice = (specialist: Record<string, unknown>): boolean =>
-    pendingWordingChoicePresentation(specialist) === "picker" && hasRenderablePendingWordingChoice(specialist);
+  const hasPickerPendingCompare = (specialist: Record<string, unknown>): boolean =>
+    pendingComparePresentation(specialist) === "picker" && hasRenderablePendingCompare(specialist);
 
-  const hasCanonicalPendingWordingChoice = (specialist: Record<string, unknown>): boolean =>
-    pendingWordingChoicePresentation(specialist) === "canonical" && hasRenderablePendingWordingChoice(specialist);
+  const hasCanonicalPendingCompare = (specialist: Record<string, unknown>): boolean =>
+    pendingComparePresentation(specialist) === "canonical" && hasRenderablePendingCompare(specialist);
 
   const normalizeAcceptedOutputPendingSpecialist = async (
     specialist: Record<string, unknown>,
     stepId: string
   ): Promise<Record<string, unknown>> => {
-    if (String(specialist.wording_choice_pending || "").trim() !== "true") return specialist;
+    if (String(specialist.compare_pending || "").trim() !== "true") return specialist;
     const dreamRuntimeMode = action.getDreamRuntimeMode(state);
     const dreamBuilderFlowActive = String(state.current_step || "") === ids.dreamStepId && dreamRuntimeMode !== "self";
     if (dreamBuilderFlowActive && stepId === ids.dreamStepId) {
-      return clearDreamBuilderLegacyWordingChoiceFields(specialist);
+      return clearDreamBuilderLegacyCompareFields(specialist);
     }
-    const mode = String(specialist.wording_choice_mode || "text").trim() === "list" ? "list" : "text";
+    const mode = String(specialist.compare_mode || "text").trim() === "list" ? "list" : "text";
     if (!isSingleValueTextPickerStep(stepId, mode)) return specialist;
-    if (pendingWordingChoicePresentation(specialist) !== "picker") return specialist;
-    if (String(specialist.wording_choice_user_variant_stepworthy || "").trim() === "true") return specialist;
-    const userVariant = String(specialist.wording_choice_user_normalized || specialist.wording_choice_user_raw || "").trim();
-    const suggestion = String(specialist.wording_choice_agent_current || specialist.refined_formulation || "").trim();
+    if (pendingComparePresentation(specialist) !== "picker") return specialist;
+    if (String(specialist.compare_user_variant_stepworthy || "").trim() === "true") return specialist;
+    const userVariant = String(specialist.compare_user_normalized || specialist.compare_user_raw || "").trim();
+    const suggestion = String(specialist.compare_agent_current || specialist.refined_formulation || "").trim();
     if (!userVariant || !suggestion) return specialist;
     const classification = await statePorts.classifyAcceptedOutputUserTurn({
       model: runtime.model,
@@ -326,9 +326,9 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     });
     return {
       ...specialist,
-      wording_choice_user_variant_semantics: classification.turn_kind,
-      wording_choice_user_variant_stepworthy: classification.user_variant_is_stepworthy ? "true" : "false",
-      wording_choice_presentation: classification.user_variant_is_stepworthy ? "picker" : "canonical",
+      compare_user_variant_semantics: classification.turn_kind,
+      compare_user_variant_stepworthy: classification.user_variant_is_stepworthy ? "true" : "false",
+      compare_presentation: classification.user_variant_is_stepworthy ? "picker" : "canonical",
     };
   };
 
@@ -388,7 +388,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
         ? ((stateForRules as Record<string, unknown>).provisional_source_by_step as Record<string, unknown>)
         : {};
     const source = String(rawMap[ids.rulesofthegameStepId] || "").trim();
-    return source === "user_input" || source === "wording_pick" || source === "action_route";
+    return source === "user_input" || source === "compare_pick" || source === "action_route";
   };
 
   const acceptedRulesValue = (stateForRules: CanvasState): string => {
@@ -409,23 +409,23 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
       String(pendingSpecialist.rulesofthegame || "").trim() ||
       String(pendingSpecialist.refined_formulation || "").trim() ||
       acceptedValue;
-    const wordingChoicePending = String(pendingSpecialist.wording_choice_pending || "").trim() === "true";
+    const comparePending = String(pendingSpecialist.compare_pending || "").trim() === "true";
     const gate = evaluateRulesRuntimeGate({
       acceptedOutput,
       acceptedValue,
       visibleValue,
       statements: pendingSpecialist.statements,
-      wordingChoicePending,
+      comparePending,
     });
     const codes: string[] = [];
     if (gate.count < RULESOFTHEGAME_MIN_RULES) codes.push("rules_min_count");
     if (gate.count > RULESOFTHEGAME_MAX_RULES) codes.push("rules_max_count");
-    if (wordingChoicePending) codes.push("rules_pending_choice");
+    if (comparePending) codes.push("rules_pending_choice");
     if (
       !acceptedOutput &&
       gate.count >= RULESOFTHEGAME_MIN_RULES &&
       gate.count <= RULESOFTHEGAME_MAX_RULES &&
-      !wordingChoicePending
+      !comparePending
     ) {
       codes.push("rules_missing_accepted_output");
     }
@@ -458,13 +458,13 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
       String(pendingSpecialist.rulesofthegame || "").trim() ||
       String(pendingSpecialist.refined_formulation || "").trim() ||
       acceptedValue;
-    const wordingChoicePending = String(pendingSpecialist.wording_choice_pending || "").trim() === "true";
+    const comparePending = String(pendingSpecialist.compare_pending || "").trim() === "true";
     const gate = evaluateRulesRuntimeGate({
       acceptedOutput,
       acceptedValue,
       visibleValue,
       statements: pendingSpecialist.statements,
-      wordingChoicePending,
+      comparePending,
     });
     const blockCodes = rulesProceedBlockCodes(stateForText, pendingSpecialist);
     const reasonLines = [
@@ -517,26 +517,26 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
       proceed_request_intent: "next_step",
       proceed_block_reason_codes: blockCodes,
       proceed_block_rule_count: gate.count,
-      wording_choice_pending: "false",
-      wording_choice_selected: "",
-      wording_choice_mode: "",
-      wording_choice_target_field: "",
-      wording_choice_user_raw: "",
-      wording_choice_user_normalized: "",
-      wording_choice_user_items: [],
-      wording_choice_suggestion_items: [],
-      wording_choice_base_items: [],
-      wording_choice_agent_current: "",
-      wording_choice_presentation: "",
-      wording_choice_variant: "",
-      wording_choice_user_label: "",
-      wording_choice_suggestion_label: "",
-      wording_choice_compare_mode: "",
-      wording_choice_compare_cursor: "",
-      wording_choice_compare_units: [],
-      wording_choice_compare_segments: [],
-      wording_choice_user_variant_semantics: "",
-      wording_choice_user_variant_stepworthy: "",
+      compare_pending: "false",
+      compare_selected: "",
+      compare_mode: "",
+      compare_target_field: "",
+      compare_user_raw: "",
+      compare_user_normalized: "",
+      compare_user_items: [],
+      compare_suggestion_items: [],
+      compare_base_items: [],
+      compare_agent_current: "",
+      compare_presentation: "",
+      compare_variant: "",
+      compare_user_label: "",
+      compare_suggestion_label: "",
+      compare_compare_mode: "",
+      compare_compare_cursor: "",
+      compare_compare_units: [],
+      compare_compare_segments: [],
+      compare_user_variant_semantics: "",
+      compare_user_variant_stepworthy: "",
       pending_suggestion_intent: "",
       pending_suggestion_anchor: "",
       pending_suggestion_seed_source: "",
@@ -590,9 +590,9 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
       ((state as Record<string, unknown>).last_specialist_result as Record<string, unknown>) || {};
 
     if (
-      runtime.wordingChoiceEnabled &&
-      String(prev.wording_choice_pending || "") === "true" &&
-      wording.isWordingChoiceEligibleContext(
+      runtime.compareEnabled &&
+      String(prev.compare_pending || "") === "true" &&
+      compare.isCompareEligibleContext(
         stepId,
         String((state as Record<string, unknown>).active_specialist || ""),
         prev,
@@ -607,13 +607,13 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
         specialist: pendingSpecialistSeed,
         stepIdHint: stepId,
       });
-      const canonicalPendingConfirmable = hasCanonicalPendingWordingChoice(pendingSpecialist);
+      const canonicalPendingConfirmable = hasCanonicalPendingCompare(pendingSpecialist);
       if (canonicalPendingConfirmable) {
         state = statePorts.clearStepInteractiveState(stateWithUi, stepId);
       } else {
         (state as Record<string, unknown>).last_specialist_result = pendingSpecialist;
       }
-      const pendingChoice = wording.buildWordingChoiceFromPendingSpecialist(
+      const pendingChoice = compare.buildCompareFromPendingSpecialist(
         pendingSpecialist,
         stateWithUi,
         String((state as Record<string, unknown>).active_specialist || ""),
@@ -634,7 +634,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
             state: stateWithUi,
           },
           pendingSpecialist,
-          { require_wording_pick: true },
+          { require_compare_pick: true },
           [],
           [],
           pendingChoice
@@ -654,9 +654,9 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
         };
       }
       if (!canonicalPendingConfirmable && (
-        String(pendingSpecialist.wording_choice_pending || "").trim() === "true" &&
-        pendingWordingChoicePresentation(pendingSpecialist) === "canonical" &&
-        hasRenderablePendingWordingChoice(pendingSpecialist)
+        String(pendingSpecialist.compare_pending || "").trim() === "true" &&
+        pendingComparePresentation(pendingSpecialist) === "canonical" &&
+        hasRenderablePendingCompare(pendingSpecialist)
       )) {
         const payload = behavior.attachRegistryPayload(
           {
@@ -688,9 +688,9 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     }
 
     if (
-      runtime.wordingChoiceEnabled &&
-      String(prev.wording_choice_pending || "") === "true" &&
-      !wording.isWordingChoiceEligibleContext(
+      runtime.compareEnabled &&
+      String(prev.compare_pending || "") === "true" &&
+      !compare.isCompareEligibleContext(
         stepId,
         String((state as Record<string, unknown>).active_specialist || ""),
         prev,
@@ -769,14 +769,14 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     if (stepId) {
       const pending = (((state as Record<string, unknown>).last_specialist_result as Record<string, unknown>) ||
         {}) as Record<string, unknown>;
-      if (String(pending.wording_choice_pending || "").trim() === "true" && !hasRenderablePendingWordingChoice(pending)) {
+      if (String(pending.compare_pending || "").trim() === "true" && !hasRenderablePendingCompare(pending)) {
         state = statePorts.clearStepInteractiveState(state, stepId);
         statePorts.bumpUiI18nCounter(runtime.uiI18nTelemetry, "state_hygiene_resets_count");
       }
     }
   }
 
-  if (!forcedProceed && !userMessage.startsWith("ACTION_") && !wording.isWordingPickRouteToken(userMessage)) {
+  if (!forcedProceed && !userMessage.startsWith("ACTION_") && !compare.isComparePickRouteToken(userMessage)) {
     const stepId = String(state.current_step || "").trim();
     if (stepId) {
       const sourceMenuId = action.inferCurrentMenuForStep(state, stepId);
@@ -826,19 +826,19 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
         const pendingSpecialist =
           (((state as Record<string, unknown>).last_specialist_result as Record<string, unknown>) ||
             {}) as Record<string, unknown>;
-        const hasPendingWordingChoice =
-          runtime.wordingChoiceEnabled &&
-          String(pendingSpecialist.wording_choice_pending || "").trim() === "true" &&
-          wording.isWordingChoiceEligibleContext(
+        const hasPendingCompare =
+          runtime.compareEnabled &&
+          String(pendingSpecialist.compare_pending || "").trim() === "true" &&
+          compare.isCompareEligibleContext(
             stepId,
             String((state as Record<string, unknown>).active_specialist || ""),
             pendingSpecialist,
             pendingSpecialist,
             action.getDreamRuntimeMode(state)
           ) &&
-          hasPickerPendingWordingChoice(pendingSpecialist);
-        if (hasPendingWordingChoice) {
-          userMessage = "__WORDING_PICK_SUGGESTION__";
+          hasPickerPendingCompare(pendingSpecialist);
+        if (hasPendingCompare) {
+          userMessage = "__COMPARE_PICK_SUGGESTION__";
         } else {
           const guidanceActionCode = action.firstGuidanceActionCodeForMenu(String(sourceMenuId || "").trim());
           if (guidanceActionCode) {
@@ -927,15 +927,15 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     Boolean(String(userMessage || "").trim()) &&
     !String(userMessage || "").trim().startsWith("ACTION_") &&
     !String(userMessage || "").trim().startsWith("__ROUTE__") &&
-    !wording.isWordingPickRouteToken(userMessage);
-  const suspendPendingWordingChoiceSpecialist = (
+    !compare.isComparePickRouteToken(userMessage);
+  const suspendPendingCompareSpecialist = (
     specialist: Record<string, unknown>
   ): Record<string, unknown> =>
     normalizePendingPickerSpecialistContract({
       specialist: {
         ...specialist,
-        wording_choice_pending: "false",
-        wording_choice_selected: "",
+        compare_pending: "false",
+        compare_selected: "",
         pending_suggestion_intent: "",
         pending_suggestion_anchor: "",
         pending_suggestion_feedback_text: "",
@@ -949,8 +949,8 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     ...normalizePendingPickerSpecialistContract({
       specialist: {
         ...specialist,
-        wording_choice_pending: "false",
-        wording_choice_selected: "",
+        compare_pending: "false",
+        compare_selected: "",
         pending_suggestion_intent: "",
         pending_suggestion_anchor: "",
         pending_suggestion_feedback_text: "",
@@ -972,23 +972,23 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
   const buildWidgetResponse = async (params: {
     nextState: CanvasState;
     specialist: Record<string, unknown>;
-    wordingChoice?: WordingChoiceUiPayload | null;
+    compare?: CompareUiPayload | null;
   }): Promise<RunStepRuntimeActionRoutingOutput<TPayload>> => {
     const stateWithUi = await behavior.ensureUiStrings(params.nextState, userMessage);
     const shouldSuspendPendingPicker =
-      (!params.wordingChoice || params.wordingChoice.enabled !== true) &&
-      String(params.specialist.wording_choice_pending || "").trim() === "true" &&
-      pendingWordingChoicePresentation(params.specialist) === "picker";
+      (!params.compare || params.compare.enabled !== true) &&
+      String(params.specialist.compare_pending || "").trim() === "true" &&
+      pendingComparePresentation(params.specialist) === "picker";
     const responseSpecialistBase = shouldSuspendPendingPicker
-      ? suspendPendingWordingChoiceSpecialist(params.specialist)
+      ? suspendPendingCompareSpecialist(params.specialist)
       : params.specialist;
     const responseSpecialist =
       dreamBuilderModeActive
-        ? clearDreamBuilderLegacyWordingChoiceFields(responseSpecialistBase)
+        ? clearDreamBuilderLegacyCompareFields(responseSpecialistBase)
         : responseSpecialistBase;
     (stateWithUi as Record<string, unknown>).last_specialist_result = responseSpecialist;
     state = stateWithUi;
-    const payload = params.wordingChoice && params.wordingChoice.enabled === true
+    const payload = params.compare && params.compare.enabled === true
       ? behavior.attachRegistryPayload(
           {
             ok: true,
@@ -1001,10 +1001,10 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
             state: stateWithUi,
           },
           responseSpecialist,
-          { require_wording_pick: true },
+          { require_compare_pick: true },
           [],
           [],
-          params.wordingChoice
+          params.compare
         )
       : behavior.attachRegistryPayload(
           {
@@ -1173,27 +1173,27 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     runtime.inputMode === "widget" &&
     dreamBuilderModeActive &&
     String(pendingBeforeTurn.__dream_builder_compare_pending || "").trim() === "true";
-  let hasPendingWordingChoice =
-    runtime.wordingChoiceEnabled &&
+  let hasPendingCompare =
+    runtime.compareEnabled &&
     runtime.inputMode === "widget" &&
     !dreamBuilderModeActive &&
-    String(pendingBeforeTurn.wording_choice_pending || "") === "true" &&
-    wording.isWordingChoiceEligibleContext(
+    String(pendingBeforeTurn.compare_pending || "") === "true" &&
+    compare.isCompareEligibleContext(
       String(state.current_step || ""),
       String((state as Record<string, unknown>).active_specialist || ""),
       pendingBeforeTurn,
       pendingBeforeTurn,
       action.getDreamRuntimeMode(state)
     ) &&
-    hasRenderablePendingWordingChoice(pendingBeforeTurn);
-  const suspendPendingWordingChoice = (specialist: Record<string, unknown>) => {
-    const suspended = suspendPendingWordingChoiceSpecialist(specialist);
+    hasRenderablePendingCompare(pendingBeforeTurn);
+  const suspendPendingCompare = (specialist: Record<string, unknown>) => {
+    const suspended = suspendPendingCompareSpecialist(specialist);
     (state as Record<string, unknown>).last_specialist_result = suspended;
     pendingBeforeTurn = suspended;
-    hasPendingWordingChoice = false;
+    hasPendingCompare = false;
   };
-  const shouldResolvePendingWordingFromTextIntent =
-    hasPendingWordingChoice &&
+  const shouldResolvePendingCompareFromTextIntent =
+    hasPendingCompare &&
     hasFreeTextWhilePending &&
     !isRulesProceedBlockTurn &&
     !dreamBuilderComparePending;
@@ -1202,12 +1202,12 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     (state as Record<string, unknown>).last_specialist_result = suspended;
     pendingBeforeTurn = suspended;
   }
-  if (shouldResolvePendingWordingFromTextIntent) {
+  if (shouldResolvePendingCompareFromTextIntent) {
     const pendingSuggestion = String(
-      pendingBeforeTurn.wording_choice_agent_current || pendingBeforeTurn.refined_formulation || ""
+      pendingBeforeTurn.compare_agent_current || pendingBeforeTurn.refined_formulation || ""
     ).trim();
     const pendingUserInput = String(
-      pendingBeforeTurn.wording_choice_user_normalized || pendingBeforeTurn.wording_choice_user_raw || ""
+      pendingBeforeTurn.compare_user_normalized || pendingBeforeTurn.compare_user_raw || ""
     ).trim();
     acceptedOutputUserTurnClassification = await statePorts.classifyAcceptedOutputUserTurn({
       model: runtime.model,
@@ -1223,7 +1223,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
           ? { intent: "feedback_on_suggestion" as const, anchor: "suggestion" as const }
           : acceptedOutputUserTurnClassification.turn_kind === "rejection_without_replacement"
             ? { intent: "reject_suggestion_explicit" as const, anchor: "suggestion" as const }
-            : await statePorts.resolvePendingWordingChoiceIntent({
+            : await statePorts.resolvePendingCompareIntent({
                 userMessage,
                 stepId: currentStepId,
                 pendingSuggestion,
@@ -1233,7 +1233,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     submittedTextAnchor = pendingIntentResolution.anchor;
     if (pendingIntentResolution.intent !== "accept_suggestion_explicit") {
       const pendingFeedbackText = String(userMessage || "").trim();
-      const preservedPresentation = String(pendingBeforeTurn.wording_choice_presentation || "").trim();
+      const preservedPresentation = String(pendingBeforeTurn.compare_presentation || "").trim();
       const nextPending = {
         ...pendingBeforeTurn,
         pending_suggestion_intent: pendingIntentResolution.intent,
@@ -1261,16 +1261,16 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
       pendingBeforeTurn = nextPending;
     }
     if (pendingIntentResolution.intent === "accept_suggestion_explicit") {
-      const implicitSelection = wording.applyWordingPickSelection({
+      const implicitSelection = compare.applyComparePickSelection({
         stepId: currentStepId,
-        routeToken: "__WORDING_PICK_SUGGESTION__",
+        routeToken: "__COMPARE_PICK_SUGGESTION__",
         state,
         telemetry: runtime.uiI18nTelemetry,
       });
       if (implicitSelection.handled) {
         state = implicitSelection.nextState;
         userMessage = "";
-        statePorts.bumpUiI18nCounter(runtime.uiI18nTelemetry, "wording_choice_implicit_accept_count");
+        statePorts.bumpUiI18nCounter(runtime.uiI18nTelemetry, "compare_implicit_accept_count");
         return buildWidgetResponse({
           nextState: state,
           specialist: implicitSelection.specialist,
@@ -1282,20 +1282,20 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     }
     pendingBeforeTurn =
       ((state as Record<string, unknown>).last_specialist_result as Record<string, unknown>) || {};
-    hasPendingWordingChoice =
-      runtime.wordingChoiceEnabled &&
+    hasPendingCompare =
+      runtime.compareEnabled &&
       runtime.inputMode === "widget" &&
       !dreamBuilderModeActive &&
-      String(pendingBeforeTurn.wording_choice_pending || "") === "true" &&
-      wording.isWordingChoiceEligibleContext(
+      String(pendingBeforeTurn.compare_pending || "") === "true" &&
+      compare.isCompareEligibleContext(
         String(state.current_step || ""),
         String((state as Record<string, unknown>).active_specialist || ""),
         pendingBeforeTurn,
         pendingBeforeTurn,
         action.getDreamRuntimeMode(state)
       ) &&
-      hasRenderablePendingWordingChoice(pendingBeforeTurn);
-    if (hasPendingWordingChoice) {
+      hasRenderablePendingCompare(pendingBeforeTurn);
+    if (hasPendingCompare) {
       if (isGeneralOfftopicInput) {
         const stateWithUi = await behavior.ensureUiStrings(state, userMessage);
         state = stateWithUi;
@@ -1322,16 +1322,16 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
         pendingIntentResolution.anchor === "user_input" &&
         isStepContributingInput
       ) {
-        const rebuilt = wording.buildWordingChoiceFromTurn({
+        const rebuilt = compare.buildCompareFromTurn({
           stepId: currentStepId,
           state,
           activeSpecialist: String((state as Record<string, unknown>).active_specialist || ""),
           previousSpecialist: pendingBeforeTurn,
-          specialistResult: wording.copyPendingWordingChoiceState(
+          specialistResult: compare.copyPendingCompareState(
             {
               ...pendingBeforeTurn,
               refined_formulation: String(
-                pendingBeforeTurn.wording_choice_agent_current || pendingBeforeTurn.refined_formulation || ""
+                pendingBeforeTurn.compare_agent_current || pendingBeforeTurn.refined_formulation || ""
               ).trim(),
             },
             pendingBeforeTurn
@@ -1340,7 +1340,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
           isOfftopic: false,
           dreamRuntimeModeRaw: action.getDreamRuntimeMode(state),
         });
-        const rebuiltSpecialist = rebuilt.wordingChoice
+        const rebuiltSpecialist = rebuilt.compare
           ? normalizePendingPickerSpecialistContract({
               specialist: rebuilt.specialist,
               stepIdHint: currentStepId,
@@ -1350,7 +1350,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
         return buildWidgetResponse({
           nextState: state,
           specialist: rebuiltSpecialist,
-          wordingChoice: rebuilt.wordingChoice || null,
+          compare: rebuilt.compare || null,
         });
       }
 
@@ -1358,7 +1358,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
         pendingIntentResolution.anchor === "user_input" &&
         !isStepContributingInput
       ) {
-        suspendPendingWordingChoice(pendingBeforeTurn);
+        suspendPendingCompare(pendingBeforeTurn);
       } else {
         const stateWithUi = await behavior.ensureUiStrings(state, userMessage);
         state = stateWithUi;
@@ -1383,7 +1383,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
           stepIdHint: String(state.current_step || ""),
         });
 
-        let pendingChoice = wording.buildWordingChoiceFromPendingSpecialist(
+        let pendingChoice = compare.buildCompareFromPendingSpecialist(
           pendingSpecialist,
           stateWithUi,
           String((state as Record<string, unknown>).active_specialist || ""),
@@ -1396,7 +1396,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
             specialist: pendingBeforeTurn,
             stepIdHint: String(state.current_step || ""),
           });
-          pendingChoice = wording.buildWordingChoiceFromPendingSpecialist(
+          pendingChoice = compare.buildCompareFromPendingSpecialist(
             pendingSpecialist,
             stateWithUi,
             String((state as Record<string, unknown>).active_specialist || ""),
@@ -1410,20 +1410,20 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
         return buildWidgetResponse({
           nextState: state,
           specialist: pendingSpecialist,
-          wordingChoice: pendingChoice,
+          compare: pendingChoice,
         });
       }
     }
   }
 
-  const hasPickerPendingWordingChoiceForTurn =
-    hasPendingWordingChoice &&
-    pendingWordingChoicePresentation(pendingBeforeTurn) === "picker";
+  const hasPickerPendingCompareForTurn =
+    hasPendingCompare &&
+    pendingComparePresentation(pendingBeforeTurn) === "picker";
 
   if (
-    hasPickerPendingWordingChoiceForTurn &&
+    hasPickerPendingCompareForTurn &&
     !hasFreeTextWhilePending &&
-    !wording.isWordingPickRouteToken(userMessage) &&
+    !compare.isComparePickRouteToken(userMessage) &&
     isStepContributingInput
   ) {
     const stateWithUi = await behavior.ensureUiStrings(state, userMessage);
@@ -1450,7 +1450,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     });
     (state as Record<string, unknown>).last_specialist_result = pendingSpecialist;
 
-    const pendingChoice = wording.buildWordingChoiceFromPendingSpecialist(
+    const pendingChoice = compare.buildCompareFromPendingSpecialist(
       pendingSpecialist,
       stateWithUi,
       String((state as Record<string, unknown>).active_specialist || ""),
@@ -1476,7 +1476,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
       };
     }
 
-    console.log("[wording_choice_pending_blocked]", {
+    console.log("[compare_pending_blocked]", {
       step: String(state.current_step || ""),
       request_id: String((state as Record<string, unknown>).__request_id ?? ""),
       client_action_id: String((state as Record<string, unknown>).__client_action_id ?? ""),
@@ -1494,7 +1494,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
         state: stateWithUi,
       },
       pendingSpecialist,
-      { require_wording_pick: true },
+      { require_compare_pick: true },
       [],
       [],
       pendingChoice
@@ -1515,60 +1515,60 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     };
   }
 
-  let stateForWordingSelection = state;
+  let stateForCompareSelection = state;
   const activePendingSpecialist =
-    (((stateForWordingSelection as Record<string, unknown>).last_specialist_result as Record<string, unknown>) ||
+    (((stateForCompareSelection as Record<string, unknown>).last_specialist_result as Record<string, unknown>) ||
       {}) as Record<string, unknown>;
   const submittedPendingInteractionId = String(
-    (stateForWordingSelection as Record<string, unknown>).__submitted_pending_interaction_id || ""
+    (stateForCompareSelection as Record<string, unknown>).__submitted_pending_interaction_id || ""
   ).trim();
   const activePendingInteractionId = String(
-    (stateForWordingSelection as Record<string, unknown>).__pending_interaction_id ||
+    (stateForCompareSelection as Record<string, unknown>).__pending_interaction_id ||
     activePendingSpecialist.pending_interaction_id ||
     ""
   ).trim();
   const hasSubmittedPendingInteractionMismatch =
-    runtime.wordingChoiceEnabled &&
-    wording.isWordingPickRouteToken(userMessage) &&
+    runtime.compareEnabled &&
+    compare.isComparePickRouteToken(userMessage) &&
     Boolean(submittedPendingInteractionId) &&
     Boolean(activePendingInteractionId) &&
     submittedPendingInteractionId !== activePendingInteractionId;
   if (hasSubmittedPendingInteractionMismatch) {
-    stateForWordingSelection = await behavior.ensureUiStrings(stateForWordingSelection, userMessage);
-    state = stateForWordingSelection;
+    stateForCompareSelection = await behavior.ensureUiStrings(stateForCompareSelection, userMessage);
+    state = stateForCompareSelection;
     const pendingSpecialist =
-      ((stateForWordingSelection as Record<string, unknown>).last_specialist_result as Record<string, unknown>) || {};
-    const pendingChoice = wording.buildWordingChoiceFromPendingSpecialist(
+      ((stateForCompareSelection as Record<string, unknown>).last_specialist_result as Record<string, unknown>) || {};
+    const pendingChoice = compare.buildCompareFromPendingSpecialist(
       pendingSpecialist,
-      stateForWordingSelection,
-      String((stateForWordingSelection as Record<string, unknown>).active_specialist || ""),
+      stateForCompareSelection,
+      String((stateForCompareSelection as Record<string, unknown>).active_specialist || ""),
       pendingSpecialist,
-      String(stateForWordingSelection.current_step || ""),
-      action.getDreamRuntimeMode(stateForWordingSelection)
+      String(stateForCompareSelection.current_step || ""),
+      action.getDreamRuntimeMode(stateForCompareSelection)
     );
     console.warn("[pending_interaction_id_mismatch]", {
-      step: String(stateForWordingSelection.current_step || ""),
+      step: String(stateForCompareSelection.current_step || ""),
       submitted_interaction_id: submittedPendingInteractionId,
       active_interaction_id: activePendingInteractionId,
-      client_action_id: String((stateForWordingSelection as Record<string, unknown>).__client_action_id || ""),
+      client_action_id: String((stateForCompareSelection as Record<string, unknown>).__client_action_id || ""),
     });
     if (pendingChoice && pendingChoice.enabled === true) {
       return buildWidgetResponse({
-        nextState: stateForWordingSelection,
+        nextState: stateForCompareSelection,
         specialist: pendingSpecialist,
-        wordingChoice: pendingChoice,
+        compare: pendingChoice,
       });
     }
   }
-  if (runtime.wordingChoiceEnabled && wording.isWordingPickRouteToken(userMessage)) {
-    stateForWordingSelection = await behavior.ensureUiStrings(stateForWordingSelection, userMessage);
-    state = stateForWordingSelection;
+  if (runtime.compareEnabled && compare.isComparePickRouteToken(userMessage)) {
+    stateForCompareSelection = await behavior.ensureUiStrings(stateForCompareSelection, userMessage);
+    state = stateForCompareSelection;
   }
-  const wordingSelection = runtime.wordingChoiceEnabled
-    ? wording.applyWordingPickSelection({
-        stepId: String(stateForWordingSelection.current_step ?? ""),
+  const compareSelection = runtime.compareEnabled
+    ? compare.applyComparePickSelection({
+        stepId: String(stateForCompareSelection.current_step ?? ""),
         routeToken: userMessage,
-        state: stateForWordingSelection,
+        state: stateForCompareSelection,
         telemetry: runtime.uiI18nTelemetry,
       })
     : {
@@ -1578,8 +1578,8 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
         nextState: state,
       };
 
-  if (wordingSelection.handled) {
-    const stateWithUi = await behavior.ensureUiStrings(wordingSelection.nextState, userMessage);
+  if (compareSelection.handled) {
+    const stateWithUi = await behavior.ensureUiStrings(compareSelection.nextState, userMessage);
     state = stateWithUi;
     const payload = behavior.attachRegistryPayload(
       {
@@ -1587,12 +1587,12 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
         tool: "run_step",
         current_step_id: String(stateWithUi.current_step),
         active_specialist: String((stateWithUi as Record<string, unknown>).active_specialist || ""),
-        text: behavior.buildTextForWidget({ specialist: wordingSelection.specialist, state: stateWithUi }),
-        prompt: behavior.pickPrompt(wordingSelection.specialist),
-        specialist: wordingSelection.specialist,
+        text: behavior.buildTextForWidget({ specialist: compareSelection.specialist, state: stateWithUi }),
+        prompt: behavior.pickPrompt(compareSelection.specialist),
+        specialist: compareSelection.specialist,
         state: stateWithUi,
       },
-      wordingSelection.specialist
+      compareSelection.specialist
     );
 
     return {

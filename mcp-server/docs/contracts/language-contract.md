@@ -50,4 +50,4 @@ This contract defines language detection, lock timing, override behavior, and pr
 
 - specialist prompts (`LANGUAGE` input)
 - render labels/titles/buttons
-- menu and wording-choice UI content
+- menu and compare UI content

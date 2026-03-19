@@ -12,7 +12,7 @@ import type {
 import { createTurnResponseEngine, type TurnResponseEngine } from "./run_step_turn_response_engine.js";
 import type { UiI18nTelemetryCounters } from "./run_step_i18n_runtime.js";
 import { looksLikeExamplesFramingLine } from "./run_step_value_shape.js";
-import { isSingleValueTextPickerState } from "./run_step_wording_picker_contract.js";
+import { isSingleValueTextPickerState } from "./run_step_compare_picker_contract.js";
 import { hasGroupedCompareListSemantics } from "../steps/step_registry.js";
 
 export type RunStepRuntimeInputMode = "widget" | "chat";
@@ -28,7 +28,7 @@ type RunStepRuntimeTextHelpersDeps = {
   dreamStepId: string;
   parseMenuFromContractIdForStep: (contractIdRaw: unknown, stepId: string) => string;
   canonicalizeComparableText: (value: string) => string;
-  wordingSelectionMessage: (
+  compareSelectionMessage: (
     stepId: string,
     state: CanvasState,
     activeSpecialist?: string,
@@ -42,11 +42,11 @@ type RunStepRuntimeTextHelpersDeps = {
     state?: CanvasState | null | undefined,
     specialist?: Record<string, unknown> | null | undefined
   ) => string;
-  isWordingPanelCleanBodyV1Enabled: () => boolean;
+  isComparePanelCleanBodyV1Enabled: () => boolean;
   fieldForStep: (stepId: string) => string;
   stripUnsupportedReformulationClaims: (message: string) => string;
   tokenizeWords: (text: string) => string[];
-  compactWordingPanelBody: (message: string, state?: CanvasState | null | undefined) => string;
+  compactComparePanelBody: (message: string, state?: CanvasState | null | undefined) => string;
 };
 
 function stripChoiceInstructionNoise(value: string): string {
@@ -517,15 +517,15 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
     const dreamBuilderComparePending =
       contractStepId === deps.dreamStepId &&
       String(specialist?.__dream_builder_compare_pending || "").trim().toLowerCase() === "true";
-    const wordingPending =
-      String(specialist?.wording_choice_pending || "").trim().toLowerCase() === "true" ||
+    const comparePending =
+      String(specialist?.compare_pending || "").trim().toLowerCase() === "true" ||
       dreamBuilderComparePending;
     const wordingMode = dreamBuilderComparePending
       ? "list"
-      : (String(specialist?.wording_choice_mode || "text") === "list" ? "list" : "text");
-    const wordingPresentation = String(specialist?.wording_choice_presentation || "").trim();
+      : (String(specialist?.compare_mode || "text") === "list" ? "list" : "text");
+    const comparePresentation = String(specialist?.compare_presentation || "").trim();
     const canonicalPendingTextSuggestion =
-      wordingPending && wordingMode === "text" && wordingPresentation === "canonical";
+      comparePending && wordingMode === "text" && comparePresentation === "canonical";
     const wordingSuggestion = stripMarkupPreserveLines(
       dreamBuilderComparePending
         ? String(
@@ -535,7 +535,7 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
                 : []
             ).join("\n") || specialist?.refined_formulation || ""
           )
-        : String(specialist?.wording_choice_agent_current || specialist?.refined_formulation || "")
+        : String(specialist?.compare_agent_current || specialist?.refined_formulation || "")
     );
     const normalizeLine = (value: string): string =>
       String(value || "")
@@ -687,7 +687,7 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
         msg = keepDreamBuilderSupportParagraphsOnly(msg);
       }
     }
-    if (wordingPending && wordingMode === "text" && suggestionNorm) {
+    if (comparePending && wordingMode === "text" && suggestionNorm) {
       const paragraphs = msg
         .split(/\n{2,}/)
         .map((p) => p.trim())
@@ -695,7 +695,7 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
       const filtered = paragraphs.filter((p) => normalizeLine(p) !== suggestionNorm);
       msg = filtered.join("\n\n").trim();
     }
-    if (wordingPending && wordingMode === "list" && msg) {
+    if (comparePending && wordingMode === "list" && msg) {
       const userItems = dreamBuilderComparePending
         ? (
             Array.isArray(specialist?.__dream_builder_compare_current_items)
@@ -704,8 +704,8 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
           )
             .map((line) => String(line || "").trim())
             .filter(Boolean)
-        : Array.isArray(specialist?.wording_choice_user_items)
-          ? (specialist.wording_choice_user_items as string[]).map((line) => String(line || "").trim()).filter(Boolean)
+        : Array.isArray(specialist?.compare_user_items)
+          ? (specialist.compare_user_items as string[]).map((line) => String(line || "").trim()).filter(Boolean)
           : [];
       const suggestionItems = dreamBuilderComparePending
         ? (
@@ -715,15 +715,15 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
           )
             .map((line) => String(line || "").trim())
             .filter(Boolean)
-        : Array.isArray(specialist?.wording_choice_suggestion_items)
-          ? (specialist.wording_choice_suggestion_items as string[]).map((line) => String(line || "").trim()).filter(Boolean)
+        : Array.isArray(specialist?.compare_suggestion_items)
+          ? (specialist.compare_suggestion_items as string[]).map((line) => String(line || "").trim()).filter(Boolean)
           : [];
       const knownItems = deps.mergeListItems(userItems, suggestionItems);
       const fallbackItems = knownItems.length > 0 ? knownItems : deps.splitSentenceItems(wordingSuggestion);
       msg = deps.sanitizePendingListMessage(msg, fallbackItems, params.state || null, specialist);
     }
-    if (wordingPending && deps.isWordingPanelCleanBodyV1Enabled()) {
-      msg = deps.compactWordingPanelBody(msg, params.state || null);
+    if (comparePending && deps.isComparePanelCleanBodyV1Enabled()) {
+      msg = deps.compactComparePanelBody(msg, params.state || null);
     }
     const promptFromSpecialist = stripMarkupPreserveLines(String(specialist?.question ?? ""));
     const promptOverride = stripMarkupPreserveLines(String(params.questionTextOverride || ""));
@@ -737,7 +737,7 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
       specialist,
     });
     let refined = stripMarkupPreserveLines(String(specialist?.refined_formulation ?? ""));
-    if (!wordingPending) {
+    if (!comparePending) {
       const field = deps.fieldForStep(contractStepId);
       const fieldValue = field ? String((specialist as Record<string, unknown>)?.[field] || "").trim() : "";
       if (!fieldValue && !refined && statementLines.length === 0) {
@@ -865,13 +865,13 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
     };
     let refinedDisplay = refined;
     const selectionForRefined = (() => {
-      if (dreamBuilderCanonicalOnlyView || wordingPending || !refined) return "";
+      if (dreamBuilderCanonicalOnlyView || comparePending || !refined) return "";
       const stepId = String(contractStepId || "").trim();
       if (!stepId || !deps.fieldForStep(stepId)) return "";
       const state = params.state;
       if (!state || typeof state !== "object") return "";
       const activeSpecialist = String((state as Record<string, unknown>).active_specialist || "").trim();
-      return deps.wordingSelectionMessage(stepId, state, activeSpecialist, refined);
+      return deps.compareSelectionMessage(stepId, state, activeSpecialist, refined);
     })();
     const selectionParts = extractHeadingAndBodyFromSelection(selectionForRefined, refined);
     if (selectionParts.body) refinedDisplay = selectionParts.body;
@@ -896,21 +896,21 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
       return refinedDisplay || refined || fieldValue || stateBackedValue;
     })();
     const selectionForCurrentValue = (() => {
-      if (dreamBuilderCanonicalOnlyView || wordingPending) return "";
+      if (dreamBuilderCanonicalOnlyView || comparePending) return "";
       const stepId = String(contractStepId || "").trim();
       if (!stepId || !deps.fieldForStep(stepId)) return "";
       const state = params.state;
       if (!state || typeof state !== "object") return "";
       const activeSpecialist = String((state as Record<string, unknown>).active_specialist || "").trim();
       if (!currentSelectedValue) return "";
-      return deps.wordingSelectionMessage(stepId, state, activeSpecialist, currentSelectedValue);
+      return deps.compareSelectionMessage(stepId, state, activeSpecialist, currentSelectedValue);
     })();
     const selectionCurrentParts = extractHeadingAndBodyFromSelection(
       selectionForCurrentValue,
       currentSelectedValue
     );
     const groupedCompareCurrentValueBlock = (() => {
-      if (dreamBuilderCanonicalOnlyView || wordingPending || isSingleValueValidOutput || !isBulletConsistencyStep) {
+      if (dreamBuilderCanonicalOnlyView || comparePending || isSingleValueValidOutput || !isBulletConsistencyStep) {
         return "";
       }
       if (selectionCurrentParts.heading && selectionCurrentParts.body) {
@@ -967,7 +967,7 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
     if (groupedCompareCurrentValueBlock) {
       msg = stripGroupedCompareCurrentValueNoise(msg);
     }
-    if (!msg && !wordingPending && !isSingleValueValidOutput && isBulletConsistencyStep && currentSelectedValue) {
+    if (!msg && !comparePending && !isSingleValueValidOutput && isBulletConsistencyStep && currentSelectedValue) {
       msg = groupedCompareCurrentValueBlock;
     }
     if (
@@ -997,7 +997,7 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
     const currentHeading = (() => {
       if (groupedCompareCurrentValueBlock) return "";
       if (isSingleValueValidOutput) return "";
-      if (wordingPending) return "";
+      if (comparePending) return "";
       if (!msg || !refined) return "";
       const heading = selectionParts.heading || selectionCurrentParts.heading;
       if (!heading) return "";
@@ -1015,7 +1015,7 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
     })();
     const canonicalPendingSuggestionText = canonicalPendingTextSuggestion ? wordingSuggestion : "";
     const canonicalPendingSuggestionHeading = canonicalPendingTextSuggestion
-      ? stripMarkupPreserveLines(String(stateUiStrings["wordingChoiceSuggestionLabel"] || "").trim())
+      ? stripMarkupPreserveLines(String(stateUiStrings["compareSuggestionLabel"] || "").trim())
       : "";
     const canonicalPendingSuggestionBlock = canonicalPendingSuggestionText
       ? (
@@ -1058,7 +1058,7 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
         parts.push(canonicalPendingSuggestionBlock);
       }
     }
-    if (refined && !groupedCompareCurrentValueBlock && !wordingPending && !suppressRefinedAppend) {
+    if (refined && !groupedCompareCurrentValueBlock && !comparePending && !suppressRefinedAppend) {
       const statementComparable = statementLines
         .map((line) => deps.canonicalizeComparableText(line))
         .filter(Boolean);
@@ -1377,8 +1377,8 @@ export function createRunStepRuntimeFinalizeLayer<TPayload extends Record<string
     const isDreamStep = currentStep === dreamStepId;
     const dreamBuilderComparePending =
       isDreamStep && String(lastSpecialist.__dream_builder_compare_pending || "").trim().toLowerCase() === "true";
-    const wordingPending =
-      String(lastSpecialist.wording_choice_pending || "").trim().toLowerCase() === "true" ||
+    const comparePending =
+      String(lastSpecialist.compare_pending || "").trim().toLowerCase() === "true" ||
       dreamBuilderComparePending;
     const isDreamExplainer = activeSpecialist === dreamExplainerSpecialist;
     const isDreamSpecialist = isDreamStep && !isDreamExplainer;
@@ -1423,13 +1423,15 @@ export function createRunStepRuntimeFinalizeLayer<TPayload extends Record<string
       scoreSubmitAvailable ? "ACTION_DREAM_EXPLAINER_SUBMIT_SCORES" : ""
     );
     setStateAction(
-      "ui_action_wording_pick_user",
-      interactiveSession && wordingPending ? "ACTION_WORDING_PICK_USER" : ""
+      "ui_action_compare_pick_user",
+      interactiveSession && comparePending ? "ACTION_COMPARE_PICK_USER" : ""
     );
     setStateAction(
-      "ui_action_wording_pick_suggestion",
-      interactiveSession && wordingPending ? "ACTION_WORDING_PICK_SUGGESTION" : ""
+      "ui_action_compare_pick_suggestion",
+      interactiveSession && comparePending ? "ACTION_COMPARE_PICK_SUGGESTION" : ""
     );
+    setStateAction("ui_action_compare_pick_user", "");
+    setStateAction("ui_action_compare_pick_suggestion", "");
     setStateAction(
       "ui_action_dream_start_exercise",
       interactiveSession &&

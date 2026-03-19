@@ -28,16 +28,16 @@ export const UI_STRINGS_LOCALE_AR: Record<string, string> = {
     "menuLabel.RULES_MENU_REFINE.ACTION_RULES_REFINE_ADJUST": "أريد تعديلها.",
     "rulesofthegame.count.template": "لديك الآن {0} من قواعد اللعبة. أنصحك بصياغة ما لا يقل عن {1} ولا يزيد عن {2} من قواعد اللعبة.",
     "rulesofthegame.current.template": "قواعد اللعبة الحالية لـ {0} هي:",
-    "wording.feedback.compare.intro.template":
+    "compare.feedback.compare.intro.template":
       "أعتقد أنني أفهم ما تعنيه. ولجعل {0} أقوى، من المفيد أن تضع هذا في اعتبارك.",
-    "wording.feedback.dream_builder.rewrite.default":
+    "compare.feedback.dream_builder.rewrite.default":
       "صياغتك الأصلية تتمحور أساسًا حول رغبتك الشخصية، بينما يطلب Dream Builder تغييرًا أوسع في العالم.",
-    "wording.feedback.user_pick.ack.default": "لقد اخترت صياغتك الخاصة، وهذا لا بأس به.",
-    "wording.feedback.user_pick.reason.default": "هذا يحافظ على المعنى الأصلي لديك مع بقائه متوافقًا مع هذه الخطوة.",
-    "wordingChoiceGroupedCompareUserLabel": "هذه هي صياغتك المختصرة:",
-    "wordingChoiceGroupedCompareSuggestionLabel": "هذا هو اقتراحي:",
-    "wordingChoiceGroupedCompareInstruction": "اختر النسخة التي تناسب الاختلاف المتبقي بشكل أفضل.",
-    "wordingChoiceGroupedCompareRetainedHeading": "هذه النقاط ستبقى بالفعل في القائمة النهائية:",
+    "compare.feedback.user_pick.ack.default": "لقد اخترت صياغتك الخاصة، وهذا لا بأس به.",
+    "compare.feedback.user_pick.reason.default": "هذا يحافظ على المعنى الأصلي لديك مع بقائه متوافقًا مع هذه الخطوة.",
+    "compareGroupedUserLabel": "هذه هي صياغتك المختصرة:",
+    "compareGroupedCompareSuggestionLabel": "هذا هو اقتراحي:",
+    "compareGroupedCompareInstruction": "اختر النسخة التي تناسب الاختلاف المتبقي بشكل أفضل.",
+    "compareGroupedCompareRetainedHeading": "هذه النقاط ستبقى بالفعل في القائمة النهائية:",
     "dreamBuilder.question.base": "إذا نظرت من 5 إلى 10 سنوات إلى الأمام، فما الفرص أو التهديدات الكبرى التي تراها، وما التغييرات الإيجابية التي تأملها؟ صُغها كعبارات واضحة.",
     "dreamBuilder.question.more": "ما التغييرات الأخرى التي تراها في المستقبل، سواء كانت إيجابية أو سلبية؟ أطلق العنان لخيالك وصُغها كعبارات واضحة.",
     "dreamBuilder.resumeExercise": "تابع التمرين القصير الذي يساعد على تحديد حلمك.",

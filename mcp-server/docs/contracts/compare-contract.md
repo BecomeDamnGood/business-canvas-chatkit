@@ -4,9 +4,9 @@ This contract governs compare selection when both user and suggestion variants a
 
 ## Trigger
 
-- Compare mode is active when specialist payload exposes pending wording choice fields:
-- `wording_choice_pending="true"`
-- `wording_choice_user_*` and suggestion counterpart present
+- Compare mode is active when specialist payload exposes pending compare choice fields:
+- `compare_pending="true"`
+- `compare_user_*` and suggestion counterpart present
 - Runtime trigger rule:
 - If suggestion differs from user input in wording/content/order, show the compare panel.
 - Exception: do **not** show the compare panel only when the difference is strictly spelling/surface correction and the sentence/list content is otherwise identical.
@@ -24,17 +24,17 @@ This contract governs compare selection when both user and suggestion variants a
 - DreamBuilder scoring view overrides compare.
 - Outside scoring, compare overrides standard menu buttons.
 - Accepted pick actions:
-- `ACTION_WORDING_PICK_USER`
-- `ACTION_WORDING_PICK_SUGGESTION`
+- `ACTION_COMPARE_PICK_USER`
+- `ACTION_COMPARE_PICK_SUGGESTION`
 - Compare UI never overrides menu routing; menu transitions stay actioncode + contract-state driven.
 
 ## State Update Rules
 
 On pick:
 
-1. Clear pending wording flags and raw comparison buffers.
+1. Clear pending compare flags and raw comparison buffers.
 2. Persist selected variant as staged value (`provisional_by_step[step]`) for active step.
-3. Set `wording_choice_selected` to `user` or `suggestion`.
+3. Set `compare_selected` to `user` or `suggestion`.
 4. Rebuild menu contract for parent step (do not branch into unrelated flow).
 
 ## Staged vs Committed

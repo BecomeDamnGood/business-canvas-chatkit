@@ -33,8 +33,8 @@ function buildRoutePorts() {
       switchToSelfDreamToken: "__SWITCH_TO_SELF_DREAM__",
       dreamStartExerciseRouteToken: "__ROUTE__DREAM_START_EXERCISE__",
     },
-    wording: {
-      wordingSelectionMessage: (_stepId: string, _state: Record<string, unknown>, _active = "", selected = "") =>
+    compare: {
+      compareSelectionMessage: (_stepId: string, _state: Record<string, unknown>, _active = "", selected = "") =>
         String(selected || ""),
       pickPrompt: (specialist: Record<string, unknown>) => String(specialist.question || ""),
       buildTextForWidget: ({ specialist }: { specialist: Record<string, unknown> }) => String(specialist.message || ""),
@@ -192,7 +192,7 @@ function buildRouteContext(state: Record<string, unknown>, userMessage: string, 
       actionCodeRaw,
       responseUiFlags: null,
       inputMode: "widget",
-      wordingChoiceEnabled: true,
+      compareEnabled: true,
       languageResolvedThisTurn: true,
       isBootstrapPollCall: false,
       motivationQuotesEnabled: true,

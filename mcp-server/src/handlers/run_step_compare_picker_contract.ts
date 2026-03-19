@@ -1,14 +1,14 @@
-import { isSingleValueWordingStep } from "../steps/step_registry.js";
+import { isSingleValueCompareStep } from "../steps/step_registry.js";
 
 function normalizedMode(modeRaw: unknown): "text" | "list" {
   return String(modeRaw || "").trim() === "list" ? "list" : "text";
 }
 
-export function resolvePendingWordingChoiceStepId(
+export function resolvePendingCompareStepId(
   specialist: Record<string, unknown> | null | undefined,
   stepIdHint = ""
 ): string {
-  return String(stepIdHint || specialist?.wording_choice_target_field || "").trim();
+  return String(stepIdHint || specialist?.compare_target_field || "").trim();
 }
 
 export function isPickerPresentation(presentationRaw: unknown): boolean {
@@ -16,7 +16,7 @@ export function isPickerPresentation(presentationRaw: unknown): boolean {
 }
 
 export function isSingleValueTextPickerStep(stepId: string, modeRaw: unknown): boolean {
-  return normalizedMode(modeRaw) === "text" && isSingleValueWordingStep(stepId);
+  return normalizedMode(modeRaw) === "text" && isSingleValueCompareStep(stepId);
 }
 
 export function isSingleValueTextPickerState(params: {
@@ -24,10 +24,10 @@ export function isSingleValueTextPickerState(params: {
   stepIdHint?: string;
 }): boolean {
   const specialist = params.specialist || {};
-  if (String(specialist.wording_choice_pending || "").trim() !== "true") return false;
-  if (!isPickerPresentation(specialist.wording_choice_presentation)) return false;
-  const stepId = resolvePendingWordingChoiceStepId(specialist, params.stepIdHint || "");
-  return isSingleValueTextPickerStep(stepId, specialist.wording_choice_mode);
+  if (String(specialist.compare_pending || "").trim() !== "true") return false;
+  if (!isPickerPresentation(specialist.compare_presentation)) return false;
+  const stepId = resolvePendingCompareStepId(specialist, params.stepIdHint || "");
+  return isSingleValueTextPickerStep(stepId, specialist.compare_mode);
 }
 
 export function normalizePendingPickerSpecialistContract(params: {
@@ -38,8 +38,8 @@ export function normalizePendingPickerSpecialistContract(params: {
     ? { ...params.specialist }
     : {};
   if (
-    String(specialist.wording_choice_pending || "").trim() !== "true" ||
-    !isPickerPresentation(specialist.wording_choice_presentation)
+    String(specialist.compare_pending || "").trim() !== "true" ||
+    !isPickerPresentation(specialist.compare_presentation)
   ) {
     return specialist;
   }

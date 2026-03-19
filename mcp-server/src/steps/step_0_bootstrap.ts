@@ -74,7 +74,7 @@ Hard rules
   - remove conjunctions/pronouns that belong to the next clause
   - remove generic filler around the name
 - Prefer the more specific venture description if the sentence contains both a generic container phrase and a more specific self-description.
-- Venture should be concise and faithful to the user's wording.
+- Venture should be concise and faithful to the user's compare.
 - Status is:
   - existing, if the user indicates they already have/run/are the venture
   - starting, if the user indicates they want to start it

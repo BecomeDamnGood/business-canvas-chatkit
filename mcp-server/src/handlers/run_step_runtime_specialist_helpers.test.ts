@@ -38,14 +38,14 @@ test("normalizeLocalizedConceptTerms replaces 'my future company' with parsed bu
   const specialist: Record<string, unknown> = {
     message: "my future company droomt van een wereld waarin mensen zich gezien voelen.",
     refined_formulation: "my future company droomt van een wereld waarin mensen zich gezien voelen.",
-    wording_choice_agent_current:
+    compare_agent_current:
       "my future company droomt van een wereld waarin mensen zich gezien voelen.",
   };
 
   const next = helpers.normalizeLocalizedConceptTerms(specialist, state) as Record<string, unknown>;
   const message = String(next.message || "");
   const refined = String(next.refined_formulation || "");
-  const suggestion = String(next.wording_choice_agent_current || "");
+  const suggestion = String(next.compare_agent_current || "");
 
   assert.match(message, /\bMindd\b/);
   assert.match(refined, /\bMindd\b/);
@@ -112,7 +112,7 @@ test("enforceDreamBuilderQuestionProgress forces catalog base question in builde
     currentStepId: "dream",
     activeSpecialist: "DreamExplainer",
     canonicalStatementCount: 0,
-    wordingChoicePending: false,
+    comparePending: false,
     state,
   });
 
@@ -138,7 +138,7 @@ test("enforceDreamBuilderQuestionProgress forces catalog more question after fir
     currentStepId: "dream",
     activeSpecialist: "DreamExplainer",
     canonicalStatementCount: 1,
-    wordingChoicePending: false,
+    comparePending: false,
     state,
   });
 

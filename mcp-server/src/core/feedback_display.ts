@@ -69,7 +69,7 @@ export function sanitizeFeedbackReasonForDisplay(params: {
   resolveString: FeedbackStringResolver;
 }): string {
   const stepLabel = feedbackStepLabel(params.stepId, params.resolveString);
-  const introTemplate = params.resolveString("wording.feedback.compare.intro.template", "");
+  const introTemplate = params.resolveString("compare.feedback.compare.intro.template", "");
   const intro = ensureSentence(String(introTemplate || "").replace(/\{0\}/g, stepLabel));
   const candidate = splitFeedbackSentences(params.rawReason).find((sentence) => {
     if (isPureGenericFeedbackAcknowledgementSentence(sentence)) return false;
@@ -115,7 +115,7 @@ export function formatCompareFeedbackForDisplay(params: {
 }
 
 export function userPickAcknowledgmentForDisplay(resolveString: FeedbackStringResolver): string {
-  return ensureSentence(resolveString("wording.feedback.user_pick.ack.default", ""));
+  return ensureSentence(resolveString("compare.feedback.user_pick.ack.default", ""));
 }
 
 export function userPickFeedbackReasonForDisplay(params: {
@@ -126,7 +126,7 @@ export function userPickFeedbackReasonForDisplay(params: {
   const reason = sanitizeFeedbackReasonForDisplay(params);
   if (reason) return reason;
   return ensureSentence(
-    params.resolveString("wording.feedback.user_pick.reason.default", "")
+    params.resolveString("compare.feedback.user_pick.reason.default", "")
   );
 }
 

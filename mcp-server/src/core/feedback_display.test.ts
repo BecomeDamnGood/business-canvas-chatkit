@@ -6,7 +6,7 @@ import { sanitizeFeedbackReasonForDisplay } from "./feedback_display.js";
 function resolveString(key: string, fallback = ""): string {
   const strings: Record<string, string> = {
     "offtopic.step.purpose": "Purpose",
-    "wording.feedback.compare.intro.template":
+    "compare.feedback.compare.intro.template":
       "I think I understand what you mean. For a stronger {0}, it helps to keep this in mind.",
   };
   return strings[key] || fallback;

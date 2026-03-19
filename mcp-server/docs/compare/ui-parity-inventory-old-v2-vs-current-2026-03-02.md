@@ -208,14 +208,14 @@ Als een wijziging nieuw controle-oppervlak toevoegt: afkeuren.
 | `uiSubtitle` | `mcp-server/docs/compare/old_v2_2026-02-14/ui/step-card.bundled.html:1243,1306,2089,2093,2094` | `mcp-server/ui/step-card.bundled.html:771,800,814,823,832` | `header/subtitle` | `prestart` | `gebruikt maar anders` | `BEWEZEN` |
 | `uiTitle.template` | `-` | `-` | `unknown` | `ONBEWEZEN` | `ontbreekt` | `ONBEWEZEN` |
 | `uiUseWidgetToContinue` | `mcp-server/docs/compare/old_v2_2026-02-14/ui/step-card.bundled.html:1307` | `mcp-server/ui/step-card.bundled.html:815,824,833,842,851` | `header/subtitle` | `prestart` | `gebruikt maar anders` | `BEWEZEN` |
-| `wording.choice.context.default` | `-` | `-` | `wording-choice` | `interactive` | `ontbreekt` | `ONBEWEZEN` |
-| `wording.feedback.user_pick.ack.default` | `-` | `-` | `wording-choice` | `interactive` | `ontbreekt` | `ONBEWEZEN` |
-| `wording.feedback.user_pick.reason.default` | `-` | `-` | `wording-choice` | `interactive` | `ontbreekt` | `ONBEWEZEN` |
-| `wordingChoice.chooseVersion` | `-` | `-` | `wording-choice` | `interactive` | `ontbreekt` | `ONBEWEZEN` |
-| `wordingChoice.useInputFallback` | `-` | `-` | `wording-choice` | `interactive` | `ontbreekt` | `ONBEWEZEN` |
-| `wordingChoiceHeading` | `-` | `mcp-server/ui/step-card.bundled.html:517,744` | `unknown` | `ONBEWEZEN` | `afwijkend` | `BEWEZEN` |
-| `wordingChoiceInstruction` | `-` | `mcp-server/ui/step-card.bundled.html:518,755` | `unknown` | `ONBEWEZEN` | `afwijkend` | `BEWEZEN` |
-| `wordingChoiceSuggestionLabel` | `-` | `-` | `unknown` | `ONBEWEZEN` | `ontbreekt` | `ONBEWEZEN` |
+| `compare.choice.context.default` | `-` | `-` | `compare` | `interactive` | `ontbreekt` | `ONBEWEZEN` |
+| `compare.feedback.user_pick.ack.default` | `-` | `-` | `compare` | `interactive` | `ontbreekt` | `ONBEWEZEN` |
+| `compare.feedback.user_pick.reason.default` | `-` | `-` | `compare` | `interactive` | `ontbreekt` | `ONBEWEZEN` |
+| `compare.chooseVersion` | `-` | `-` | `compare` | `interactive` | `ontbreekt` | `ONBEWEZEN` |
+| `compare.useInputFallback` | `-` | `-` | `compare` | `interactive` | `ontbreekt` | `ONBEWEZEN` |
+| `compareHeading` | `-` | `mcp-server/ui/step-card.bundled.html:517,744` | `unknown` | `ONBEWEZEN` | `afwijkend` | `BEWEZEN` |
+| `compareInstruction` | `-` | `mcp-server/ui/step-card.bundled.html:518,755` | `unknown` | `ONBEWEZEN` | `afwijkend` | `BEWEZEN` |
+| `compareSuggestionLabel` | `-` | `-` | `unknown` | `ONBEWEZEN` | `ontbreekt` | `ONBEWEZEN` |
 
 ## 2) Volledige UI-elementeninventaris
 
@@ -268,17 +268,17 @@ Als een wijziging nieuw controle-oppervlak toevoegt: afkeuren.
 | `stepper` | `mcp-server/docs/compare/old_v2_2026-02-14/ui/step-card.bundled.html:1182` | `mcp-server/ui/step-card.bundled.html:669` | `mcp-server/docs/compare/old_v2_2026-02-14/ui/step-card.bundled.html:2020` | `-` | `afwijking` | `middel` |
 | `uiSubtitle` | `mcp-server/docs/compare/old_v2_2026-02-14/ui/step-card.bundled.html:1243` | `mcp-server/ui/step-card.bundled.html:771` | `mcp-server/docs/compare/old_v2_2026-02-14/ui/step-card.bundled.html:2089,2728` | `mcp-server/ui/step-card.bundled.html:800` | `GEVERIFIEERD GELIJK` | `laag` |
 | `uiTitle` | `mcp-server/docs/compare/old_v2_2026-02-14/ui/step-card.bundled.html:1171` | `mcp-server/ui/step-card.bundled.html:655` | `-` | `mcp-server/ui/step-card.bundled.html:788` | `afwijking` | `middel` |
-| `wordingChoiceHeading` | `-` | `mcp-server/ui/step-card.bundled.html:744` | `-` | `-` | `afwijking` | `middel` |
-| `wordingChoiceInstruction` | `-` | `mcp-server/ui/step-card.bundled.html:755` | `-` | `-` | `afwijking` | `middel` |
-| `wordingChoicePickSuggestion` | `-` | `mcp-server/ui/step-card.bundled.html:753` | `-` | `-` | `afwijking` | `middel` |
-| `wordingChoicePickUser` | `-` | `mcp-server/ui/step-card.bundled.html:748` | `-` | `-` | `afwijking` | `middel` |
-| `wordingChoiceSuggestionCard` | `-` | `mcp-server/ui/step-card.bundled.html:750` | `-` | `-` | `afwijking` | `middel` |
-| `wordingChoiceSuggestionList` | `-` | `mcp-server/ui/step-card.bundled.html:752` | `-` | `-` | `afwijking` | `middel` |
-| `wordingChoiceSuggestionText` | `-` | `mcp-server/ui/step-card.bundled.html:751` | `-` | `-` | `afwijking` | `middel` |
-| `wordingChoiceUserCard` | `-` | `mcp-server/ui/step-card.bundled.html:745` | `-` | `-` | `afwijking` | `middel` |
-| `wordingChoiceUserList` | `-` | `mcp-server/ui/step-card.bundled.html:747` | `-` | `-` | `afwijking` | `middel` |
-| `wordingChoiceUserText` | `-` | `mcp-server/ui/step-card.bundled.html:746` | `-` | `-` | `afwijking` | `middel` |
-| `wordingChoiceWrap` | `-` | `mcp-server/ui/step-card.bundled.html:743` | `-` | `-` | `afwijking` | `middel` |
+| `compareHeading` | `-` | `mcp-server/ui/step-card.bundled.html:744` | `-` | `-` | `afwijking` | `middel` |
+| `compareInstruction` | `-` | `mcp-server/ui/step-card.bundled.html:755` | `-` | `-` | `afwijking` | `middel` |
+| `comparePickSuggestion` | `-` | `mcp-server/ui/step-card.bundled.html:753` | `-` | `-` | `afwijking` | `middel` |
+| `comparePickUser` | `-` | `mcp-server/ui/step-card.bundled.html:748` | `-` | `-` | `afwijking` | `middel` |
+| `compareSuggestionCard` | `-` | `mcp-server/ui/step-card.bundled.html:750` | `-` | `-` | `afwijking` | `middel` |
+| `compareSuggestionList` | `-` | `mcp-server/ui/step-card.bundled.html:752` | `-` | `-` | `afwijking` | `middel` |
+| `compareSuggestionText` | `-` | `mcp-server/ui/step-card.bundled.html:751` | `-` | `-` | `afwijking` | `middel` |
+| `compareUserCard` | `-` | `mcp-server/ui/step-card.bundled.html:745` | `-` | `-` | `afwijking` | `middel` |
+| `compareUserList` | `-` | `mcp-server/ui/step-card.bundled.html:747` | `-` | `-` | `afwijking` | `middel` |
+| `compareUserText` | `-` | `mcp-server/ui/step-card.bundled.html:746` | `-` | `-` | `afwijking` | `middel` |
+| `compareWrap` | `-` | `mcp-server/ui/step-card.bundled.html:743` | `-` | `-` | `afwijking` | `middel` |
 
 ### 2.2 Class-inventaris (markup classes old/current)
 | class | old aanwezig (regels) | current aanwezig (regels) | status | ernst |
@@ -348,13 +348,13 @@ Als een wijziging nieuw controle-oppervlak toevoegt: afkeuren.
 | `subtitle` | `mcp-server/docs/compare/old_v2_2026-02-14/ui/step-card.bundled.html:1243` | `mcp-server/ui/step-card.bundled.html:771` | `GEVERIFIEERD GELIJK` | `laag` |
 | `themeName` | `mcp-server/docs/compare/old_v2_2026-02-14/ui/step-card.bundled.html:2392,2484` | `mcp-server/ui/step-card.bundled.html:734` | `GEVERIFIEERD GELIJK` | `laag` |
 | `title` | `mcp-server/docs/compare/old_v2_2026-02-14/ui/step-card.bundled.html:1171` | `mcp-server/ui/step-card.bundled.html:655` | `GEVERIFIEERD GELIJK` | `laag` |
-| `wordingChoiceCard` | `-` | `mcp-server/ui/step-card.bundled.html:745,750` | `afwijking` | `middel` |
-| `wordingChoiceHeading` | `-` | `mcp-server/ui/step-card.bundled.html:744` | `afwijking` | `middel` |
-| `wordingChoiceInstruction` | `-` | `mcp-server/ui/step-card.bundled.html:755` | `afwijking` | `middel` |
-| `wordingChoiceList` | `-` | `mcp-server/ui/step-card.bundled.html:747,752` | `afwijking` | `middel` |
-| `wordingChoiceSelectBtn` | `-` | `-` | `afwijking` | `middel` |
-| `wordingChoiceText` | `-` | `mcp-server/ui/step-card.bundled.html:746,751` | `afwijking` | `middel` |
-| `wordingChoiceWrap` | `-` | `mcp-server/ui/step-card.bundled.html:743` | `afwijking` | `middel` |
+| `compareCard` | `-` | `mcp-server/ui/step-card.bundled.html:745,750` | `afwijking` | `middel` |
+| `compareHeading` | `-` | `mcp-server/ui/step-card.bundled.html:744` | `afwijking` | `middel` |
+| `compareInstruction` | `-` | `mcp-server/ui/step-card.bundled.html:755` | `afwijking` | `middel` |
+| `compareList` | `-` | `mcp-server/ui/step-card.bundled.html:747,752` | `afwijking` | `middel` |
+| `compareSelectBtn` | `-` | `-` | `afwijking` | `middel` |
+| `compareText` | `-` | `mcp-server/ui/step-card.bundled.html:746,751` | `afwijking` | `middel` |
+| `compareWrap` | `-` | `mcp-server/ui/step-card.bundled.html:743` | `afwijking` | `middel` |
 | `wrap` | `mcp-server/docs/compare/old_v2_2026-02-14/ui/step-card.bundled.html:1170,1187` | `mcp-server/ui/step-card.bundled.html:654,676` | `GEVERIFIEERD GELIJK` | `laag` |
 
 ## 3) Button + Action contract matrix
@@ -539,11 +539,11 @@ Als een wijziging nieuw controle-oppervlak toevoegt: afkeuren.
 - `transient.rate_limited`
 - `transient.timeout`
 - `uiTitle.template`
-- `wording.choice.context.default`
-- `wording.feedback.user_pick.ack.default`
-- `wording.feedback.user_pick.reason.default`
-- `wordingChoice.chooseVersion`
-- `wordingChoice.useInputFallback`
-- `wordingChoiceSuggestionLabel`
+- `compare.choice.context.default`
+- `compare.feedback.user_pick.ack.default`
+- `compare.feedback.user_pick.reason.default`
+- `compare.chooseVersion`
+- `compare.useInputFallback`
+- `compareSuggestionLabel`
 
 - verklaring: **audit niet compleet** (omdat ONBEWEZEN > 0)

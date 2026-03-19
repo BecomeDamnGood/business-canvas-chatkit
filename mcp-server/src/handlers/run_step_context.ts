@@ -1,9 +1,9 @@
 import type { OrchestratorOutput } from "../core/orchestrator.js";
 import type { CanvasState } from "../core/state.js";
 import type {
-  PendingWordingChoiceTextAnchor,
-  PendingWordingChoiceTextIntent,
-} from "./run_step_wording_heuristics.js";
+  PendingCompareTextAnchor,
+  PendingCompareTextIntent,
+} from "./run_step_compare_heuristics.js";
 
 export type RunStepInputMode = "widget" | "chat";
 
@@ -12,7 +12,7 @@ export type RunStepRoutingContext = {
   actionCodeRaw: string;
   responseUiFlags: Record<string, boolean | string> | null;
   inputMode: RunStepInputMode;
-  wordingChoiceEnabled: boolean;
+  compareEnabled: boolean;
   languageResolvedThisTurn: boolean;
   isBootstrapPollCall: boolean;
   motivationQuotesEnabled: boolean;
@@ -28,8 +28,8 @@ export type RunStepStateContext = {
   state: CanvasState;
   transientPendingScores: number[][] | null;
   submittedUserText: string;
-  submittedTextIntent: PendingWordingChoiceTextIntent | "";
-  submittedTextAnchor: PendingWordingChoiceTextAnchor | "";
+  submittedTextIntent: PendingCompareTextIntent | "";
+  submittedTextAnchor: PendingCompareTextAnchor | "";
   rawNormalized: string;
   pristineAtEntry: boolean;
 };
@@ -56,7 +56,7 @@ export type RunStepRouteRegistryRequest = {
   uiI18nTelemetry: unknown;
   transientPendingScores: number[][] | null;
   inputMode: RunStepInputMode;
-  wordingChoiceEnabled: boolean;
+  compareEnabled: boolean;
   languageResolvedThisTurn: boolean;
   isBootstrapPollCall: boolean;
   lang: string;
@@ -70,11 +70,11 @@ export type RunStepPostSpecialistPipelineRequest = {
   model: string;
   uiI18nTelemetry: unknown;
   inputMode: RunStepInputMode;
-  wordingChoiceEnabled: boolean;
+  compareEnabled: boolean;
   motivationQuotesEnabled: boolean;
   submittedUserText: string;
-  submittedTextIntent: PendingWordingChoiceTextIntent | "";
-  submittedTextAnchor: PendingWordingChoiceTextAnchor | "";
+  submittedTextIntent: PendingCompareTextIntent | "";
+  submittedTextAnchor: PendingCompareTextAnchor | "";
   lang: string;
   rawNormalized: string;
   pristineAtEntry: boolean;
@@ -93,7 +93,7 @@ export function toRouteRegistryRequest(context: RunStepContext): RunStepRouteReg
     uiI18nTelemetry: context.rendering.uiI18nTelemetry,
     transientPendingScores: context.state.transientPendingScores,
     inputMode: context.routing.inputMode,
-    wordingChoiceEnabled: context.routing.wordingChoiceEnabled,
+    compareEnabled: context.routing.compareEnabled,
     languageResolvedThisTurn: context.routing.languageResolvedThisTurn,
     isBootstrapPollCall: context.routing.isBootstrapPollCall,
     lang: context.rendering.lang,
@@ -111,7 +111,7 @@ export function toRunPostSpecialistPipelineRequest(
     model: context.specialist.model,
     uiI18nTelemetry: context.rendering.uiI18nTelemetry,
     inputMode: context.routing.inputMode,
-    wordingChoiceEnabled: context.routing.wordingChoiceEnabled,
+    compareEnabled: context.routing.compareEnabled,
     motivationQuotesEnabled: context.routing.motivationQuotesEnabled,
     submittedUserText: context.state.submittedUserText,
     submittedTextIntent: context.state.submittedTextIntent,

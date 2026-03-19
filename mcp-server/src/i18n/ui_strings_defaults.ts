@@ -64,27 +64,27 @@ export const UI_STRINGS_DEFAULT: Record<string, string> = {
   thinking: "Thinking…",
   btnStart: "Start the process with Validation & Business Name",
   btnDreamConfirm: "I'm happy with this formulation, continue to step 3 Purpose",
-  wordingChoiceHeading: "This is your input:",
-  wordingChoiceInterpretedListHeading: "This is what I took from your input:",
-  wordingChoiceGroupedCompareUserLabel: "This is your compact wording:",
-  wordingChoiceGroupedCompareSuggestionLabel: "This is my suggestion:",
-  wordingChoiceGroupedCompareInstruction: "Choose the version that fits best for the remaining difference.",
-  wordingChoiceGroupedCompareRetainedHeading: "These points already stay in the final list:",
-  wordingChoiceDreamBuilderKeepBothLabel: "Keep both statements:",
-  wordingChoiceDreamBuilderMergeLabel: "Merge into one statement:",
-  wordingChoiceDreamBuilderMergeInstruction:
+  compareHeading: "This is your input:",
+  compareInterpretedListHeading: "This is what I took from your input:",
+  compareGroupedUserLabel: "This is your compact wording:",
+  compareGroupedCompareSuggestionLabel: "This is my suggestion:",
+  compareGroupedCompareInstruction: "Choose the version that fits best for the remaining difference.",
+  compareGroupedCompareRetainedHeading: "These points already stay in the final list:",
+  compareDreamBuilderKeepBothLabel: "Keep both statements:",
+  compareDreamBuilderMergeLabel: "Merge into one statement:",
+  compareDreamBuilderMergeInstruction:
     "Choose whether you want to keep both similar statements or merge them into one stronger statement.",
-  wordingChoiceSuggestionLabel: "This would be my suggestion:",
-  wordingChoiceInstruction: "Please click what suits you best.",
-  "wording.choice.context.default": "Please choose the wording that fits best.",
-  "wording.feedback.compare.intro.template":
+  compareSuggestionLabel: "This would be my suggestion:",
+  compareInstruction: "Please click what suits you best.",
+  "compare.choice.context.default": "Please choose the wording that fits best.",
+  "compare.feedback.compare.intro.template":
     "I think I understand what you mean. For a stronger {0}, it helps to keep this in mind.",
-  "wording.feedback.user_pick.ack.default": "Your own wording is completely okay.",
-  "wording.feedback.user_pick.nudge.template":
+  "compare.feedback.user_pick.ack.default": "Your own wording is completely okay.",
+  "compare.feedback.user_pick.nudge.template":
     "At the same time, it helps to remember what usually makes a strong {0}.",
-  "wording.feedback.user_pick.reason.default":
+  "compare.feedback.user_pick.reason.default":
     "Keep in mind what makes this step strong, so your wording stays clear and aligned.",
-  "wording.feedback.dream_builder.rewrite.default":
+  "compare.feedback.dream_builder.rewrite.default":
     "Your original wording is mainly about your own wish, while Dream Builder asks for a broader change in the world.",
   "generic.choicePrompt.shareOrOption": "Share your thoughts or choose an option",
   "invariant.prompt.ask.default": "Share your thoughts or choose an option.",
@@ -245,8 +245,8 @@ export const UI_STRINGS_DEFAULT: Record<string, string> = {
   "dev.error.unknown": "unknown error",
   "dev.error.unhandled_rejection": "unhandled rejection",
   "media.image.alt": "Image",
-  "wordingChoice.chooseVersion": "Choose this version",
-  "wordingChoice.useInputFallback": "Use this input",
+  "compare.chooseVersion": "Choose this version",
+  "compare.useInputFallback": "Use this input",
   "bigwhy.tooLong.message":
     "Your formulation is longer than 28 words. Short and clear is better, so please provide a compact version.",
   "bigwhy.tooLong.question": "Can you rewrite it in 28 words or fewer?",

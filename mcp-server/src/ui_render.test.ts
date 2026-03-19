@@ -7,7 +7,7 @@ import {
   collectPendingScoresForContractAction,
   decorateStructuredSuggestionItemsForStep,
   dreamExerciseButtonLabelKeyForState,
-  parseWordingChoiceInstruction,
+  parseCompareInstruction,
   readCompareContractFailureReason,
   readDreamBuilderContract,
   readStructuredSuggestionsCardContent,
@@ -18,10 +18,10 @@ import {
   shouldRenderBigWhyStepIntroVideo,
   shouldRenderPurposeStepIntroVideo,
   shouldRenderRoleStepIntroVideo,
-  shouldDisableTextInputForWordingChoice,
-  shouldShowTextInputForWordingChoice,
-  shouldSuppressPromptForWordingChoice,
-  shouldSuppressMainCardForWordingChoice,
+  shouldDisableTextInputForCompare,
+  shouldShowTextInputForCompare,
+  shouldSuppressPromptForCompare,
+  shouldSuppressMainCardForCompare,
 } from "../ui/lib/ui_render.js";
 import {
   prestartIntroVideoUrlForLang,
@@ -37,14 +37,14 @@ import {
 } from "../ui/lib/ui_constants.js";
 import { STEP_REGISTRY_ORDER } from "./steps/step_registry.js";
 
-function buildPendingWordingChoiceUiPayload(overrides: Record<string, unknown> = {}) {
+function buildPendingCompareUiPayload(overrides: Record<string, unknown> = {}) {
   return {
     view: {
       variant: "text_compare",
     },
     pending_interaction: {
       version: "2026-03-18.pending_interaction.v1",
-      id: "pi_wording_test",
+      id: "pi_compare_test",
       kind: "text_compare",
       status: "pending",
       source: "server_contract",
@@ -52,19 +52,19 @@ function buildPendingWordingChoiceUiPayload(overrides: Record<string, unknown> =
       allowed_actions: [
         {
           id: "pick_user",
-          action_code: "ACTION_WORDING_PICK_USER",
+          action_code: "ACTION_COMPARE_PICK_USER",
           label: "Choose this version",
-          label_key: "wordingChoice.chooseVersion",
-          role: "wording_pick_user",
+          label_key: "compare.chooseVersion",
+          role: "compare_pick_user",
           surface: "compare_pick",
           primary: false,
         },
         {
           id: "pick_suggestion",
-          action_code: "ACTION_WORDING_PICK_SUGGESTION",
+          action_code: "ACTION_COMPARE_PICK_SUGGESTION",
           label: "Choose this version",
-          label_key: "wordingChoice.chooseVersion",
-          role: "wording_pick_suggestion",
+          label_key: "compare.chooseVersion",
+          role: "compare_pick_suggestion",
           surface: "compare_pick",
           primary: false,
         },
@@ -88,23 +88,23 @@ function buildPendingWordingChoiceUiPayload(overrides: Record<string, unknown> =
   };
 }
 
-test("shouldSuppressMainCardForWordingChoice suppresses the main card for wording-choice view variants", () => {
+test("shouldSuppressMainCardForCompare suppresses the main card for compare view variants", () => {
   assert.equal(
-    shouldSuppressMainCardForWordingChoice(buildPendingWordingChoiceUiPayload(), "text_compare"),
+    shouldSuppressMainCardForCompare(buildPendingCompareUiPayload(), "text_compare"),
     true
   );
 });
 
-test("shouldSuppressMainCardForWordingChoice suppresses the main card for explicit picker payloads", () => {
+test("shouldSuppressMainCardForCompare suppresses the main card for explicit picker payloads", () => {
   assert.equal(
-    shouldSuppressMainCardForWordingChoice(buildPendingWordingChoiceUiPayload(), "default"),
+    shouldSuppressMainCardForCompare(buildPendingCompareUiPayload(), "default"),
     true
   );
 });
 
-test("shouldSuppressMainCardForWordingChoice ignores stale wording-choice payloads when Dream Builder owns the screen", () => {
+test("shouldSuppressMainCardForCompare ignores stale compare payloads when Dream Builder owns the screen", () => {
   assert.equal(
-    shouldSuppressMainCardForWordingChoice(
+    shouldSuppressMainCardForCompare(
       {
         dream_builder_contract: {
           version: "2026-03-17.dream_builder_contract.v2",
@@ -113,11 +113,11 @@ test("shouldSuppressMainCardForWordingChoice ignores stale wording-choice payloa
           statements_visible: true,
           question: "Wat zie je nog meer veranderen?",
         },
-        wording_choice: {
+        compare: {
           enabled: true,
         },
         flags: {
-          require_wording_pick: true,
+          require_compare_pick: true,
         },
       },
       "text_compare"
@@ -126,9 +126,9 @@ test("shouldSuppressMainCardForWordingChoice ignores stale wording-choice payloa
   );
 });
 
-test("shouldSuppressMainCardForWordingChoice keeps the main card enabled for non-picker payloads", () => {
+test("shouldSuppressMainCardForCompare keeps the main card enabled for non-picker payloads", () => {
   assert.equal(
-    shouldSuppressMainCardForWordingChoice(
+    shouldSuppressMainCardForCompare(
       {
         content: {
           kind: "single_value",
@@ -140,7 +140,7 @@ test("shouldSuppressMainCardForWordingChoice keeps the main card enabled for non
     false
   );
   assert.equal(
-    shouldSuppressMainCardForWordingChoice(
+    shouldSuppressMainCardForCompare(
       {
         content: {
           kind: "structured_suggestions",
@@ -179,10 +179,10 @@ test("strategy structured suggestion blocks get Strategy 1/2/3 headings in the w
   assert.match(String(decorated?.items?.[2] || ""), /^Strategie 3\b/);
 });
 
-test("shouldSuppressMainCardForWordingChoice follows pending_interaction for compare families", () => {
+test("shouldSuppressMainCardForCompare follows pending_interaction for compare families", () => {
   assert.equal(
-    shouldSuppressMainCardForWordingChoice(
-      buildPendingWordingChoiceUiPayload({
+    shouldSuppressMainCardForCompare(
+      buildPendingCompareUiPayload({
         kind: "list_compare",
         render_model: {
           mode: "list",
@@ -204,7 +204,7 @@ test("shouldSuppressMainCardForWordingChoice follows pending_interaction for com
     true
   );
   assert.equal(
-    shouldSuppressMainCardForWordingChoice(
+    shouldSuppressMainCardForCompare(
       {
         content: {
           kind: "single_value",
@@ -227,7 +227,7 @@ test("readCompareContractFailureReason fail-closes compare payloads that are mis
     "ui_pending_interaction_missing_for_compare"
   );
   assert.equal(
-    shouldSuppressMainCardForWordingChoice(
+    shouldSuppressMainCardForCompare(
       {
         view: {
           variant: "text_compare",
@@ -251,10 +251,10 @@ test("readCompareContractFailureReason rejects malformed pending_interaction pay
         allowed_actions: [
           {
             id: "pick_user",
-            action_code: "ACTION_WORDING_PICK_USER",
+            action_code: "ACTION_COMPARE_PICK_USER",
             label: "Choose",
-            label_key: "wordingChoice.chooseVersion",
-            role: "wording_pick_user",
+            label_key: "compare.chooseVersion",
+            role: "compare_pick_user",
             surface: "compare_pick",
           },
         ],
@@ -317,63 +317,63 @@ test("readDreamBuilderContract normalizes explicit Dream Builder compare ownersh
   });
 });
 
-test("shouldSuppressPromptForWordingChoice hides the prompt while wording-choice is active", () => {
+test("shouldSuppressPromptForCompare hides the prompt while compare is active", () => {
   assert.equal(
-    shouldSuppressPromptForWordingChoice({
+    shouldSuppressPromptForCompare({
       uiViewVariant: "text_compare",
-      wordingChoiceActive: true,
-      requireWordingPick: true,
+      compareActive: true,
+      requireComparePick: true,
     }),
     true
   );
   assert.equal(
-    shouldSuppressPromptForWordingChoice({
+    shouldSuppressPromptForCompare({
       uiViewVariant: "default",
-      wordingChoiceActive: false,
-      requireWordingPick: false,
+      compareActive: false,
+      requireComparePick: false,
     }),
     false
   );
 });
 
-test("shouldShowTextInputForWordingChoice keeps the field visible while a wording-choice picker is active", () => {
+test("shouldShowTextInputForCompare keeps the field visible while a compare picker is active", () => {
   assert.equal(
-    shouldShowTextInputForWordingChoice({
+    shouldShowTextInputForCompare({
       textSubmitAvailable: true,
       uiViewVariant: "text_compare",
-      wordingChoiceActive: true,
-      requireWordingPick: true,
+      compareActive: true,
+      requireComparePick: true,
     }),
     true
   );
   assert.equal(
-    shouldShowTextInputForWordingChoice({
+    shouldShowTextInputForCompare({
       textSubmitAvailable: true,
       uiViewVariant: "default",
-      wordingChoiceActive: false,
-      requireWordingPick: false,
+      compareActive: false,
+      requireComparePick: false,
     }),
     true
   );
 });
 
-test("shouldDisableTextInputForWordingChoice disables free input while a wording-choice picker is active", () => {
+test("shouldDisableTextInputForCompare disables free input while a compare picker is active", () => {
   assert.equal(
-    shouldDisableTextInputForWordingChoice({
-      requireWordingPick: true,
+    shouldDisableTextInputForCompare({
+      requireComparePick: true,
     }),
     true
   );
   assert.equal(
-    shouldDisableTextInputForWordingChoice({
-      requireWordingPick: false,
+    shouldDisableTextInputForCompare({
+      requireComparePick: false,
     }),
     false
   );
 });
 
-test("parseWordingChoiceInstruction separates retained bullets from the picker instruction", () => {
-  const parsed = parseWordingChoiceInstruction([
+test("parseCompareInstruction separates retained bullets from the picker instruction", () => {
+  const parsed = parseCompareInstruction([
     "These points already stay in the final list:",
     "",
     "• Strategisch bedrijfs- en communicatieadvies",
@@ -970,7 +970,7 @@ test("shouldRenderPurposeStepIntroVideo returns true for configured languages in
     shouldRenderPurposeStepIntroVideo({
       currentStep: "purpose",
       showStepIntroChrome: true,
-      wordingChoiceActive: false,
+      compareActive: false,
       lang: "nl",
     }),
     true
@@ -982,19 +982,19 @@ test("shouldRenderPurposeStepIntroVideo returns false for languages without a co
     shouldRenderPurposeStepIntroVideo({
       currentStep: "purpose",
       showStepIntroChrome: true,
-      wordingChoiceActive: false,
+      compareActive: false,
       lang: "ar",
     }),
     false
   );
 });
 
-test("shouldRenderPurposeStepIntroVideo returns false outside intro state or while wording-choice is active", () => {
+test("shouldRenderPurposeStepIntroVideo returns false outside intro state or while compare is active", () => {
   assert.equal(
     shouldRenderPurposeStepIntroVideo({
       currentStep: "purpose",
       showStepIntroChrome: false,
-      wordingChoiceActive: false,
+      compareActive: false,
       lang: "en",
     }),
     false
@@ -1003,7 +1003,7 @@ test("shouldRenderPurposeStepIntroVideo returns false outside intro state or whi
     shouldRenderPurposeStepIntroVideo({
       currentStep: "purpose",
       showStepIntroChrome: true,
-      wordingChoiceActive: true,
+      compareActive: true,
       lang: "en",
     }),
     false
@@ -1015,7 +1015,7 @@ test("shouldRenderBigWhyStepIntroVideo returns true only for configured intro st
     shouldRenderBigWhyStepIntroVideo({
       currentStep: "bigwhy",
       showStepIntroChrome: true,
-      wordingChoiceActive: false,
+      compareActive: false,
       lang: "nl",
     }),
     true
@@ -1024,7 +1024,7 @@ test("shouldRenderBigWhyStepIntroVideo returns true only for configured intro st
     shouldRenderBigWhyStepIntroVideo({
       currentStep: "bigwhy",
       showStepIntroChrome: true,
-      wordingChoiceActive: false,
+      compareActive: false,
       lang: "hi",
     }),
     false
@@ -1033,7 +1033,7 @@ test("shouldRenderBigWhyStepIntroVideo returns true only for configured intro st
     shouldRenderBigWhyStepIntroVideo({
       currentStep: "bigwhy",
       showStepIntroChrome: false,
-      wordingChoiceActive: false,
+      compareActive: false,
       lang: "en",
     }),
     false
@@ -1045,7 +1045,7 @@ test("shouldRenderRoleStepIntroVideo returns true only for configured intro stat
     shouldRenderRoleStepIntroVideo({
       currentStep: "role",
       showStepIntroChrome: true,
-      wordingChoiceActive: false,
+      compareActive: false,
       lang: "en",
     }),
     true
@@ -1054,7 +1054,7 @@ test("shouldRenderRoleStepIntroVideo returns true only for configured intro stat
     shouldRenderRoleStepIntroVideo({
       currentStep: "role",
       showStepIntroChrome: true,
-      wordingChoiceActive: false,
+      compareActive: false,
       lang: "ja",
     }),
     false
@@ -1063,7 +1063,7 @@ test("shouldRenderRoleStepIntroVideo returns true only for configured intro stat
     shouldRenderRoleStepIntroVideo({
       currentStep: "role",
       showStepIntroChrome: true,
-      wordingChoiceActive: true,
+      compareActive: true,
       lang: "en",
     }),
     false

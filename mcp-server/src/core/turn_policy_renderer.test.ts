@@ -4,7 +4,7 @@ import { getDefaultState } from "./state.js";
 import { renderFreeTextTurnPolicy } from "./turn_policy_renderer.js";
 import { buildUiContractId } from "./ui_contract_id.js";
 
-test("strategy wording-pick render always appends canonical bullet context and never exposes consolidate action", () => {
+test("strategy compare-pick render always appends canonical bullet context and never exposes consolidate action", () => {
   const statements = [
     "Focus op het ontwikkelen van concepten die mensen inspireren tot zelfontplooiing",
     "Selectief zijn in het aannemen van opdrachten die aansluiten bij de eigen waarden",
@@ -17,7 +17,7 @@ test("strategy wording-pick render always appends canonical bullet context and n
   (state as any).active_specialist = "Strategy";
   (state as any).business_name = "Mindd";
   (state as any).provisional_by_step = { strategy: statements.join("\n") };
-  (state as any).provisional_source_by_step = { strategy: "wording_pick" };
+  (state as any).provisional_source_by_step = { strategy: "compare_pick" };
 
   const specialist = {
     action: "ASK",
@@ -104,7 +104,7 @@ test("strategy confirm render exposes consolidate action when focus points overf
   );
 });
 
-test("strategy pending wording-choice render does not append canonical context block", () => {
+test("strategy pending compare render does not append canonical context block", () => {
   const state = getDefaultState();
   const statements = [
     "Focus op enterprise klanten met complexe transformatievraagstukken",
@@ -118,11 +118,11 @@ test("strategy pending wording-choice render does not append canonical context b
 
   const specialist = {
     action: "ASK",
-    wording_choice_pending: "true",
-    wording_choice_mode: "list",
-    wording_choice_target_field: "strategy",
-    wording_choice_user_items: statements,
-    wording_choice_suggestion_items: [...statements, "Focus op meetbare waarderealisatie per traject"],
+    compare_pending: "true",
+    compare_mode: "list",
+    compare_target_field: "strategy",
+    compare_user_items: statements,
+    compare_suggestion_items: [...statements, "Focus op meetbare waarderealisatie per traject"],
     message:
       "Dit is je input:\n- Focus op enterprise klanten met complexe transformatievraagstukken\n- Focus op langdurige strategische samenwerkingen met beslissers\n\nDit is mijn suggestie:\n- Focus op enterprise klanten met complexe transformatievraagstukken\n- Focus op langdurige strategische samenwerkingen met beslissers\n- Focus op meetbare waarderealisatie per traject",
     question: "",
@@ -215,7 +215,7 @@ test("stuck support questions mode suppresses step buttons for eligible steps", 
   assert.deepEqual(rendered.uiActionCodes, []);
 });
 
-test("strategy wording-choice picker suppresses the normal step question", () => {
+test("strategy compare picker suppresses the normal step question", () => {
   const state = getDefaultState();
   (state as any).current_step = "strategy";
   (state as any).active_specialist = "Strategy";
@@ -227,13 +227,13 @@ test("strategy wording-choice picker suppresses the normal step question", () =>
       action: "ASK",
       message: "Kies de beste formulering voor het resterende verschil.",
       question: "Waar focus je nog meer op binnen je strategie?",
-      wording_choice_pending: "true",
-      wording_choice_mode: "list",
-      wording_choice_presentation: "picker",
-      wording_choice_variant: "grouped_list_units",
-      wording_choice_target_field: "strategy",
-      wording_choice_compare_mode: "grouped_units",
-      wording_choice_compare_units: [
+      compare_pending: "true",
+      compare_mode: "list",
+      compare_presentation: "picker",
+      compare_variant: "grouped_list_units",
+      compare_target_field: "strategy",
+      compare_compare_mode: "grouped_units",
+      compare_compare_units: [
         {
           id: "unit_1",
           user_items: ["Recurring revenue through retainers"],
@@ -244,9 +244,9 @@ test("strategy wording-choice picker suppresses the normal step question", () =>
           confidence: "fallback",
         },
       ],
-      wording_choice_compare_segments: [{ kind: "unit", unit_id: "unit_1" }],
-      wording_choice_user_items: ["Recurring revenue through retainers"],
-      wording_choice_suggestion_items: ["Build recurring revenue with implementation retainers"],
+      compare_compare_segments: [{ kind: "unit", unit_id: "unit_1" }],
+      compare_user_items: ["Recurring revenue through retainers"],
+      compare_suggestion_items: ["Build recurring revenue with implementation retainers"],
     },
     previousSpecialist: {},
   });
@@ -595,10 +595,10 @@ test("rulesofthegame overflow renders pending-choice context and suppresses conf
       question: "",
       refined_formulation: "",
       rulesofthegame: "",
-      wording_choice_pending: "true",
-      wording_choice_mode: "list",
-      wording_choice_target_field: "rulesofthegame",
-      wording_choice_user_items: [
+      compare_pending: "true",
+      compare_mode: "list",
+      compare_target_field: "rulesofthegame",
+      compare_user_items: [
         "We communiceren proactief.",
         "We leveren op tijd.",
         "We zijn transparant over risico's.",
@@ -606,7 +606,7 @@ test("rulesofthegame overflow renders pending-choice context and suppresses conf
         "We werken met duidelijke scope.",
         "We borgen kwaliteit onder druk.",
       ],
-      wording_choice_suggestion_items: [
+      compare_suggestion_items: [
         "We communiceren proactief.",
         "We leveren op tijd.",
         "We nemen eigenaarschap.",
@@ -785,7 +785,7 @@ test("entity valid output uses current-value heading after wording pick and supp
   (state as any).active_specialist = "Entity";
   (state as any).business_name = "Mindd";
   (state as any).provisional_by_step = { entity: canonical };
-  (state as any).provisional_source_by_step = { entity: "wording_pick" };
+  (state as any).provisional_source_by_step = { entity: "compare_pick" };
 
   const rendered = renderFreeTextTurnPolicy({
     stepId: "entity",
@@ -951,7 +951,7 @@ test("purpose semantic intro chrome stays hidden for refine states", () => {
   assert.equal(rendered.contractId, "purpose:valid_output:PURPOSE_MENU_REFINE");
 });
 
-test("purpose semantic intro chrome stays hidden while wording-choice is pending", () => {
+test("purpose semantic intro chrome stays hidden while compare is pending", () => {
   const state = getDefaultState();
   (state as any).current_step = "purpose";
   (state as any).active_specialist = "Purpose";
@@ -963,13 +963,13 @@ test("purpose semantic intro chrome stays hidden while wording-choice is pending
       action: "ASK",
       message: "Kies welke formulering je wilt gebruiken.",
       question: "",
-      wording_choice_pending: "true",
-      wording_choice_mode: "text",
-      wording_choice_presentation: "picker",
-      wording_choice_target_field: "purpose",
-      wording_choice_user_raw: "Ik wil iets goeds doen.",
-      wording_choice_user_normalized: "Ik wil iets goeds doen.",
-      wording_choice_agent_current: "Mindd bestaat om complexe keuzes begrijpelijk te maken.",
+      compare_pending: "true",
+      compare_mode: "text",
+      compare_presentation: "picker",
+      compare_target_field: "purpose",
+      compare_user_raw: "Ik wil iets goeds doen.",
+      compare_user_normalized: "Ik wil iets goeds doen.",
+      compare_agent_current: "Mindd bestaat om complexe keuzes begrijpelijk te maken.",
     },
     previousSpecialist: {},
   });
@@ -984,7 +984,7 @@ test("targetgroup valid output keeps a single canonical heading/value block", ()
   (state as any).active_specialist = "TargetGroup";
   (state as any).business_name = "Mindd";
   (state as any).provisional_by_step = { targetgroup: canonical };
-  (state as any).provisional_source_by_step = { targetgroup: "wording_pick" };
+  (state as any).provisional_source_by_step = { targetgroup: "compare_pick" };
 
   const rendered = renderFreeTextTurnPolicy({
     stepId: "targetgroup",
@@ -1038,7 +1038,7 @@ test("single-value confirm steps render exactly one canonical heading/value bloc
     (state as any).active_specialist = current.specialistLabel;
     (state as any).business_name = "Mindd";
     (state as any).provisional_by_step = { [current.stepId]: current.canonical };
-    (state as any).provisional_source_by_step = { [current.stepId]: "wording_pick" };
+    (state as any).provisional_source_by_step = { [current.stepId]: "compare_pick" };
 
     const rendered = renderFreeTextTurnPolicy({
       stepId: current.stepId,
@@ -1074,7 +1074,7 @@ test("single-value valid output keeps feedback reason above canonical block when
   (state as any).active_specialist = "Purpose";
   (state as any).business_name = "Mindd";
   (state as any).provisional_by_step = { purpose: canonical };
-  (state as any).provisional_source_by_step = { purpose: "wording_pick" };
+  (state as any).provisional_source_by_step = { purpose: "compare_pick" };
 
   const rendered = renderFreeTextTurnPolicy({
     stepId: "purpose",
@@ -1806,7 +1806,7 @@ test("single-value pending canonical wording hides canonical block, feedback rea
     (state as any).active_specialist = scenario.activeSpecialist;
     (state as any).business_name = "Mindd";
     (state as any).provisional_by_step = { [scenario.stepId]: scenario.value };
-    (state as any).provisional_source_by_step = { [scenario.stepId]: "wording_pick" };
+    (state as any).provisional_source_by_step = { [scenario.stepId]: "compare_pick" };
 
     const rendered = renderFreeTextTurnPolicy({
       stepId: scenario.stepId,
@@ -1817,10 +1817,10 @@ test("single-value pending canonical wording hides canonical block, feedback rea
           "Ik heb het herschreven naar een toekomstbeeld waarin mensen zich zekerder en gerust voelen bij hun keuzes.",
         question: "Wat vind je van deze formulering?",
         refined_formulation: "",
-        wording_choice_pending: "true",
-        wording_choice_mode: "text",
-        wording_choice_presentation: "canonical",
-        wording_choice_agent_current: scenario.value,
+        compare_pending: "true",
+        compare_mode: "text",
+        compare_presentation: "canonical",
+        compare_agent_current: scenario.value,
         feedback_reason_text:
           "Ik heb het herschreven naar een toekomstbeeld waarin mensen zich zekerder en gerust voelen bij hun keuzes.",
         ui_content: {
@@ -1850,7 +1850,7 @@ test("single-value valid output preserves feedback reason after user picks own w
   (state as any).active_specialist = "Dream";
   (state as any).business_name = "Mindd";
   (state as any).provisional_by_step = { dream: canonical };
-  (state as any).provisional_source_by_step = { dream: "wording_pick" };
+  (state as any).provisional_source_by_step = { dream: "compare_pick" };
 
   const rendered = renderFreeTextTurnPolicy({
     stepId: "dream",
@@ -1861,7 +1861,7 @@ test("single-value valid output preserves feedback reason after user picks own w
       question: "",
       refined_formulation: canonical,
       dream: canonical,
-      wording_choice_selected: "user",
+      compare_selected: "user",
       feedback_reason_text: feedbackReason,
       is_offtopic: false,
     },
@@ -1893,12 +1893,12 @@ test("single-value valid output strips autosuggest framing after user picks own 
   (state as any).active_specialist = "Purpose";
   (state as any).business_name = "Mindd";
   (state as any).provisional_by_step = { purpose: canonical };
-  (state as any).provisional_source_by_step = { purpose: "wording_pick" };
+  (state as any).provisional_source_by_step = { purpose: "compare_pick" };
   (state as any).ui_strings = {
     "autosuggest.prefix.template": "Op basis van je input stel ik de volgende {0} voor:",
     "ppt.heading.purpose": "Bestaansreden",
-    "wording.feedback.user_pick.ack.default": "Je eigen formulering is helemaal prima.",
-    "wording.feedback.user_pick.nudge.template":
+    "compare.feedback.user_pick.ack.default": "Je eigen formulering is helemaal prima.",
+    "compare.feedback.user_pick.nudge.template":
       "Tegelijk helpt het om in gedachten te houden wat een sterke {0} meestal krachtiger maakt.",
   };
 
@@ -1916,7 +1916,7 @@ test("single-value valid output strips autosuggest framing after user picks own 
       question: "",
       refined_formulation: canonical,
       purpose: canonical,
-      wording_choice_selected: "user",
+      compare_selected: "user",
       is_offtopic: false,
     },
     previousSpecialist: {},
@@ -1938,10 +1938,10 @@ test("single-value valid output falls back to user-pick feedback when the explic
   (state as any).active_specialist = "Purpose";
   (state as any).business_name = "Mindd";
   (state as any).provisional_by_step = { purpose: canonical };
-  (state as any).provisional_source_by_step = { purpose: "wording_pick" };
+  (state as any).provisional_source_by_step = { purpose: "compare_pick" };
   (state as any).ui_strings = {
-    "wording.feedback.user_pick.ack.default": "Je eigen formulering is helemaal prima.",
-    "wording.feedback.user_pick.nudge.template":
+    "compare.feedback.user_pick.ack.default": "Je eigen formulering is helemaal prima.",
+    "compare.feedback.user_pick.nudge.template":
       "Tegelijk helpt het om in gedachten te houden wat een sterke {0} meestal krachtiger maakt.",
   };
 
@@ -1954,7 +1954,7 @@ test("single-value valid output falls back to user-pick feedback when the explic
       question: "",
       refined_formulation: canonical,
       purpose: canonical,
-      wording_choice_selected: "user",
+      compare_selected: "user",
       feedback_reason_text: "Ik denk dat ik begrijp wat je bedoelt.",
       is_offtopic: false,
     },
@@ -2053,7 +2053,7 @@ test("pending canonical single-value message strips duplicated leading feedback 
     (state as any).active_specialist = current.activeSpecialist;
     (state as any).business_name = "Mindd";
     (state as any).provisional_by_step = { [current.stepId]: current.canonical };
-    (state as any).provisional_source_by_step = { [current.stepId]: "wording_pick" };
+    (state as any).provisional_source_by_step = { [current.stepId]: "compare_pick" };
 
     const rendered = renderFreeTextTurnPolicy({
       stepId: current.stepId,
@@ -2063,10 +2063,10 @@ test("pending canonical single-value message strips duplicated leading feedback 
         message: [current.feedbackReason, `${current.feedbackReason} ${current.explanation}`].join("\n\n"),
         question: "Wat vind je van deze formulering?",
         refined_formulation: "",
-        wording_choice_pending: "true",
-        wording_choice_mode: "text",
-        wording_choice_presentation: "canonical",
-        wording_choice_agent_current: current.canonical,
+        compare_pending: "true",
+        compare_mode: "text",
+        compare_presentation: "canonical",
+        compare_agent_current: current.canonical,
         feedback_reason_text: current.feedbackReason,
         is_offtopic: false,
       },
@@ -2151,7 +2151,7 @@ test("dream valid output keeps confirm available when staged canonical Dream sti
   assert.equal(rendered.uiActionCodes.includes("ACTION_DREAM_REFINE_CONFIRM"), true);
 });
 
-test("dream picker ignores stale no-buttons support mode and keeps wording-choice actions", () => {
+test("dream picker ignores stale no-buttons support mode and keeps compare actions", () => {
   const state = getDefaultState();
   const canonical = "Mindd droomt van een wereld waarin mensen zich goed geinformeerd en veilig voelen.";
   (state as any).current_step = "dream";
@@ -2172,12 +2172,12 @@ test("dream picker ignores stale no-buttons support mode and keeps wording-choic
       question: "",
       refined_formulation: canonical,
       dream: "",
-      wording_choice_pending: "true",
-      wording_choice_mode: "text",
-      wording_choice_target_field: "dream",
-      wording_choice_presentation: "picker",
-      wording_choice_user_normalized: "Mensen zijn het zat om verkeerd voorgelicht te worden.",
-      wording_choice_agent_current: canonical,
+      compare_pending: "true",
+      compare_mode: "text",
+      compare_target_field: "dream",
+      compare_presentation: "picker",
+      compare_user_normalized: "Mensen zijn het zat om verkeerd voorgelicht te worden.",
+      compare_agent_current: canonical,
       step_support_state: "ok",
       is_offtopic: false,
     },
@@ -2241,9 +2241,9 @@ test("dream explicit stuck support suppresses stale canonical dream contracts", 
       refined_formulation: canonical,
       dream: canonical,
       step_support_state: "stuck",
-      wording_choice_pending: "true",
-      wording_choice_presentation: "canonical",
-      wording_choice_agent_current: canonical,
+      compare_pending: "true",
+      compare_presentation: "canonical",
+      compare_agent_current: canonical,
       is_offtopic: false,
     },
     previousSpecialist: {},
@@ -2276,10 +2276,10 @@ test("dream self drops stale refine confirm when no renderable dream content rem
       action: "ASK",
       message: "",
       question: "",
-      wording_choice_pending: "true",
-      wording_choice_mode: "text",
-      wording_choice_target_field: "dream",
-      wording_choice_presentation: "canonical",
+      compare_pending: "true",
+      compare_mode: "text",
+      compare_target_field: "dream",
+      compare_presentation: "canonical",
       refined_formulation: "",
       dream: "",
       is_offtopic: false,
@@ -2293,7 +2293,7 @@ test("dream self drops stale refine confirm when no renderable dream content rem
   assert.equal(rendered.confirmEligible, false);
   assert.equal(rendered.contractId, "dream:incomplete_output:DREAM_MENU_INTRO");
   assert.equal(rendered.uiActionCodes.includes("ACTION_DREAM_REFINE_CONFIRM"), false);
-  assert.equal(String((rendered.specialist as any).wording_choice_pending || ""), "false");
+  assert.equal(String((rendered.specialist as any).compare_pending || ""), "false");
   assert.equal(String((rendered.specialist as any).ui_content || ""), "");
   assert.equal(String((rendered.specialist as any).ui_feedback_contract || ""), "");
 });
@@ -2414,7 +2414,7 @@ test("single-value confirm steps keep confirm actions for user-driven current-va
   }
 });
 
-test("single-value current-value refinement uses its own state without wording-choice pending", () => {
+test("single-value current-value refinement uses its own state without compare pending", () => {
   const state = getDefaultState();
   const canonical = "Mindd bestaat om complexe keuzes begrijpelijk en menselijk te maken.";
   (state as any).current_step = "purpose";
@@ -2472,7 +2472,7 @@ test("single-value current-value refinement uses its own state without wording-c
     String((rendered.specialist as any).message || ""),
     /Ik heb de toon van de droom lichter gemaakt/i
   );
-  assert.equal(String((rendered.specialist as any).wording_choice_pending || ""), "");
+  assert.equal(String((rendered.specialist as any).compare_pending || ""), "");
 });
 
 test("single-value autosuggest contracts use the specialist suggestion instead of the provisional raw input across the family", () => {

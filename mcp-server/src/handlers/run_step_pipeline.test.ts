@@ -3,14 +3,14 @@ import assert from "node:assert/strict";
 
 import {
   createRunStepPipelineHelpers,
-  isWordingChoiceIntentEligible,
+  isCompareIntentEligible,
   pickCurrentStepValueForFeedback,
   resolveProvisionalSourceForTurn,
-  resolveWordingChoiceSeedUserText,
+  resolveCompareSeedUserText,
   shouldTreatTurnAsCurrentValueFeedback,
-  shouldForcePendingWordingChoiceFromIntent,
+  shouldForcePendingCompareFromIntent,
 } from "./run_step_pipeline.js";
-import { createRunStepWordingHelpers } from "./run_step_wording.js";
+import { createRunStepCompareHelpers } from "./run_step_compare.js";
 import { createRunStepUiPayloadHelpers } from "./run_step_ui_payload.js";
 import { ACTIONCODE_REGISTRY } from "../core/actioncode_registry.js";
 
@@ -62,25 +62,25 @@ function buildPipelineUiPayloadHelpers() {
   });
 }
 
-function buildPipelineWordingHelpers(params?: {
+function buildPipelineCompareHelpers(params?: {
   isMaterialRewriteCandidate?: (userRaw: string, suggestionRaw: string) => boolean;
 }) {
   const defaultUi: Record<string, string> = {
-    wordingChoiceHeading: "This is your input:",
-    wordingChoiceInterpretedListHeading: "This is what I took from your input:",
-    wordingChoiceGroupedCompareUserLabel: "This is your compact wording:",
-    wordingChoiceGroupedCompareSuggestionLabel: "This is my suggestion:",
-    wordingChoiceGroupedCompareInstruction: "Choose the version that fits best for the remaining difference.",
-    wordingChoiceGroupedCompareRetainedHeading: "These points already stay in the final list:",
-    wordingChoiceSuggestionLabel: "This would be my suggestion:",
-    wordingChoiceInstruction: "Please click what suits you best.",
-    "wording.choice.context.default": "Please choose the wording that fits best.",
-    "wording.feedback.user_pick.reason.default":
+    compareHeading: "This is your input:",
+    compareInterpretedListHeading: "This is what I took from your input:",
+    compareGroupedUserLabel: "This is your compact wording:",
+    compareGroupedCompareSuggestionLabel: "This is my suggestion:",
+    compareGroupedCompareInstruction: "Choose the version that fits best for the remaining difference.",
+    compareGroupedCompareRetainedHeading: "These points already stay in the final list:",
+    compareSuggestionLabel: "This would be my suggestion:",
+    compareInstruction: "Please click what suits you best.",
+    "compare.choice.context.default": "Please choose the wording that fits best.",
+    "compare.feedback.user_pick.reason.default":
       "This keeps your original meaning while staying aligned with this step.",
-    "wording.feedback.dream_builder.rewrite.default":
+    "compare.feedback.dream_builder.rewrite.default":
       "Your original wording is mainly about your own wish, while Dream Builder asks for a broader change in the world.",
-    "wordingChoice.chooseVersion": "Choose this version",
-    "wordingChoice.useInputFallback": "Use this input",
+    "compare.chooseVersion": "Choose this version",
+    "compare.useInputFallback": "Use this input",
     "autosuggest.prefix.template": "Based on your input I suggest the following {0}:",
   };
   const canonicalize = (input: string) =>
@@ -89,7 +89,7 @@ function buildPipelineWordingHelpers(params?: {
       .replace(/[^a-z0-9\s]/gi, " ")
       .replace(/\s+/g, " ")
       .trim();
-  return createRunStepWordingHelpers({
+  return createRunStepCompareHelpers({
     step0Id: "step0",
     presentationStepId: "presentation",
     dreamStepId: "dream",
@@ -145,7 +145,7 @@ function buildPipelineWordingHelpers(params?: {
         ? (record.statements as unknown[]).map((line) => String(line || "").trim()).filter(Boolean).join("\n")
         : "";
     },
-    areEquivalentWordingVariants: ({ userItems, suggestionItems }) =>
+    areEquivalentCompareVariants: ({ userItems, suggestionItems }) =>
       JSON.stringify(userItems.map(canonicalize)) === JSON.stringify(suggestionItems.map(canonicalize)),
     normalizeEntityPhrase: (input: string) => String(input || "").trim(),
     withProvisionalValue: (state) => state,
@@ -156,10 +156,10 @@ function buildPipelineWordingHelpers(params?: {
       textKeys: [],
     }),
     applyUiPhaseByStep: () => {},
-    isUiWordingFeedbackKeyedV1Enabled: () => false,
-    isWordingChoiceIntentV1Enabled: () => true,
+    isUiCompareFeedbackKeyedV1Enabled: () => false,
+    isCompareIntentV1Enabled: () => true,
     bumpUiI18nCounter: () => {},
-    wordingSelectionMessage: () => "",
+    compareSelectionMessage: () => "",
   });
 }
 
@@ -180,7 +180,7 @@ function buildStrategyPipelineHarness(params: {
     language?: string;
   }) => Promise<{ is_stuck: boolean }>;
 }) {
-  const wordingHelpers = buildPipelineWordingHelpers({
+  const compareHelpers = buildPipelineCompareHelpers({
     isMaterialRewriteCandidate: params.isMaterialRewriteCandidate,
   });
   const queuedResults = [...(params.specialistResults || [params.specialistResult])];
@@ -319,24 +319,24 @@ function buildStrategyPipelineHarness(params: {
       applyUiPhaseByStep: () => {},
       buildContractId: () => "strategy:ask:test",
     },
-    wording: {
+    compare: {
       classifyAcceptedOutputUserTurn: async () => ({
         turn_kind: "step_variant",
         user_variant_is_stepworthy: true,
       }),
       classifyStepStuckTurn: params.classifyStepStuckTurn,
-      isWordingChoiceEligibleContext: () => true,
-      buildWordingChoiceFromTurn: wordingHelpers.buildWordingChoiceFromTurn,
-      buildWordingChoiceFromPendingSpecialist: wordingHelpers.buildWordingChoiceFromPendingSpecialist,
+      isCompareEligibleContext: () => true,
+      buildCompareFromTurn: compareHelpers.buildCompareFromTurn,
+      buildCompareFromPendingSpecialist: compareHelpers.buildCompareFromPendingSpecialist,
     },
     response: {
-      attachRegistryPayload: (payload, specialist, flags, actionCodes, renderedActions, wordingChoice, contractMeta) => ({
+      attachRegistryPayload: (payload, specialist, flags, actionCodes, renderedActions, compare, contractMeta) => ({
         ...payload,
         specialist,
         responseUiFlags: flags || null,
         actionCodesOverride: actionCodes || null,
         renderedActionsOverride: renderedActions || null,
-        wordingChoiceOverride: wordingChoice || null,
+        compareOverride: compare || null,
         contractMetaOverride: contractMeta || null,
       }),
       turnResponseEngine: {
@@ -355,14 +355,14 @@ function buildStrategyPipelineHarness(params: {
             },
           },
         }),
-        attachAndFinalize: ({ state, specialist, responseUiFlags, actionCodesOverride, renderedActionsOverride, wordingChoiceOverride, contractMetaOverride, debug }) => ({
+        attachAndFinalize: ({ state, specialist, responseUiFlags, actionCodesOverride, renderedActionsOverride, compareOverride, contractMetaOverride, debug }) => ({
           ok: true,
           state,
           specialist,
           responseUiFlags: responseUiFlags || null,
           actionCodesOverride: actionCodesOverride || null,
           renderedActionsOverride: renderedActionsOverride || null,
-          wordingChoiceOverride: wordingChoiceOverride || null,
+          compareOverride: compareOverride || null,
           contractMetaOverride: contractMetaOverride || null,
           debug: debug || null,
         }),
@@ -388,7 +388,7 @@ function buildRefineAdjustPipelineHarness(params: {
   dreamRuntimeMode?: "self" | "builder_collect" | "builder_scoring" | "builder_refine";
   initialState?: Record<string, unknown>;
 }) {
-  const wordingHelpers = buildPipelineWordingHelpers();
+  const compareHelpers = buildPipelineCompareHelpers();
   const uiPayloadHelpers = buildPipelineUiPayloadHelpers();
   const helpers = createRunStepPipelineHelpers<any>({
     ids: {
@@ -501,24 +501,24 @@ function buildRefineAdjustPipelineHarness(params: {
       applyUiPhaseByStep: () => {},
       buildContractId: () => `${params.stepId}:ask:test`,
     },
-    wording: {
+    compare: {
       classifyAcceptedOutputUserTurn: async () => ({
         turn_kind: "step_variant",
         user_variant_is_stepworthy: true,
       }),
       classifyStepStuckTurn: undefined,
-      isWordingChoiceEligibleContext: () => true,
-      buildWordingChoiceFromTurn: wordingHelpers.buildWordingChoiceFromTurn,
-      buildWordingChoiceFromPendingSpecialist: wordingHelpers.buildWordingChoiceFromPendingSpecialist,
+      isCompareEligibleContext: () => true,
+      buildCompareFromTurn: compareHelpers.buildCompareFromTurn,
+      buildCompareFromPendingSpecialist: compareHelpers.buildCompareFromPendingSpecialist,
     },
     response: {
-      attachRegistryPayload: (payload, specialist, flags, actionCodes, renderedActions, wordingChoice, contractMeta) => ({
+      attachRegistryPayload: (payload, specialist, flags, actionCodes, renderedActions, compare, contractMeta) => ({
         ...payload,
         specialist,
         responseUiFlags: flags || null,
         actionCodesOverride: actionCodes || null,
         renderedActionsOverride: renderedActions || null,
-        wordingChoiceOverride: wordingChoice || null,
+        compareOverride: compare || null,
         contractMetaOverride: contractMeta || null,
       }),
       turnResponseEngine: {
@@ -543,7 +543,7 @@ function buildRefineAdjustPipelineHarness(params: {
           responseUiFlags,
           actionCodesOverride,
           renderedActionsOverride,
-          wordingChoiceOverride,
+          compareOverride,
           contractMetaOverride,
           debug,
         }) => {
@@ -570,12 +570,12 @@ function buildRefineAdjustPipelineHarness(params: {
             responseUiFlags,
             actionCodesOverride,
             renderedActionsOverride,
-            wordingChoiceOverride,
+            compareOverride,
             contractMetaOverride
           );
           return {
             ...attached,
-            wordingChoiceOverride: wordingChoiceOverride || null,
+            compareOverride: compareOverride || null,
             contractMetaOverride: contractMetaOverride || null,
             debug: debug || null,
           };
@@ -655,23 +655,23 @@ test("resolveProvisionalSourceForTurn keeps user-input source for content and ex
   );
 });
 
-test("isWordingChoiceIntentEligible allows only step-input/meta-none turns", () => {
+test("isCompareIntentEligible allows only step-input/meta-none turns", () => {
   assert.equal(
-    isWordingChoiceIntentEligible({
+    isCompareIntentEligible({
       user_intent: "STEP_INPUT",
       meta_topic: "NONE",
     }),
     true
   );
   assert.equal(
-    isWordingChoiceIntentEligible({
+    isCompareIntentEligible({
       user_intent: "META_QUESTION",
       meta_topic: "NONE",
     }),
     false
   );
   assert.equal(
-    isWordingChoiceIntentEligible({
+    isCompareIntentEligible({
       user_intent: "STEP_INPUT",
       meta_topic: "NO_STARTING_POINT",
     }),
@@ -679,45 +679,45 @@ test("isWordingChoiceIntentEligible allows only step-input/meta-none turns", () 
   );
 });
 
-test("resolveWordingChoiceSeedUserText anchors feedback on suggestion to the previous suggestion", () => {
+test("resolveCompareSeedUserText anchors feedback on suggestion to the previous suggestion", () => {
   assert.equal(
-    resolveWordingChoiceSeedUserText({
+    resolveCompareSeedUserText({
       submittedTextIntent: "feedback_on_suggestion",
       submittedTextAnchor: "suggestion",
       submittedUserText: "Dit klinkt nog een beetje saai.",
       userMessage: "Dit klinkt nog een beetje saai.",
       previousSpecialist: {
-        wording_choice_agent_current: "Technische mkb-bedrijven met complexe productontwikkeling.",
+        compare_agent_current: "Technische mkb-bedrijven met complexe productontwikkeling.",
       },
     }),
     "Technische mkb-bedrijven met complexe productontwikkeling."
   );
 });
 
-test("resolveWordingChoiceSeedUserText keeps direct user content input as seed", () => {
+test("resolveCompareSeedUserText keeps direct user content input as seed", () => {
   assert.equal(
-    resolveWordingChoiceSeedUserText({
+    resolveCompareSeedUserText({
       submittedTextIntent: "content_input",
       submittedTextAnchor: "user_input",
       submittedUserText: "Familiebedrijven met een technische kern.",
       userMessage: "Familiebedrijven met een technische kern.",
       previousSpecialist: {
-        wording_choice_agent_current: "Technische mkb-bedrijven met complexe productontwikkeling.",
+        compare_agent_current: "Technische mkb-bedrijven met complexe productontwikkeling.",
       },
     }),
     "Familiebedrijven met een technische kern."
   );
 });
 
-test("resolveWordingChoiceSeedUserText returns empty seed for feedback on current value", () => {
+test("resolveCompareSeedUserText returns empty seed for feedback on current value", () => {
   assert.equal(
-    resolveWordingChoiceSeedUserText({
+    resolveCompareSeedUserText({
       submittedTextIntent: "feedback_on_current_value",
       submittedTextAnchor: "current_value",
       submittedUserText: "Ik vind dit een saaie formulering",
       userMessage: "Ik vind dit een saaie formulering",
       previousSpecialist: {
-        wording_choice_agent_current: "Technische mkb-bedrijven met complexe productontwikkeling.",
+        compare_agent_current: "Technische mkb-bedrijven met complexe productontwikkeling.",
       },
     }),
     ""
@@ -820,30 +820,30 @@ test("shouldTreatTurnAsCurrentValueFeedback never hijacks Dream Builder turns in
   );
 });
 
-test("shouldForcePendingWordingChoiceFromIntent forces pending only for suggestion-anchored feedback/reject intents", () => {
+test("shouldForcePendingCompareFromIntent forces pending only for suggestion-anchored feedback/reject intents", () => {
   assert.equal(
-    shouldForcePendingWordingChoiceFromIntent({
+    shouldForcePendingCompareFromIntent({
       submittedTextIntent: "feedback_on_suggestion",
       submittedTextAnchor: "suggestion",
     }),
     true
   );
   assert.equal(
-    shouldForcePendingWordingChoiceFromIntent({
+    shouldForcePendingCompareFromIntent({
       submittedTextIntent: "reject_suggestion_explicit",
       submittedTextAnchor: "suggestion",
     }),
     true
   );
   assert.equal(
-    shouldForcePendingWordingChoiceFromIntent({
+    shouldForcePendingCompareFromIntent({
       submittedTextIntent: "content_input",
       submittedTextAnchor: "user_input",
     }),
     false
   );
   assert.equal(
-    shouldForcePendingWordingChoiceFromIntent({
+    shouldForcePendingCompareFromIntent({
       submittedTextIntent: "feedback_on_suggestion",
       submittedTextAnchor: "user_input",
     }),
@@ -900,7 +900,7 @@ test("runPostSpecialistPipeline keeps strategy local when a small addition is an
       actionCodeRaw: "",
       responseUiFlags: null,
       inputMode: "widget",
-      wordingChoiceEnabled: true,
+      compareEnabled: true,
       languageResolvedThisTurn: false,
       isBootstrapPollCall: false,
       motivationQuotesEnabled: false,
@@ -942,16 +942,16 @@ test("runPostSpecialistPipeline keeps strategy local when a small addition is an
   } as any);
 
   assert.equal(specialistUserMessage, smallAddition);
-  assert.equal(String((payload.specialist as Record<string, unknown>).wording_choice_pending || ""), "false");
+  assert.equal(String((payload.specialist as Record<string, unknown>).compare_pending || ""), "false");
   assert.equal(String((payload.specialist as Record<string, unknown>).__dream_builder_compare_pending || ""), "true");
-  assert.equal(String((payload.specialist as Record<string, unknown>).wording_choice_compare_mode || ""), "grouped_units");
+  assert.equal(String((payload.specialist as Record<string, unknown>).compare_compare_mode || ""), "grouped_units");
   assert.deepEqual((payload.specialist as Record<string, unknown>).statements, existingStatements);
   assert.equal(String((payload.specialist as Record<string, unknown>).strategy || ""), existingStatements.join("\n"));
   assert.equal(String((payload.specialist as Record<string, unknown>).refined_formulation || ""), existingStatements.join("\n"));
-  assert.ok(payload.wordingChoiceOverride);
-  assert.equal(payload.wordingChoiceOverride?.mode, "list");
-  assert.ok(Array.isArray((payload.specialist as Record<string, unknown>).wording_choice_compare_units));
-  const compareUnits = ((payload.specialist as Record<string, unknown>).wording_choice_compare_units as Array<Record<string, unknown>>) || [];
+  assert.ok(payload.compareOverride);
+  assert.equal(payload.compareOverride?.mode, "list");
+  assert.ok(Array.isArray((payload.specialist as Record<string, unknown>).compare_compare_units));
+  const compareUnits = ((payload.specialist as Record<string, unknown>).compare_compare_units as Array<Record<string, unknown>>) || [];
   assert.equal(compareUnits.length >= 1, true);
 });
 
@@ -990,7 +990,7 @@ test("runPostSpecialistPipeline restores Dream Builder canonical statements when
       actionCodeRaw: "",
       responseUiFlags: null,
       inputMode: "widget",
-      wordingChoiceEnabled: true,
+      compareEnabled: true,
       languageResolvedThisTurn: false,
       isBootstrapPollCall: false,
       motivationQuotesEnabled: false,
@@ -1036,11 +1036,11 @@ test("runPostSpecialistPipeline restores Dream Builder canonical statements when
   const specialist = (((payload.specialist as Record<string, unknown>)?.__dream_builder_compare_pending
     ? (payload.specialist as Record<string, unknown>)
     : ((payload.state as Record<string, unknown>).last_specialist_result as Record<string, unknown>)) || {}) as Record<string, unknown>;
-  assert.equal(String(specialist.wording_choice_pending || ""), "false");
+  assert.equal(String(specialist.compare_pending || ""), "false");
   assert.equal(String(specialist.__dream_builder_compare_pending || ""), "true");
   assert.deepEqual(specialist.statements, existingStatements);
   assert.deepEqual((payload.state as Record<string, unknown>).dream_builder_statements, existingStatements);
-  assert.equal(payload.wordingChoiceOverride, null);
+  assert.equal(payload.compareOverride, null);
 });
 
 test("runPostSpecialistPipeline recovers Dream Builder compare when a material rewrite is returned without explicit feedback_reason_text", async () => {
@@ -1085,7 +1085,7 @@ test("runPostSpecialistPipeline recovers Dream Builder compare when a material r
       actionCodeRaw: "",
       responseUiFlags: null,
       inputMode: "widget",
-      wordingChoiceEnabled: true,
+      compareEnabled: true,
       languageResolvedThisTurn: false,
       isBootstrapPollCall: false,
       motivationQuotesEnabled: false,
@@ -1137,11 +1137,11 @@ test("runPostSpecialistPipeline recovers Dream Builder compare when a material r
   const specialist = (((payload.specialist as Record<string, unknown>)?.__dream_builder_compare_pending
     ? (payload.specialist as Record<string, unknown>)
     : ((payload.state as Record<string, unknown>).last_specialist_result as Record<string, unknown>)) || {}) as Record<string, unknown>;
-  assert.equal(String(specialist.wording_choice_pending || ""), "false");
+  assert.equal(String(specialist.compare_pending || ""), "false");
   assert.equal(String(specialist.__dream_builder_compare_pending || ""), "true");
   assert.deepEqual(specialist.statements, existingStatements);
   assert.deepEqual((payload.state as Record<string, unknown>).dream_builder_statements, existingStatements);
-  assert.equal(payload.wordingChoiceOverride, null);
+  assert.equal(payload.compareOverride, null);
   assert.match(
     String(specialist.feedback_reason_text || ""),
     /broader change in the world/i
@@ -1192,7 +1192,7 @@ test("runPostSpecialistPipeline keeps Dream Builder compare active even when a c
       actionCodeRaw: "",
       responseUiFlags: null,
       inputMode: "widget",
-      wordingChoiceEnabled: true,
+      compareEnabled: true,
       languageResolvedThisTurn: false,
       isBootstrapPollCall: false,
       motivationQuotesEnabled: false,
@@ -1246,11 +1246,11 @@ test("runPostSpecialistPipeline keeps Dream Builder compare active even when a c
   const specialist = (((payload.specialist as Record<string, unknown>)?.__dream_builder_compare_pending
     ? (payload.specialist as Record<string, unknown>)
     : ((payload.state as Record<string, unknown>).last_specialist_result as Record<string, unknown>)) || {}) as Record<string, unknown>;
-  assert.equal(String(specialist.wording_choice_pending || ""), "false");
+  assert.equal(String(specialist.compare_pending || ""), "false");
   assert.equal(String(specialist.__dream_builder_compare_pending || ""), "true");
   assert.deepEqual(specialist.statements, existingStatements);
   assert.deepEqual((payload.state as Record<string, unknown>).dream_builder_statements, existingStatements);
-  assert.equal(payload.wordingChoiceOverride, null);
+  assert.equal(payload.compareOverride, null);
 });
 
 test("runPostSpecialistPipeline repairs a near-duplicate Dream Builder append into a merge compare before state is updated", async () => {
@@ -1317,7 +1317,7 @@ test("runPostSpecialistPipeline repairs a near-duplicate Dream Builder append in
       actionCodeRaw: "",
       responseUiFlags: null,
       inputMode: "widget",
-      wordingChoiceEnabled: true,
+      compareEnabled: true,
       languageResolvedThisTurn: false,
       isBootstrapPollCall: false,
       motivationQuotesEnabled: false,
@@ -1368,11 +1368,11 @@ test("runPostSpecialistPipeline repairs a near-duplicate Dream Builder append in
   const specialist = (((payload.specialist as Record<string, unknown>)?.__dream_builder_compare_pending
     ? (payload.specialist as Record<string, unknown>)
     : ((payload.state as Record<string, unknown>).last_specialist_result as Record<string, unknown>)) || {}) as Record<string, unknown>;
-  assert.equal(String(specialist.wording_choice_pending || ""), "false");
+  assert.equal(String(specialist.compare_pending || ""), "false");
   assert.equal(String(specialist.__dream_builder_compare_pending || ""), "true");
   assert.deepEqual(specialist.statements, existingStatements);
   assert.deepEqual((payload.state as Record<string, unknown>).dream_builder_statements, existingStatements);
-  assert.equal(payload.wordingChoiceOverride, null);
+  assert.equal(payload.compareOverride, null);
   assert.match(
     String(specialist.feedback_reason_text || ""),
     /samengevoegde formulering|lijst scherper/i
@@ -1441,7 +1441,7 @@ test("runPostSpecialistPipeline repairs Dream Builder REFINE overlap cases befor
       actionCodeRaw: "",
       responseUiFlags: null,
       inputMode: "widget",
-      wordingChoiceEnabled: true,
+      compareEnabled: true,
       languageResolvedThisTurn: false,
       isBootstrapPollCall: false,
       motivationQuotesEnabled: false,
@@ -1502,7 +1502,7 @@ test("runPostSpecialistPipeline repairs Dream Builder REFINE overlap cases befor
     String(specialist.__dream_builder_overlap_incoming_statement || ""),
     "Betekenisvolle verhalen wordt steeds belangrijker voor mensen. dat willen ze ook delen als ze er trots op zijn"
   );
-  assert.equal(String(specialist.wording_choice_pending || ""), "false");
+  assert.equal(String(specialist.compare_pending || ""), "false");
   assert.equal(String(specialist.__dream_builder_compare_pending || ""), "true");
 });
 
@@ -1586,7 +1586,7 @@ test("runPostSpecialistPipeline repairs a 20th Dream Builder append into overlap
       actionCodeRaw: "",
       responseUiFlags: null,
       inputMode: "widget",
-      wordingChoiceEnabled: true,
+      compareEnabled: true,
       languageResolvedThisTurn: false,
       isBootstrapPollCall: false,
       motivationQuotesEnabled: false,
@@ -1714,7 +1714,7 @@ test("runPostSpecialistPipeline repairs a semantically overlapping Dream Builder
       actionCodeRaw: "",
       responseUiFlags: null,
       inputMode: "widget",
-      wordingChoiceEnabled: true,
+      compareEnabled: true,
       languageResolvedThisTurn: false,
       isBootstrapPollCall: false,
       motivationQuotesEnabled: false,
@@ -1854,7 +1854,7 @@ test("runPostSpecialistPipeline repairs incomplete multi-wish Dream Builder rewr
       actionCodeRaw: "",
       responseUiFlags: null,
       inputMode: "widget",
-      wordingChoiceEnabled: true,
+      compareEnabled: true,
       languageResolvedThisTurn: false,
       isBootstrapPollCall: false,
       motivationQuotesEnabled: false,
@@ -1911,7 +1911,7 @@ test("runPostSpecialistPipeline repairs incomplete multi-wish Dream Builder rewr
   const specialist = (((payload.specialist as Record<string, unknown>)?.__dream_builder_compare_pending
     ? (payload.specialist as Record<string, unknown>)
     : ((payload.state as Record<string, unknown>).last_specialist_result as Record<string, unknown>)) || {}) as Record<string, unknown>;
-  assert.equal(String(specialist.wording_choice_pending || ""), "false");
+  assert.equal(String(specialist.compare_pending || ""), "false");
   assert.equal(String(specialist.__dream_builder_compare_pending || ""), "true");
   assert.deepEqual(specialist.__dream_builder_compare_suggested_items, [
     "Over 5 tot 10 jaar zullen meer mensen vooral problemen willen oplossen die voor henzelf en hun omgeving echt betekenisvol zijn.",
@@ -2052,7 +2052,7 @@ test("runPostSpecialistPipeline reaches Dream Builder scoring after adding 5 the
         actionCodeRaw: "",
         responseUiFlags: null,
         inputMode: "widget",
-        wordingChoiceEnabled: true,
+        compareEnabled: true,
         languageResolvedThisTurn: false,
         isBootstrapPollCall: false,
         motivationQuotesEnabled: false,
@@ -2187,7 +2187,7 @@ test("runPostSpecialistPipeline forces Dream Builder scoring after the twentieth
       actionCodeRaw: "",
       responseUiFlags: null,
       inputMode: "widget",
-      wordingChoiceEnabled: true,
+      compareEnabled: true,
       languageResolvedThisTurn: false,
       isBootstrapPollCall: false,
       motivationQuotesEnabled: false,
@@ -2288,7 +2288,7 @@ test("runPostSpecialistPipeline synthesizes a Dream Builder scoring contract whe
       actionCodeRaw: "",
       responseUiFlags: null,
       inputMode: "widget",
-      wordingChoiceEnabled: true,
+      compareEnabled: true,
       languageResolvedThisTurn: false,
       isBootstrapPollCall: false,
       motivationQuotesEnabled: false,
@@ -2401,7 +2401,7 @@ test("runPostSpecialistPipeline keeps overlapping strategy merge proposals in a 
       actionCodeRaw: "",
       responseUiFlags: null,
       inputMode: "widget",
-      wordingChoiceEnabled: true,
+      compareEnabled: true,
       languageResolvedThisTurn: false,
       isBootstrapPollCall: false,
       motivationQuotesEnabled: false,
@@ -2443,18 +2443,18 @@ test("runPostSpecialistPipeline keeps overlapping strategy merge proposals in a 
   } as any);
 
   assert.equal(specialistUserMessage, userAddition);
-  assert.equal(String((payload.specialist as Record<string, unknown>).wording_choice_pending || ""), "true");
-  assert.equal(String((payload.specialist as Record<string, unknown>).wording_choice_compare_mode || ""), "grouped_units");
-  assert.equal(String((payload.specialist as Record<string, unknown>).wording_choice_variant || ""), "grouped_list_units");
-  assert.ok(payload.wordingChoiceOverride);
-  assert.deepEqual(payload.wordingChoiceOverride?.user_items, [
+  assert.equal(String((payload.specialist as Record<string, unknown>).compare_pending || ""), "true");
+  assert.equal(String((payload.specialist as Record<string, unknown>).compare_compare_mode || ""), "grouped_units");
+  assert.equal(String((payload.specialist as Record<string, unknown>).compare_variant || ""), "grouped_list_units");
+  assert.ok(payload.compareOverride);
+  assert.deepEqual(payload.compareOverride?.user_items, [
     "Altijd gericht investeren in relevante technologische innovaties die de impact van klantcommunicatie vergroten",
     "Altijd gericht investeren in AI-technologieen die de impact van klantcommunicatie vergroten",
   ]);
-  assert.deepEqual(payload.wordingChoiceOverride?.suggestion_items, [
+  assert.deepEqual(payload.compareOverride?.suggestion_items, [
     "Altijd gericht investeren in relevante AI-technologieen die de impact van klantcommunicatie vergroten",
   ]);
-  assert.match(String(payload.wordingChoiceOverride?.instruction || ""), /Prototyping en MVP's bouwen/i);
+  assert.match(String(payload.compareOverride?.instruction || ""), /Prototyping en MVP's bouwen/i);
 });
 
 test("runPostSpecialistPipeline sends first multiline strategy input straight to the specialist when no list exists", async () => {
@@ -2490,7 +2490,7 @@ test("runPostSpecialistPipeline sends first multiline strategy input straight to
       actionCodeRaw: "",
       responseUiFlags: null,
       inputMode: "widget",
-      wordingChoiceEnabled: true,
+      compareEnabled: true,
       languageResolvedThisTurn: false,
       isBootstrapPollCall: false,
       motivationQuotesEnabled: false,
@@ -2627,7 +2627,7 @@ test("runPostSpecialistPipeline repairs Big Why suggestion routes into explicit 
       actionCodeRaw: "",
       responseUiFlags: null,
       inputMode: "widget",
-      wordingChoiceEnabled: true,
+      compareEnabled: true,
       languageResolvedThisTurn: false,
       isBootstrapPollCall: false,
       motivationQuotesEnabled: false,
@@ -2780,7 +2780,7 @@ test("runPostSpecialistPipeline repairs Purpose suggestion routes when the speci
       actionCodeRaw: "",
       responseUiFlags: null,
       inputMode: "widget",
-      wordingChoiceEnabled: true,
+      compareEnabled: true,
       languageResolvedThisTurn: false,
       isBootstrapPollCall: false,
       motivationQuotesEnabled: false,
@@ -2992,7 +2992,7 @@ test("runPostSpecialistPipeline exposes a renderable next widget outcome for eve
         actionCodeRaw: scenario.actionCode,
         responseUiFlags: null,
         inputMode: "widget",
-        wordingChoiceEnabled: true,
+        compareEnabled: true,
         languageResolvedThisTurn: false,
         isBootstrapPollCall: false,
         motivationQuotesEnabled: false,
@@ -3091,7 +3091,7 @@ test("runPostSpecialistPipeline escalates stuck support from server-side classif
       actionCodeRaw: "",
       responseUiFlags: null,
       inputMode: "widget",
-      wordingChoiceEnabled: true,
+      compareEnabled: true,
       languageResolvedThisTurn: false,
       isBootstrapPollCall: false,
       motivationQuotesEnabled: false,
@@ -3184,7 +3184,7 @@ test("runPostSpecialistPipeline recovers a post-hoc stuck classification by re-r
       actionCodeRaw: "",
       responseUiFlags: null,
       inputMode: "widget",
-      wordingChoiceEnabled: true,
+      compareEnabled: true,
       languageResolvedThisTurn: false,
       isBootstrapPollCall: false,
       motivationQuotesEnabled: false,
@@ -3286,7 +3286,7 @@ test("runPostSpecialistPipeline does not post-hoc stamp stuck onto a normal cont
       actionCodeRaw: "",
       responseUiFlags: null,
       inputMode: "widget",
-      wordingChoiceEnabled: true,
+      compareEnabled: true,
       languageResolvedThisTurn: false,
       isBootstrapPollCall: false,
       motivationQuotesEnabled: false,
@@ -3363,7 +3363,7 @@ test("runPostSpecialistPipeline passes current-turn stuck classification into th
       actionCodeRaw: "",
       responseUiFlags: null,
       inputMode: "widget",
-      wordingChoiceEnabled: true,
+      compareEnabled: true,
       languageResolvedThisTurn: false,
       isBootstrapPollCall: false,
       motivationQuotesEnabled: false,

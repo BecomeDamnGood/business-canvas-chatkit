@@ -37,9 +37,9 @@ export const UI_STRINGS_LOCALE_NL: Record<string, string> = {
     "dreamBuilder.switchSelf.headline": "Ga verder met de Droom-oefening.",
     "dreamBuilder.switchSelf.body.helper": "Neem even de tijd om een eerste versie van je droom te schrijven. Ik help je die zo nodig verfijnen.",
     "dreamBuilder.switchSelf.body.intro": "Dat is een sterke manier om te beginnen. Je eigen droom opschrijven helpt scherp te krijgen wat voor jou en je bedrijf echt belangrijk is.",
-    "wordingChoiceDreamBuilderKeepBothLabel": "Beide statements houden:",
-    "wordingChoiceDreamBuilderMergeLabel": "Samenvoegen tot één statement:",
-    "wordingChoiceDreamBuilderMergeInstruction":
+    "compareDreamBuilderKeepBothLabel": "Beide statements houden:",
+    "compareDreamBuilderMergeLabel": "Samenvoegen tot één statement:",
+    "compareDreamBuilderMergeInstruction":
       "Kies of je deze twee vergelijkbare statements allebei wilt houden of wilt samenvoegen tot één sterkere formulering.",
     "dream.intro.body": "Visie komt van het Griekse woord visio, wat “zien” betekent. Een echte visionair ziet een toekomst voordat anderen die kunnen zien. Ze voelen het. Ze dromen het. Daarom heet deze stap Droom. Een Droom is een levendig beeld van de toekomst die je wilt creëren. Het beschrijft een wereld die beter, eerlijker, gezonder, eenvoudiger of inspirerender is omdat jouw organisatie bestaat.\n\nHet is geen omzetdoel, geen strategie en geen verkapte pitch voor een product of dienst. Een echte Droom is menselijk. Het moet mensen raken en laten voelen waarom het belangrijk is. Richt je op de verandering die je in de wereld wilt zien en het effect dat je wilt hebben op het leven van mensen, niet op de middelen of de uitvoering. Schrijf een eerste versie van je Droom. Het hoeft niet perfect te zijn. Het moet vooral echt zijn.",
     "purpose.intro.body": "We gaan nu aan de slag met het definiëren van de bestaansreden van {0}. Waar de Droom de richting bepaalt, wat je wilt veranderen in de wereld, wordt de Bestaansreden de motor: waarom deze verandering echt belangrijk is voor jou en voor {0}. Bestaansreden is de diepere reden waarom je elke dag voor dit bedrijf opstaat, ook wanneer het moeilijk is of wanneer er nog geen direct resultaat zichtbaar is.\n\nZonder Bestaansreden blijft de Droom een mooi idee; zonder een Droom wordt Bestaansreden een gevoel zonder bestemming. Bestaansreden gaat niet over uitkomsten zoals geld, groei of erkenning; dat zijn resultaten, geen Bestaansreden. We zoeken naar het fundament dat {0} drijft, het geloof of de waarde die alles onder de Droom met elkaar verbindt. Dit helpt niet alleen om koers te houden, maar zorgt er ook voor dat {0} menselijk en veerkrachtig blijft, juist onder druk.",
@@ -349,24 +349,24 @@ export const UI_STRINGS_LOCALE_NL: Record<string, string> = {
     "uiSubtitle": "Gebruik de Business Strategy Canvas Builder-widget om door te gaan (niet het chatvak).",
     "uiTitle.template": "Business Strategy Canvas Builder",
     "uiUseWidgetToContinue": "Gebruik de Business Strategy Canvas Builder-widget om door te gaan (niet het chatvak).",
-    "wording.choice.context.default": "Kies alsjeblieft de bewoording die het beste past.",
-    "wording.feedback.compare.intro.template":
+    "compare.choice.context.default": "Kies alsjeblieft de bewoording die het beste past.",
+    "compare.feedback.compare.intro.template":
       "Ik denk dat ik begrijp wat je bedoelt. Voor een sterke {0} helpt het om dit in gedachten te houden.",
-    "wording.feedback.user_pick.ack.default": "Je eigen formulering is helemaal prima.",
-    "wording.feedback.user_pick.nudge.template":
+    "compare.feedback.user_pick.ack.default": "Je eigen formulering is helemaal prima.",
+    "compare.feedback.user_pick.nudge.template":
       "Tegelijk helpt het om in gedachten te houden wat een sterke {0} meestal krachtiger maakt.",
-    "wording.feedback.user_pick.reason.default":
+    "compare.feedback.user_pick.reason.default":
       "Houd wel in gedachten wat deze stap sterk maakt, zodat je formulering helder en passend blijft.",
-    "wording.feedback.dream_builder.rewrite.default":
+    "compare.feedback.dream_builder.rewrite.default":
       "Je oorspronkelijke zin gaat vooral over je eigen wens, terwijl Dream Builder vraagt om een bredere verandering in de wereld.",
-    "wordingChoice.chooseVersion": "Kies deze versie",
-    "wordingChoice.useInputFallback": "Gebruik deze input",
-    "wordingChoiceHeading": "Dit is jouw input:",
-    "wordingChoiceInterpretedListHeading": "Zo heb ik je input geinterpreteerd:",
-    "wordingChoiceGroupedCompareUserLabel": "Jouw compacte formulering is dit:",
-    "wordingChoiceGroupedCompareSuggestionLabel": "Mijn suggestie is dit:",
-    "wordingChoiceGroupedCompareInstruction": "Kies de versie die het beste past bij het resterende verschil.",
-    "wordingChoiceGroupedCompareRetainedHeading": "Deze punten blijven al in de definitieve lijst:",
-    "wordingChoiceInstruction": "Klik alsjeblieft wat het beste bij je past.",
-    "wordingChoiceSuggestionLabel": "Dit zou mijn suggestie zijn:",
+    "compare.chooseVersion": "Kies deze versie",
+    "compare.useInputFallback": "Gebruik deze input",
+    "compareHeading": "Dit is jouw input:",
+    "compareInterpretedListHeading": "Zo heb ik je input geinterpreteerd:",
+    "compareGroupedUserLabel": "Jouw compacte formulering is dit:",
+    "compareGroupedCompareSuggestionLabel": "Mijn suggestie is dit:",
+    "compareGroupedCompareInstruction": "Kies de versie die het beste past bij het resterende verschil.",
+    "compareGroupedCompareRetainedHeading": "Deze punten blijven al in de definitieve lijst:",
+    "compareInstruction": "Klik alsjeblieft wat het beste bij je past.",
+    "compareSuggestionLabel": "Dit zou mijn suggestie zijn:",
 } as const;

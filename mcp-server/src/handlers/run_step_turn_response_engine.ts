@@ -2,7 +2,7 @@ import type { CanvasState } from "../core/state.js";
 import type { TurnPolicyRenderResult } from "../core/turn_policy_renderer.js";
 import type { RenderedAction } from "../contracts/ui_actions.js";
 import type { UiI18nTelemetryCounters } from "./run_step_i18n_runtime.js";
-import type { UiContractMeta, WordingChoiceUiPayload } from "./run_step_ui_payload.js";
+import type { UiContractMeta, CompareUiPayload } from "./run_step_ui_payload.js";
 import { getChooseForMeRegistryEntry } from "../steps/step_registry.js";
 
 type TurnResponseEngineDeps<TPayload> = {
@@ -41,7 +41,7 @@ type TurnResponseEngineDeps<TPayload> = {
     flagsOverride?: Record<string, boolean | string> | null,
     actionCodesOverride?: string[] | null,
     renderedActionsOverride?: RenderedAction[] | null,
-    wordingChoiceOverride?: WordingChoiceUiPayload | null,
+    compareOverride?: CompareUiPayload | null,
     contractMetaOverride?: UiContractMeta | null
   ) => TPayload;
   finalizeResponse: (payload: TPayload) => TPayload;
@@ -92,7 +92,7 @@ export type TurnResponseEngine<TPayload> = {
     responseUiFlags?: Record<string, boolean | string> | null;
     actionCodesOverride?: string[] | null;
     renderedActionsOverride?: RenderedAction[] | null;
-    wordingChoiceOverride?: WordingChoiceUiPayload | null;
+    compareOverride?: CompareUiPayload | null;
     contractMetaOverride?: UiContractMeta | null;
     debug?: Record<string, unknown>;
   }) => TPayload;
@@ -190,7 +190,7 @@ export function createTurnResponseEngine<TPayload>(
     responseUiFlags?: Record<string, boolean | string> | null;
     actionCodesOverride?: string[] | null;
     renderedActionsOverride?: RenderedAction[] | null;
-    wordingChoiceOverride?: WordingChoiceUiPayload | null;
+    compareOverride?: CompareUiPayload | null;
     contractMetaOverride?: UiContractMeta | null;
     debug?: Record<string, unknown>;
   }): TPayload {
@@ -211,7 +211,7 @@ export function createTurnResponseEngine<TPayload>(
       params.responseUiFlags || null,
       params.actionCodesOverride || null,
       params.renderedActionsOverride || null,
-      params.wordingChoiceOverride || null,
+      params.compareOverride || null,
       params.contractMetaOverride || null
     );
     return deps.finalizeResponse(payload);

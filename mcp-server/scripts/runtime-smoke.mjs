@@ -118,7 +118,11 @@ async function main() {
   assert.equal(bundledHtml.includes("text_compare"), true, "bundle mist text_compare support");
   assert.equal(bundledHtml.includes("list_compare"), true, "bundle mist list_compare support");
   assert.equal(bundledHtml.includes("compare_pick"), true, "bundle mist compare_pick surface support");
-  assert.equal(bundledHtml.includes('"wording_choice"'), false, "bundle bevat nog legacy wording_choice public string");
+  assert.equal(
+    bundledHtml.includes('"wording_choice"'),
+    false,
+    "bundle bevat nog een verboden legacy publieke compare-kind string"
+  );
 
   const server = spawn("node", ["--loader", "ts-node/esm", "server.ts"], {
     cwd: serverCwd,

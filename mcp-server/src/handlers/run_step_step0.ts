@@ -201,9 +201,9 @@ export function createRunStepStep0DisplayHelpers(deps: RunStepStep0DisplayDeps) 
       action: "ASK",
       message: hasMessage ? cleanedMessage : deps.step0CardDescForState(state),
       question: deps.step0QuestionForState(state),
-      wording_choice_pending: "false",
-      wording_choice_selected: "",
-      wording_choice_list_semantics: "delta",
+      compare_pending: "false",
+      compare_selected: "",
+      compare_list_semantics: "delta",
       feedback_reason_key: "",
       feedback_reason_text: "",
       step_0: "",
@@ -245,9 +245,9 @@ export function createRunStepStep0DisplayHelpers(deps: RunStepStep0DisplayDeps) 
           question: deps.step0ReadinessQuestion(state, parsed),
           business_name: parsed.name || "TBD",
           step_0: step0FinalRaw,
-          wording_choice_pending: "false",
-          wording_choice_selected: "",
-          wording_choice_list_semantics: "delta",
+          compare_pending: "false",
+          compare_selected: "",
+          compare_list_semantics: "delta",
           feedback_reason_key: "",
           feedback_reason_text: "",
           is_offtopic: true,
@@ -294,9 +294,9 @@ export function createRunStepStep0DisplayHelpers(deps: RunStepStep0DisplayDeps) 
         next.question = deps.step0ReadinessQuestion(state, parsedEdit);
         next.business_name = parsedEdit.name || "TBD";
         next.step_0 = candidateStep0;
-        next.wording_choice_pending = "false";
-        next.wording_choice_selected = "";
-        next.wording_choice_list_semantics = "delta";
+        next.compare_pending = "false";
+        next.compare_selected = "";
+        next.compare_list_semantics = "delta";
         next.feedback_reason_key = "";
         next.feedback_reason_text = "";
         if (!String(next.message || "").trim()) {
@@ -309,9 +309,9 @@ export function createRunStepStep0DisplayHelpers(deps: RunStepStep0DisplayDeps) 
       next.question = deps.step0ReadinessQuestion(state, parsedFromState);
       next.business_name = parsedFromState.name || "TBD";
       next.step_0 = step0FinalRaw;
-      next.wording_choice_pending = "false";
-      next.wording_choice_selected = "";
-      next.wording_choice_list_semantics = "delta";
+      next.compare_pending = "false";
+      next.compare_selected = "";
+      next.compare_list_semantics = "delta";
       next.feedback_reason_key = "";
       next.feedback_reason_text = "";
       applyStep0InteractionMetadata(next, "step0_ready");

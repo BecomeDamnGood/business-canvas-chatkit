@@ -201,7 +201,7 @@ After the user describes what they offer:
 
 Validation steps:
 - Verify whether it is logical and reasonably complete.
-- Remove generic wording. Make it concrete.
+- Remove generic compare. Make it concrete.
 - Avoid a full catalog. Do not list every SKU or every variant.
 - Treat PREVIOUS_STATEMENTS as the canonical accepted list.
 - Default to local edits:

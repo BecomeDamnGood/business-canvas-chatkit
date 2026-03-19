@@ -4,7 +4,7 @@ import type { TurnOutputStatus, TurnPolicyRenderResult } from "../core/turn_poli
 import type { RenderedAction } from "../contracts/ui_actions.js";
 import type { UiI18nTelemetryCounters } from "./run_step_i18n_runtime.js";
 import type { TurnResponseEngine } from "./run_step_turn_response_engine.js";
-import type { UiContractMeta, WordingChoiceUiPayload } from "./run_step_ui_payload.js";
+import type { UiContractMeta, CompareUiPayload } from "./run_step_ui_payload.js";
 import type { AcceptedOutputUserTurnClassification } from "./run_step_accepted_output_semantics.js";
 
 export type RunStepSpecialistRouting = {
@@ -58,7 +58,7 @@ export type RunStepAttachRegistryPayload<TPayload> = (
   flagsOverride?: Record<string, boolean | string> | null,
   actionCodesOverride?: string[] | null,
   renderedActionsOverride?: RenderedAction[] | null,
-  wordingChoiceOverride?: WordingChoiceUiPayload | null,
+  compareOverride?: CompareUiPayload | null,
   contractMetaOverride?: UiContractMeta | null
 ) => TPayload;
 
@@ -113,8 +113,8 @@ export type RunStepRouteTokenPorts = {
   dreamStartExerciseRouteToken: string;
 };
 
-export type RunStepRouteWordingPorts = {
-  wordingSelectionMessage: (
+export type RunStepCompareRoutePorts = {
+  compareSelectionMessage: (
     stepId: string,
     state: CanvasState,
     activeSpecialist?: string,
@@ -191,7 +191,7 @@ export type RunStepRouteI18nPorts = {
 export type RunStepRoutePorts<TResponse> = {
   ids: RunStepRouteIdPorts;
   tokens: RunStepRouteTokenPorts;
-  wording: RunStepRouteWordingPorts;
+  compare: RunStepCompareRoutePorts;
   state: RunStepRouteStatePorts;
   contracts: RunStepRouteContractPorts;
   step0: RunStepRouteStep0Ports;
@@ -283,7 +283,7 @@ export type RunStepPipelineStatePorts = {
       currentStepId: string;
       activeSpecialist: string;
       canonicalStatementCount: number;
-      wordingChoicePending: boolean;
+      comparePending: boolean;
       state: CanvasState;
     }
   ) => any;
@@ -300,7 +300,7 @@ export type RunStepPipelineRenderPorts = {
   buildContractId: (stepId: string, status: TurnOutputStatus, menuId: string) => string;
 };
 
-export type RunStepPipelineWordingPorts = {
+export type RunStepComparePipelinePorts = {
   classifyAcceptedOutputUserTurn: (params: {
     model: string;
     stepId: string;
@@ -318,14 +318,14 @@ export type RunStepPipelineWordingPorts = {
     currentStepSupportMode?: string;
     language?: string;
   }) => Promise<{ is_stuck: boolean }>;
-  isWordingChoiceEligibleContext: (
+  isCompareEligibleContext: (
     stepId: string,
     activeSpecialist: string,
     specialist?: Record<string, unknown> | null,
     previousSpecialist?: Record<string, unknown> | null,
     dreamRuntimeModeRaw?: unknown
   ) => boolean;
-  buildWordingChoiceFromTurn: (params: {
+  buildCompareFromTurn: (params: {
     stepId: string;
     state: CanvasState;
     activeSpecialist: string;
@@ -341,16 +341,16 @@ export type RunStepPipelineWordingPorts = {
     acceptedOutputUserTurnClassification?: AcceptedOutputUserTurnClassification | null;
   }) => {
     specialist: Record<string, unknown>;
-    wordingChoice?: WordingChoiceUiPayload | null;
+    compare?: CompareUiPayload | null;
   };
-  buildWordingChoiceFromPendingSpecialist: (
+  buildCompareFromPendingSpecialist: (
     specialistResult: any,
     state: CanvasState | null | undefined,
     activeSpecialist: string,
     previousSpecialist: Record<string, unknown>,
     stepId: string,
     dreamRuntimeModeRaw?: unknown
-  ) => WordingChoiceUiPayload | null;
+  ) => CompareUiPayload | null;
 };
 
 export type RunStepPipelineResponsePorts<TPayload> = {
@@ -373,7 +373,7 @@ export type RunStepPipelinePorts<TPayload> = {
   normalization: RunStepPipelineNormalizationPorts;
   state: RunStepPipelineStatePorts;
   render: RunStepPipelineRenderPorts;
-  wording: RunStepPipelineWordingPorts;
+  compare: RunStepComparePipelinePorts;
   response: RunStepPipelineResponsePorts<TPayload>;
   guard: RunStepPipelineGuardPorts;
   i18n: RunStepPipelineI18nPorts;
