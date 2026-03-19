@@ -103,11 +103,6 @@ export type TurnResponseEngine<TPayload> = {
 export function createTurnResponseEngine<TPayload>(
   deps: TurnResponseEngineDeps<TPayload>
 ): TurnResponseEngine<TPayload> {
-  function menuIdFromContractId(contractId: string): string {
-    const parts = String(contractId || "").trim().split(":");
-    return String(parts[2] || "").trim().toUpperCase();
-  }
-
   function renderValidateRecover(params: {
     state: CanvasState;
     specialist: Record<string, unknown>;
@@ -161,9 +156,11 @@ export function createTurnResponseEngine<TPayload>(
       };
     }
     const chooseForMeEntry = getChooseForMeRegistryEntry(stepId);
-    if (chooseForMeEntry) {
-      const currentMenuId = menuIdFromContractId(contractId);
-      if (currentMenuId !== chooseForMeEntry.chooseForMe.menuId) {
+    if (chooseForMeEntry && suggestionState && suggestionState.stepId === stepId) {
+      const allowed = suggestionState.valid_for_action_codes.includes(
+        chooseForMeEntry.chooseForMe.actionCode
+      );
+      if (!allowed) {
         delete currentMap[stepId];
       }
     }

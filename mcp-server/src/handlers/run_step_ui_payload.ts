@@ -1,8 +1,7 @@
 import { type CanvasState } from "../core/state.js";
 import { ACTIONCODE_REGISTRY } from "../core/actioncode_registry.js";
-import { MENU_LABEL_DEFAULTS, labelKeyForMenuAction } from "../core/menu_contract.js";
-import { NEXT_MENU_BY_ACTIONCODE, UI_CONTRACT_VERSION } from "../core/ui_contract_matrix.js";
-import { parseUiContractMenuForStep, parseUiContractStatusForStep } from "../core/ui_contract_id.js";
+import { ACTION_LABEL_DEFAULTS, ACTION_PRETRANSITION_BY_ACTIONCODE, UI_CONTRACT_VERSION, labelKeyForActionCode } from "../core/ui_contract_matrix.js";
+import { parseUiContractStatusForStep } from "../core/ui_contract_id.js";
 import { currentTurnSupportMode } from "../core/stuck_support.js";
 import { DREAM_STEP_ID } from "../steps/dream.js";
 import type { RenderedAction, UiContentPayload } from "../contracts/ui_actions.js";
@@ -113,9 +112,7 @@ type PromptInvariantContext = {
 export type ResolvedActionCodeTransition = {
   actionCode: string;
   stepId: string;
-  sourceMenuId: string;
   targetStepId: string;
-  targetMenuId: string;
   renderMode: "menu" | "no_buttons";
 };
 
@@ -131,7 +128,11 @@ type UiPayloadHelperDeps = {
   deriveBootstrapContract: (state: CanvasState | null | undefined) => BootstrapContractState;
   deriveUiViewPayload: (variant: UiViewVariant) => UiViewPayload | null;
   sanitizeWidgetActionCodes: (actionCodes: string[]) => string[];
-  buildRenderedActionsFromMenu: (
+  buildRenderedActionsFromActionCodes?: (
+    actionCodes: string[],
+    state?: CanvasState | null
+  ) => RenderedAction[];
+  buildRenderedActionsFromMenu?: (
     menuId: string,
     actionCodes: string[],
     state?: CanvasState | null
@@ -159,16 +160,6 @@ type UiPayloadHelperDeps = {
   isUiTranslationFastModelV1Enabled: () => boolean;
   isUiI18nCriticalKeysV1Enabled: () => boolean;
 };
-
-function menuBelongsToStep(menuId: string, stepId: string): boolean {
-  const actions = ACTIONCODE_REGISTRY.menus[String(menuId || "").trim()];
-  const safeStepId = String(stepId || "").trim();
-  if (!Array.isArray(actions) || actions.length === 0 || !safeStepId) return false;
-  return actions.every((actionCode) => {
-    const actionStep = String(ACTIONCODE_REGISTRY.actions[actionCode]?.step || "").trim();
-    return actionStep === safeStepId || actionStep === "system";
-  });
-}
 
 function splitComparableSentences(text: string): string[] {
   return String(text || "")
@@ -390,31 +381,18 @@ export function resolveActionCodeTransition(
 ): ResolvedActionCodeTransition | null {
   const safeActionCode = String(actionCode || "").trim().toUpperCase();
   const safeStepId = String(stepId || "").trim();
-  const safeSourceMenu = String(sourceMenuId || "").trim();
-  const sourceMenuForMatch = safeSourceMenu || "NO_MENU";
+  void sourceMenuId;
   if (!safeActionCode || !safeStepId) return null;
-  const transition = NEXT_MENU_BY_ACTIONCODE[safeActionCode];
+  const transition = ACTION_PRETRANSITION_BY_ACTIONCODE[safeActionCode];
   if (!transition) return null;
-  if (String(transition.step_id || "").trim() !== safeStepId) return null;
-  const fromMenus = Array.isArray(transition.from_menu_ids)
-    ? transition.from_menu_ids.map((menu) => String(menu || "").trim()).filter(Boolean)
-    : [];
-  if (fromMenus.length > 0 && !fromMenus.includes(sourceMenuForMatch)) return null;
-  const targetStepId = String(transition.to_step_id || safeStepId).trim();
+  const targetStepId = String(transition.targetStepId || safeStepId).trim();
   if (!targetStepId) return null;
   const renderMode: "menu" | "no_buttons" =
-    String(transition.render_mode || "").trim() === "no_buttons" ? "no_buttons" : "menu";
-  const targetMenuId = String(transition.to_menu_id || "").trim();
-  if (renderMode === "menu") {
-    if (!targetMenuId) return null;
-    if (!menuBelongsToStep(targetMenuId, targetStepId)) return null;
-  }
+    String(transition.renderMode || "").trim() === "no_buttons" ? "no_buttons" : "menu";
   return {
     actionCode: safeActionCode,
     stepId: safeStepId,
-    sourceMenuId: sourceMenuForMatch,
     targetStepId,
-    targetMenuId: renderMode === "menu" ? targetMenuId : "",
     renderMode,
   };
 }
@@ -425,10 +403,8 @@ export function resolveActionCodeMenuTransition(
   sourceMenuId: string
 ): string {
   const resolved = resolveActionCodeTransition(actionCode, stepId, sourceMenuId);
-  if (!resolved) return "";
-  if (resolved.renderMode !== "menu") return "";
-  if (resolved.targetStepId !== String(stepId || "").trim()) return "";
-  return resolved.targetMenuId;
+  void resolved;
+  return "";
 }
 
 export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
@@ -500,34 +476,26 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
     return String(existing[safeStepId] || "").trim() === "no_buttons" ? "no_buttons" : "menu";
   }
 
-  function parseMenuFromContractIdForStep(contractIdRaw: unknown, stepId: string): string {
-    return parseUiContractMenuForStep(contractIdRaw, stepId);
-  }
-
   function parseStatusFromContractIdForStep(contractIdRaw: unknown, stepId: string): TurnOutputStatus | null {
     return parseUiContractStatusForStep(contractIdRaw, stepId);
   }
 
+  function parseMenuFromContractIdForStep(_contractIdRaw: unknown, _stepId: string): string {
+    return "";
+  }
+
   function inferCurrentMenuForStep(state: CanvasState, stepId: string): string {
-    const phaseMap =
-      (state as any).__ui_phase_by_step && typeof (state as any).__ui_phase_by_step === "object"
-        ? ((state as any).__ui_phase_by_step as Record<string, unknown>)
-        : {};
-    return parseMenuFromContractIdForStep(phaseMap[String(stepId || "").trim()], stepId);
+    void state;
+    void stepId;
+    return "";
   }
 
   function labelForActionInMenu(menuId: string, actionCode: string): string {
-    const safeMenuId = String(menuId || "").trim();
+    void menuId;
     const safeActionCode = String(actionCode || "").trim();
-    if (!safeMenuId || !safeActionCode) return "";
-    const actionCodes = Array.isArray(ACTIONCODE_REGISTRY.menus[safeMenuId])
-      ? ACTIONCODE_REGISTRY.menus[safeMenuId].map((code) => String(code || "").trim())
-      : [];
-    if (actionCodes.length === 0) return "";
-    const idx = actionCodes.findIndex((code) => code === safeActionCode);
-    if (idx < 0) return "";
-    const labelKey = labelKeyForMenuAction(safeMenuId, safeActionCode, idx);
-    return String(MENU_LABEL_DEFAULTS[labelKey] || "").trim();
+    if (!safeActionCode) return "";
+    const labelKey = labelKeyForActionCode(safeActionCode);
+    return String(ACTION_LABEL_DEFAULTS[labelKey] || "").trim();
   }
 
   function buildUiPayload(
@@ -628,7 +596,6 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
       flags.locale_pending_background = bootstrap.waiting;
     }
     const effectiveStepId = String(stepIdOverride || (effectiveState as any)?.current_step || "").trim();
-    const contractMenuId = parseMenuFromContractIdForStep(contractMeta.contractId, effectiveStepId);
     const dreamRuntimeMode = String((effectiveState as any)?.__dream_runtime_mode || "").trim();
     const canonicalText = String(canonicalTextOverride || "").trim();
     const statementsCount = Array.isArray((specialist as any)?.statements)
@@ -752,7 +719,14 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
         flags.escape_actioncodes_suppressed = true;
       }
       if (safeOverrideCodes.length > 0) {
-        const renderedActions = deps.buildRenderedActionsFromMenu(contractMenuId, safeOverrideCodes, effectiveState);
+        const renderedActions =
+          Array.isArray(renderedActionsOverride) && renderedActionsOverride.length > 0
+            ? renderedActionsOverride
+            : deps.buildRenderedActionsFromActionCodes
+              ? deps.buildRenderedActionsFromActionCodes(safeOverrideCodes, effectiveState)
+              : deps.buildRenderedActionsFromMenu
+                ? deps.buildRenderedActionsFromMenu("", safeOverrideCodes, effectiveState)
+                : [];
         return {
           action_codes: safeOverrideCodes,
           expected_choice_count: safeOverrideCodes.length,
@@ -785,71 +759,6 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
         };
       }
       return undefined;
-    }
-    const menuId = contractMenuId;
-    if (menuId) {
-      if (deps.isWidgetSuppressedEscapeMenuId(menuId)) {
-        if (localDev) flags.escape_menu_suppressed = true;
-        if (
-          Object.keys(flags).length > 0 ||
-          contractMeta.contractId ||
-          contentPayload
-        ) {
-          return {
-            ...questionTextPayload,
-            ...(contentPayload ? { content: contentPayload } : {}),
-            ...(dreamBuilderContractPayload ? { dream_builder_contract: dreamBuilderContractPayload } : {}),
-            ...(contractMeta.contractId ? { contract_id: contractMeta.contractId } : {}),
-            ...(contractMeta.contractVersion ? { contract_version: contractMeta.contractVersion } : {}),
-            ...(contractMeta.textKeys && contractMeta.textKeys.length > 0 ? { text_keys: contractMeta.textKeys } : {}),
-            flags,
-          };
-        }
-        return undefined;
-      }
-      const actionCodes = ACTIONCODE_REGISTRY.menus[menuId];
-      if (actionCodes && actionCodes.length > 0) {
-        const safeCodes = deps.sanitizeWidgetActionCodes(
-          actionCodes.map((code) => String(code || "").trim()).filter(Boolean)
-        );
-        if (safeCodes.length !== actionCodes.length && localDev) {
-          flags.escape_actioncodes_suppressed = true;
-        }
-        if (safeCodes.length === 0) {
-          if (
-            Object.keys(flags).length > 0 ||
-            contractMeta.contractId ||
-            viewPayload ||
-            contentPayload
-          ) {
-            return {
-              ...questionTextPayload,
-              ...(contentPayload ? { content: contentPayload } : {}),
-              ...(dreamBuilderContractPayload ? { dream_builder_contract: dreamBuilderContractPayload } : {}),
-              ...(contractMeta.contractId ? { contract_id: contractMeta.contractId } : {}),
-              ...(contractMeta.contractVersion ? { contract_version: contractMeta.contractVersion } : {}),
-              ...(contractMeta.textKeys && contractMeta.textKeys.length > 0 ? { text_keys: contractMeta.textKeys } : {}),
-              ...(viewPayload ? { view: viewPayload } : {}),
-              flags,
-            };
-          }
-          return undefined;
-        }
-        const renderedActions = deps.buildRenderedActionsFromMenu(menuId, safeCodes, effectiveState);
-        return {
-          action_codes: safeCodes,
-          expected_choice_count: safeCodes.length,
-          ...(renderedActions.length > 0 ? { actions: renderedActions } : {}),
-          ...questionTextPayload,
-          ...(contentPayload ? { content: contentPayload } : {}),
-          ...(dreamBuilderContractPayload ? { dream_builder_contract: dreamBuilderContractPayload } : {}),
-          ...(contractMeta.contractId ? { contract_id: contractMeta.contractId } : {}),
-          ...(contractMeta.contractVersion ? { contract_version: contractMeta.contractVersion } : {}),
-          ...(contractMeta.textKeys && contractMeta.textKeys.length > 0 ? { text_keys: contractMeta.textKeys } : {}),
-          ...(viewPayload ? { view: viewPayload } : {}),
-          flags,
-        };
-      }
     }
     if (
       Object.keys(flags).length > 0 ||

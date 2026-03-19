@@ -42,11 +42,6 @@ type TurnLlmCallMeta = {
   usage: CallUsageSnapshot;
 };
 
-export const WIDGET_ESCAPE_MENU_SUFFIX = "_MENU_ESCAPE";
-export const DREAM_EXPLAINER_ESCAPE_MENU_ID = "DREAM_EXPLAINER_MENU_ESCAPE";
-export const DREAM_EXPLAINER_SWITCH_SELF_MENU_ID = "DREAM_EXPLAINER_MENU_SWITCH_SELF";
-export const DREAM_EXPLAINER_REFINE_MENU_ID = "DREAM_EXPLAINER_MENU_NEXT_STEP";
-
 export type DreamRuntimeMode = "self" | "builder_collect" | "builder_scoring" | "builder_refine";
 
 export const DREAM_START_EXERCISE_ACTION_CODES = new Set<string>([
@@ -103,8 +98,6 @@ export function syncDreamRuntimeMode(params: {
   state: CanvasState;
   dreamStepId: string;
   dreamExplainerSpecialist: string;
-  dreamExplainerRefineMenuId: string;
-  parseMenuFromContractIdForStep: (contractIdLike: unknown, stepId: string) => string;
 }): void {
   const currentStep = String((params.state as any).current_step || "").trim();
   if (currentStep !== params.dreamStepId) {
@@ -125,15 +118,6 @@ export function syncDreamRuntimeMode(params: {
   const scoringPhase = String((last as any).scoring_phase || "").trim();
   if (scoringPhase === "true") {
     setDreamRuntimeMode(params.state, "builder_scoring");
-    return;
-  }
-  const phaseMap =
-    (params.state as any).__ui_phase_by_step && typeof (params.state as any).__ui_phase_by_step === "object"
-      ? ((params.state as any).__ui_phase_by_step as Record<string, unknown>)
-      : {};
-  const menuId = params.parseMenuFromContractIdForStep(phaseMap[params.dreamStepId], params.dreamStepId);
-  if (menuId === params.dreamExplainerRefineMenuId) {
-    setDreamRuntimeMode(params.state, "builder_refine");
     return;
   }
   setDreamRuntimeMode(params.state, "builder_collect");

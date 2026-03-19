@@ -458,10 +458,8 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
         const previousSpecialist = asRecord(
           (stateWithUi as Record<string, unknown>).last_specialist_result || {}
         );
-        const currentMenuId = currentMenuIdForStep(stateWithUi, config.stepId);
         const suggestionState = suggestionStateForStep(stateWithUi, config.stepId);
         if (
-          currentMenuId !== chooseForMeEntry.chooseForMe.menuId ||
           !suggestionState ||
           !suggestionState.valid_for_action_codes.includes(chooseForMeEntry.chooseForMe.actionCode) ||
           suggestionState.items.length === 0
@@ -477,8 +475,6 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
             retryAction: chooseForMeEntry.chooseForMe.actionCode,
             details: {
               reason: "missing_or_mismatched_suggestion_snapshot",
-              current_menu_id: currentMenuId,
-              expected_menu_id: chooseForMeEntry.chooseForMe.menuId,
               expected_action_code: chooseForMeEntry.chooseForMe.actionCode,
               has_suggestion_state: Boolean(suggestionState),
               valid_for_action_codes: suggestionState?.valid_for_action_codes || [],
@@ -500,8 +496,6 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
             retryAction: chooseForMeEntry.chooseForMe.actionCode,
             details: {
               reason: "empty_first_suggestion",
-              current_menu_id: currentMenuId,
-              expected_menu_id: chooseForMeEntry.chooseForMe.menuId,
               expected_action_code: chooseForMeEntry.chooseForMe.actionCode,
             },
           });

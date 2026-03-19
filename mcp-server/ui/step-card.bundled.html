@@ -1908,9 +1908,7 @@
       uiMode: "text_compare",
       chooseForMe: {
         routeToken: "__ROUTE__DREAM_PICK_ONE__",
-        menuId: "DREAM_MENU_SUGGESTIONS",
         actionCode: "ACTION_DREAM_SUGGESTIONS_PICK_ONE",
-        nextMenuId: "DREAM_MENU_NEXT_STEP",
         mode: "suggestions",
         itemKind: "sentence",
         field: "dream"
@@ -1930,9 +1928,7 @@
       uiMode: "text_compare",
       chooseForMe: {
         routeToken: "__ROUTE__PURPOSE_CHOOSE_FOR_ME__",
-        menuId: "PURPOSE_MENU_EXAMPLES",
         actionCode: "ACTION_PURPOSE_EXAMPLES_CHOOSE_FOR_ME",
-        nextMenuId: "PURPOSE_MENU_AFTER_CHOOSE",
         mode: "examples",
         itemKind: "sentence",
         field: "purpose"
@@ -1952,9 +1948,7 @@
       uiMode: "text_compare",
       chooseForMe: {
         routeToken: "__ROUTE__BIGWHY_CHOOSE_FOR_ME__",
-        menuId: "BIGWHY_MENU_FROM_GIVE",
         actionCode: "ACTION_BIGWHY_SUGGESTIONS_CHOOSE_FOR_ME",
-        nextMenuId: "BIGWHY_MENU_REFINE",
         mode: "suggestions",
         itemKind: "sentence",
         field: "bigwhy"
@@ -1974,9 +1968,7 @@
       uiMode: "text_compare",
       chooseForMe: {
         routeToken: "__ROUTE__ROLE_CHOOSE_FOR_ME__",
-        menuId: "ROLE_MENU_EXAMPLES",
         actionCode: "ACTION_ROLE_EXAMPLES_CHOOSE_FOR_ME",
-        nextMenuId: "ROLE_MENU_REFINE",
         mode: "examples",
         itemKind: "sentence",
         field: "role"
@@ -1996,9 +1988,7 @@
       uiMode: "text_compare",
       chooseForMe: {
         routeToken: "__ROUTE__ENTITY_CHOOSE_FOR_ME__",
-        menuId: "ENTITY_MENU_SUGGESTIONS",
         actionCode: "ACTION_ENTITY_SUGGESTIONS_CHOOSE_FOR_ME",
-        nextMenuId: "ENTITY_MENU_EXAMPLE",
         mode: "suggestions",
         itemKind: "phrase",
         field: "entity"
@@ -2018,9 +2008,7 @@
       uiMode: "list_compare",
       chooseForMe: {
         routeToken: "__ROUTE__STRATEGY_CHOOSE_FOR_ME__",
-        menuId: "STRATEGY_MENU_EXAMPLES",
         actionCode: "ACTION_STRATEGY_EXAMPLES_CHOOSE_FOR_ME",
-        nextMenuId: "STRATEGY_MENU_CONFIRM",
         mode: "examples",
         itemKind: "multiline_list",
         field: "strategy"
@@ -5118,9 +5106,7 @@ ${String(item || "").trim()}`.trim())
   function shouldShowTextInputForCompare(params) {
     if (params.textSubmitAvailable !== true) return false;
     if (params.compareActive === true) return true;
-    return !shouldSuppressPromptForCompare({
-      compareActive: params.compareActive
-    });
+    return params.dreamBuilderTextInputActive === true;
   }
   function shouldDisableTextInputForCompare() {
     return false;
@@ -6149,10 +6135,8 @@ ${String(item || "").trim()}`.trim())
     const promptFailureEl = document.getElementById("prompt");
     const uiSubtitleFailureEl = document.getElementById("uiSubtitle");
     const hasSemanticCardContent = Boolean(singleValueContent) || Boolean(structuredSuggestionsContent);
-    const hasBodyContent = stripInlineText(String(body || "")).trim().length > 0;
-    const hasPromptContent = stripInlineText(String(promptSource || "")).trim().length > 0;
     const hasOwnerBackedInteractiveContent = compareActive || Boolean(dreamBuilderContract) || hasSemanticCardContent;
-    const hasRenderableInteractiveContent = hasOwnerBackedInteractiveContent || hasBodyContent || hasPromptContent || hasStructuredActions;
+    const hasRenderableInteractiveContent = hasOwnerBackedInteractiveContent;
     if (!hasRenderableInteractiveContent) {
       console.warn("[ui_contract_interactive_content_absent]", {
         current_step: current,
@@ -6447,17 +6431,10 @@ ${String(item || "").trim()}`.trim())
           updateScoringDreamQuestionVisibility2();
         });
       });
-      const textSubmitActionCode2 = actionCodeForRole(result, "text_submit");
-      const textSubmitAvailable2 = textSubmitActionCode2.length > 0;
-      inputWrap.style.display = textSubmitAvailable2 ? "flex" : "none";
+      inputWrap.style.display = "none";
       const input2 = document.getElementById("input");
       if (input2) input2.placeholder = t(lang, "inputPlaceholder");
-      if (!textSubmitAvailable2) {
-        setSendEnabled(false);
-      } else {
-        const inputVal2 = (input2?.value || "").trim();
-        setSendEnabled(inputVal2.length > 0);
-      }
+      setSendEnabled(false);
       const latestScoringState = retainCanonicalStepContinuity(
         state,
         latestState
@@ -6557,9 +6534,11 @@ ${String(item || "").trim()}`.trim())
     const choiceMode = !comparePanelVisible && (renderedChoiceButtons || hasStructuredActions);
     const textSubmitActionCode = actionCodeForRole(result, "text_submit");
     const textSubmitAvailable = textSubmitActionCode.length > 0;
+    const dreamBuilderTextInputActive = isViewModeDreamBuilderCollect || isViewModeDreamBuilderRefine;
     const showTextSubmit = shouldShowTextInputForCompare({
       textSubmitAvailable,
-      compareActive
+      compareActive,
+      dreamBuilderTextInputActive
     });
     const disableTextSubmit = shouldDisableTextInputForCompare();
     inputWrap.style.display = showTextSubmit ? "flex" : "none";

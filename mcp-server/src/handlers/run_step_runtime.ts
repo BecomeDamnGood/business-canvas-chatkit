@@ -44,12 +44,8 @@ import {
   PRESENTATION_STEP_ID,
   PRESENTATION_SPECIALIST,
   ACTIONCODE_REGISTRY,
-  MENU_LABEL_DEFAULTS,
-  MENU_LABEL_KEYS,
-  labelKeyForMenuAction,
   renderFreeTextTurnPolicy,
-  NEXT_MENU_BY_ACTIONCODE,
-  DEFAULT_MENU_BY_STATUS,
+  ACTION_PRETRANSITION_BY_ACTIONCODE,
   UI_CONTRACT_VERSION,
   buildContractId,
   actionCodeToIntent,
@@ -129,9 +125,6 @@ import {
 import {
   ACTION_BOOTSTRAP_POLL_TOKEN,
   BIGWHY_CHOOSE_FOR_ME_ROUTE_TOKEN,
-  DREAM_EXPLAINER_ESCAPE_MENU_ID,
-  DREAM_EXPLAINER_REFINE_MENU_ID,
-  DREAM_EXPLAINER_SWITCH_SELF_MENU_ID,
   DREAM_EXPLAINER_OVERLAP_REPAIR_ROUTE_PREFIX,
   DREAM_EXPLAINER_MULTI_REWRITE_REPAIR_ROUTE_PREFIX,
   DREAM_FORCE_REFINE_ROUTE_PREFIX,
@@ -146,7 +139,6 @@ import {
   STRATEGY_CONSOLIDATE_ROUTE_TOKEN,
   SWITCH_TO_SELF_DREAM_TOKEN,
   WIDGET_ESCAPE_LABEL_PATTERNS,
-  WIDGET_ESCAPE_MENU_SUFFIX,
   createTurnLlmAccumulator,
   envFlagEnabled,
   getDreamRuntimeMode,
@@ -291,9 +283,8 @@ const {
   shouldPretransitionActionCode,
   deriveUiViewPayload,
   isConfirmActionCode,
-  menuHasConfirmAction,
-  firstConfirmActionCodeForMenu,
-  firstGuidanceActionCodeForMenu,
+  firstConfirmActionCodeForStep,
+  firstGuidanceActionCodeForStep,
 } = runtimeActionHelpers;
 const runtimeDreamHelpers = createRunStepRuntimeDreamHelpers({
   strategyStepId: STRATEGY_STEP_ID,
@@ -324,27 +315,20 @@ function ensureSentenceEnd(raw: string): string {
   return /[.!?]$/.test(text) ? text : `${text}.`;
 }
 
-const DREAM_EXPLAINER_ESCAPE_ACTION_CODES = new Set(
-  (ACTIONCODE_REGISTRY.menus[DREAM_EXPLAINER_ESCAPE_MENU_ID] || [])
-    .map((code) => String(code || "").trim())
-    .filter(Boolean)
-);
+const DREAM_EXPLAINER_ESCAPE_ACTION_CODES = new Set([
+  "ACTION_DREAM_EXPLAINER_CONTINUE",
+  "ACTION_DREAM_EXPLAINER_FINISH_LATER",
+]);
 const WIDGET_ESCAPE_ACTION_CODE_BAN = new Set<string>(
-  Object.entries(ACTIONCODE_REGISTRY.menus)
-    .filter(([menuId]) => String(menuId || "").trim().endsWith(WIDGET_ESCAPE_MENU_SUFFIX))
-    .flatMap(([, actionCodes]) => (Array.isArray(actionCodes) ? actionCodes : []))
+  Object.keys(ACTIONCODE_REGISTRY.actions)
     .map((code) => String(code || "").trim())
     .filter(Boolean)
+    .filter((code) => /_ESCAPE_/.test(code))
     .filter((code) => !DREAM_EXPLAINER_ESCAPE_ACTION_CODES.has(code))
 );
 
-function isEscapeMenuId(menuId: string): boolean {
-  return String(menuId || "").trim().endsWith(WIDGET_ESCAPE_MENU_SUFFIX);
-}
-
-function isWidgetSuppressedEscapeMenuId(menuId: string): boolean {
-  const id = String(menuId || "").trim();
-  return isEscapeMenuId(id) && id !== DREAM_EXPLAINER_ESCAPE_MENU_ID;
+function isWidgetSuppressedEscapeMenuId(_menuId: string): boolean {
+  return false;
 }
 
 function hasEscapeLabelPhrase(input: string): boolean {
@@ -355,15 +339,12 @@ function hasEscapeLabelPhrase(input: string): boolean {
 
 function sanitizeEscapeInWidget(specialist: unknown): Record<string, unknown> {
   const safe = specialist && typeof specialist === "object" ? { ...(specialist as Record<string, unknown>) } : {};
-  const contractId = String(safe.ui_contract_id || "").trim();
-  const contractStepId = contractId.split(":")[0] || "";
-  const menuId = parseMenuFromContractIdForStep(contractId, contractStepId);
-  if (menuId === DREAM_EXPLAINER_ESCAPE_MENU_ID) return safe;
   const action = String(safe.action || "").trim().toUpperCase();
+  if (DREAM_EXPLAINER_ESCAPE_ACTION_CODES.has(action)) return safe;
   const question = String(safe.question || "");
   const message = String(safe.message || "");
   const hasEscapeSignal =
-    isWidgetSuppressedEscapeMenuId(menuId) ||
+    WIDGET_ESCAPE_ACTION_CODE_BAN.has(action) ||
     action === "ESCAPE" ||
     hasEscapeLabelPhrase(question) ||
     hasEscapeLabelPhrase(message);
@@ -374,7 +355,7 @@ function sanitizeEscapeInWidget(specialist: unknown): Record<string, unknown> {
   safe.user_intent = "OFFTOPIC";
   safe.meta_topic = "NONE";
   const shouldCleanQuestion =
-    isWidgetSuppressedEscapeMenuId(menuId) || hasEscapeLabelPhrase(question);
+    WIDGET_ESCAPE_ACTION_CODE_BAN.has(action) || hasEscapeLabelPhrase(question);
   if (shouldCleanQuestion) {
     const cleanedQuestion = String(question || "")
       .split(/\r?\n/)
@@ -427,9 +408,6 @@ const {
 const runStepRuntimeTextUiHelpers = createRunStepRuntimeTextUiHelpers({
   step0Id: STEP_0_ID,
   uiDefaultString,
-  menuLabelDefaults: MENU_LABEL_DEFAULTS,
-  menuLabelKeys: MENU_LABEL_KEYS,
-  labelKeyForMenuAction,
   actioncodeRegistry: ACTIONCODE_REGISTRY,
   actionCodeToIntent,
   shouldSuppressFallbackText,
@@ -442,17 +420,18 @@ const {
   step0QuestionForState,
   step0ReadinessQuestion,
   countNumberedOptions,
-  labelKeysForMenuActionCodes,
-  buildRenderedActionsFromMenu,
+  labelKeysForActionCodes,
+  buildRenderedActionsFromActionCodes,
   buildQuestionTextFromActions,
   promptFallbackForInteractiveAsk,
   enforcePromptInvariants,
 } = runStepRuntimeTextUiHelpers;
+const labelKeysForMenuActionCodes = labelKeysForActionCodes;
+const buildRenderedActionsFromMenu = buildRenderedActionsFromActionCodes;
 
 const runtimeTextHelpers = createRunStepRuntimeTextHelpers({
   dreamStepId: DREAM_STEP_ID,
-  parseMenuFromContractIdForStep: (contractIdRaw, stepId) =>
-    parseMenuFromContractIdForStep(contractIdRaw, stepId),
+  parseMenuFromContractIdForStep: () => "",
   canonicalizeComparableText,
   compareSelectionMessage,
   mergeListItems: (userItems, suggestionItems) => mergeListItems(userItems, suggestionItems),
@@ -606,7 +585,7 @@ const uiPayloadHelpers = createRunStepUiPayloadHelpers({
   deriveBootstrapContract,
   deriveUiViewPayload,
   sanitizeWidgetActionCodes,
-  buildRenderedActionsFromMenu,
+  buildRenderedActionsFromActionCodes,
   buildQuestionTextFromActions,
   sanitizeEscapeInWidget,
   isWidgetSuppressedEscapeMenuId,
@@ -635,25 +614,19 @@ const {
   applyUiPhaseByStep,
   setUiRenderModeByStep,
   inferUiRenderModeForStep,
-  parseMenuFromContractIdForStep,
-  inferCurrentMenuForStep,
   resolveActionCodeTransition,
-  labelForActionInMenu,
   attachRegistryPayload,
 } = uiPayloadHelpers;
 
 const runStepRuntimeSemanticHelpers = createRunStepRuntimeSemanticHelpers({
   step0Id: STEP_0_ID,
   dreamStepId: DREAM_STEP_ID,
-  dreamExplainerSwitchSelfMenuId: DREAM_EXPLAINER_SWITCH_SELF_MENU_ID,
-  dreamExplainerRefineMenuId: DREAM_EXPLAINER_REFINE_MENU_ID,
+  dreamExplainerSwitchSelfMenuId: "",
+  dreamExplainerRefineMenuId: "",
   actioncodeRegistry: ACTIONCODE_REGISTRY,
-  defaultMenuByStatus: DEFAULT_MENU_BY_STATUS,
   finalFieldByStepId: FINAL_FIELD_BY_STEP_ID,
   getDreamRuntimeMode,
-  parseMenuFromContractIdForStep,
   isConfirmActionCode,
-  menuHasConfirmAction,
   inferUiRenderModeForStep,
   fieldForStep,
   provisionalValueForStep,
@@ -682,8 +655,6 @@ function syncDreamRuntimeMode(state: CanvasState): void {
     state,
     dreamStepId: DREAM_STEP_ID,
     dreamExplainerSpecialist: DREAM_EXPLAINER_SPECIALIST,
-    dreamExplainerRefineMenuId: DREAM_EXPLAINER_REFINE_MENU_ID,
-    parseMenuFromContractIdForStep,
   });
 }
 
@@ -956,17 +927,17 @@ const runStepRuntimeExecuteDeps = {
   registerTurnLlmCall, normalizeUsage, runStepPreflightHelpers, applyRunStepServerTransients, createRunStepRuntimeFinalizeLayer,
   resolveModelForCall, shouldLogLocalDevDiagnostics, isUiTranslationFastModelV1Enabled,
   isUiI18nV3LangBootstrapEnabled, isUiStartTriggerLangResolveV1Enabled, isInteractiveLocaleReady,
-  normalizeLangCode, ensureUiStringsForState, resolveLanguageForTurn, parseMenuFromContractIdForStep,
+  normalizeLangCode, ensureUiStringsForState, resolveLanguageForTurn,
   labelKeysForMenuActionCodes, bumpUiI18nCounter, turnUsageFromAccumulator, getDreamRuntimeMode,
   DREAM_STEP_ID, DREAM_EXPLAINER_SPECIALIST, buildTextForWidget, pickPrompt, renderFreeTextTurnPolicy,
   validateRenderedContractOrRecover, applyUiPhaseByStep, runStepRuntimePreflightLayer, STEP_0_SPECIALIST,
   isUiLocaleReadyGateV1Enabled, hasUsableSpecialistForRetry, buildTransientFallbackSpecialist,
-  deriveBootstrapContract, buildFailClosedState, inferCurrentMenuForStep, labelForActionInMenu,
+  deriveBootstrapContract, buildFailClosedState,
   normalizeLanguageSource, isUiStep0LangResetGuardV1Enabled, runStepRuntimeActionRoutingLayer,
   PURPOSE_STEP_ID, BIGWHY_STEP_ID, ROLE_STEP_ID, ENTITY_STEP_ID, STRATEGY_STEP_ID, TARGETGROUP_STEP_ID,
-  PRODUCTSSERVICES_STEP_ID, RULESOFTHEGAME_STEP_ID, PRESENTATION_STEP_ID, DREAM_EXPLAINER_SWITCH_SELF_MENU_ID,
-  NEXT_MENU_BY_ACTIONCODE, DREAM_START_EXERCISE_ACTION_CODES, resolveActionCodeTransition,
-  setUiRenderModeByStep, buildContractId, processActionCode, firstConfirmActionCodeForMenu, firstGuidanceActionCodeForMenu, shouldPretransitionActionCode, setDreamRuntimeMode, provisionalValueForStep,
+  PRODUCTSSERVICES_STEP_ID, RULESOFTHEGAME_STEP_ID, PRESENTATION_STEP_ID,
+  ACTION_PRETRANSITION_BY_ACTIONCODE, DREAM_START_EXERCISE_ACTION_CODES, resolveActionCodeTransition,
+  setUiRenderModeByStep, buildContractId, processActionCode, firstConfirmActionCodeForStep, firstGuidanceActionCodeForStep, shouldPretransitionActionCode, setDreamRuntimeMode, provisionalValueForStep,
   clearProvisionalValue, clearStepInteractiveState, isUiStateHygieneSwitchV1Enabled,
   isClearlyGeneralOfftopicInput, isCompareEligibleContext, buildCompareFromPendingSpecialist,
   applyComparePickSelection, isComparePickRouteToken, isRefineAdjustRouteToken, buildCompareFromTurn,

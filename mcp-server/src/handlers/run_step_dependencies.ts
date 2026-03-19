@@ -87,8 +87,7 @@ import {
   type TurnOutputStatus,
 } from "../core/turn_policy_renderer.js";
 import {
-  NEXT_MENU_BY_ACTIONCODE,
-  DEFAULT_MENU_BY_STATUS,
+  ACTION_PRETRANSITION_BY_ACTIONCODE,
   UI_CONTRACT_VERSION,
   buildContractId,
 } from "../core/ui_contract_matrix.js";
@@ -151,8 +150,7 @@ export {
   MENU_LABEL_KEYS,
   labelKeyForMenuAction,
   renderFreeTextTurnPolicy,
-  NEXT_MENU_BY_ACTIONCODE,
-  DEFAULT_MENU_BY_STATUS,
+  ACTION_PRETRANSITION_BY_ACTIONCODE,
   UI_CONTRACT_VERSION,
   buildContractId,
   actionCodeToIntent,

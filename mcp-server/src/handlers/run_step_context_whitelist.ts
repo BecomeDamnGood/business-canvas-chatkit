@@ -65,8 +65,6 @@ function sanitizeCompareRuntime(value: unknown): Record<string, unknown> | null 
   if (compare.suggestion_text) next.suggestion_text = compare.suggestion_text;
   if (compare.user_items.length > 0) next.user_items = compare.user_items.slice(0, 25);
   if (compare.suggestion_items.length > 0) next.suggestion_items = compare.suggestion_items.slice(0, 25);
-  if (compare.pending_text_intent) next.pending_text_intent = compare.pending_text_intent;
-  if (compare.pending_text_anchor) next.pending_text_anchor = compare.pending_text_anchor;
   return next;
 }
 

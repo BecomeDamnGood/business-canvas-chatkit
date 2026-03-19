@@ -593,7 +593,7 @@ test("rulesofthegame exposes confirm when 3 accepted internal rules are availabl
   assert.match(message, /current rules of the game.*mindd.*are:/i);
 });
 
-test("rulesofthegame overflow renders pending-choice context and suppresses confirm menu", () => {
+test("rulesofthegame overflow keeps the standard ask-explain menu while compare ownership is resolved later", () => {
   const state = getDefaultState();
   (state as any).current_step = "rulesofthegame";
   (state as any).active_specialist = "RulesOfTheGame";
@@ -642,7 +642,7 @@ test("rulesofthegame overflow renders pending-choice context and suppresses conf
   });
 
   assert.equal(rendered.status, "incomplete_output");
-  assert.equal(rendered.contractId, "rulesofthegame:incomplete_output:NO_MENU");
+  assert.equal(rendered.contractId, "rulesofthegame:incomplete_output:RULES_MENU_ASK_EXPLAIN");
   assert.equal(rendered.uiActionCodes.includes("ACTION_RULES_CONFIRM_ALL"), false);
 });
 
@@ -2275,7 +2275,7 @@ test("dream explicit stuck support suppresses stale canonical dream contracts", 
   assert.equal(String((rendered.specialist as any).ui_content || ""), "");
 });
 
-test("dream self drops stale refine confirm when no renderable dream content remains", () => {
+test("dream self renderer no longer clears pending compare state before owner publication", () => {
   const state = getDefaultState();
   (state as any).current_step = "dream";
   (state as any).active_specialist = "Dream";
@@ -2317,7 +2317,7 @@ test("dream self drops stale refine confirm when no renderable dream content rem
   assert.equal(rendered.confirmEligible, false);
   assert.equal(rendered.contractId, "dream:incomplete_output:DREAM_MENU_INTRO");
   assert.equal(rendered.uiActionCodes.includes("ACTION_DREAM_REFINE_CONFIRM"), false);
-  assert.equal(Object.prototype.hasOwnProperty.call((rendered.specialist as any) || {}, "compare_runtime"), false);
+  assert.equal(Object.prototype.hasOwnProperty.call((rendered.specialist as any) || {}, "compare_runtime"), true);
   assert.equal(String((rendered.specialist as any).ui_content || ""), "");
   assert.equal(String((rendered.specialist as any).ui_content || ""), "");
 });

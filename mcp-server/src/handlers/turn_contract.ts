@@ -9,7 +9,7 @@ import {
   parseRetainedInstruction,
   readCompareRuntime,
 } from "./compare_runtime.js";
-import { labelKeyForMenuAction } from "../core/menu_contract.js";
+import { labelKeyForActionCode } from "../core/ui_contract_matrix.js";
 import { UI_STRINGS_DEFAULT, UI_STRINGS_WITH_MENU_KEYS } from "../i18n/ui_strings_defaults.js";
 import { resolveUiStringForState } from "../i18n/ui_strings_lookup.js";
 import { STEP_0_ID } from "../steps/step_0_validation.js";
@@ -75,8 +75,8 @@ type PendingInteractionCompareRenderModel = {
 };
 
 type UiParityDeps = {
-  parseMenuFromContractIdForStep: (contractIdRaw: unknown, stepId: string) => string;
-  labelKeysForMenuActionCodes: (menuId: string, actionCodes: string[]) => string[];
+  labelKeysForActionCodes?: (actionCodes: string[]) => string[];
+  labelKeysForMenuActionCodes?: (menuId: string, actionCodes: string[]) => string[];
 };
 
 type FinalizeContractInternalsOptions = UiParityDeps & {
@@ -105,6 +105,17 @@ function toRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
+}
+
+function resolveLabelKeysForActionCodes(deps: UiParityDeps | undefined, actionCodes: string[]): string[] {
+  if (!deps) return [];
+  if (typeof deps.labelKeysForActionCodes === "function") {
+    return deps.labelKeysForActionCodes(actionCodes);
+  }
+  if (typeof deps.labelKeysForMenuActionCodes === "function") {
+    return deps.labelKeysForMenuActionCodes("", actionCodes);
+  }
+  return [];
 }
 
 function normalizeEditableFields(raw: unknown): string[] {
@@ -332,6 +343,11 @@ function hasDreamBuilderCompareSource(ui: Record<string, unknown>): boolean {
   );
 }
 
+function hasDreamBuilderOwner(ui: Record<string, unknown>): boolean {
+  const phase = String(toRecord(ui.dream_builder_contract).phase || "").trim();
+  return phase === "collect" || phase === "compare" || phase === "scoring" || phase === "refine";
+}
+
 function hasActiveNormalCompareSource(response: RunStepContractResponse): boolean {
   const ui = toRecord(response.ui);
   const pending = toRecord(ui.pending_interaction);
@@ -450,41 +466,10 @@ function validatePendingInteractionCompareInvariant(response: RunStepContractRes
   return null;
 }
 
-function hasRenderableResponseContent(response: RunStepContractResponse): boolean {
-  const uiPayload = toRecord(response.ui);
-  const uiView = toRecord(uiPayload.view);
+function hasRenderableUiContentOwner(uiPayload: Record<string, unknown>): boolean {
   const uiContent = toRecord(uiPayload.content);
-  const uiPendingInteraction = toRecord(uiPayload.pending_interaction);
-  const actionContract = toRecord(uiPayload.action_contract);
-  const specialist = toRecord(response.specialist);
-  const stateRecord =
-    response.state && typeof response.state === "object"
-      ? (response.state as Record<string, unknown>)
-      : {};
-  const hasVisibleActionSurface =
-    Array.isArray(actionContract.actions) &&
-    actionContract.actions.some((entry) => {
-      const action = toRecord(entry);
-      const surface = String(action.surface || "").trim().toLowerCase();
-      return surface !== "text_input" && surface !== "compare_pick";
-    });
-  const viewVariant = String(uiView.variant || "").trim();
-  const hasDreamBuilderStatements =
-    (
-      uiView.dream_builder_statements_visible === true ||
-      (
-        (viewVariant === "dream_builder_collect" || viewVariant === "dream_builder_refine") &&
-        uiView.dream_builder_statements_visible !== false
-      )
-    ) &&
-    (
-      Array.isArray(specialist.statements) && specialist.statements.length > 0 ||
-      Array.isArray(stateRecord.dream_builder_statements) &&
-      (stateRecord.dream_builder_statements as unknown[]).length > 0
-    );
-  const hasDreamBuilderCompare = hasDreamBuilderCompareSource(uiPayload);
   const uiContentKind = String(uiContent.kind || "").trim();
-  const hasStructuredContent =
+  return (
     (
       uiContentKind === "structured_suggestions" &&
       (
@@ -501,18 +486,18 @@ function hasRenderableResponseContent(response: RunStepContractResponse): boolea
         String(uiContent.support_text || "").trim().length > 0 ||
         String(uiContent.feedback_reason_text || "").trim().length > 0
       )
-    );
+    )
+  );
+}
+
+function hasRenderableResponseContent(response: RunStepContractResponse): boolean {
+  const uiPayload = toRecord(response.ui);
+  const uiPendingInteraction = toRecord(uiPayload.pending_interaction);
   const pendingKind = String(uiPendingInteraction.kind || "").trim().toLowerCase();
   const hasPendingCompare =
     (pendingKind === "text_compare" || pendingKind === "list_compare") &&
     String(uiPendingInteraction.status || "").trim().toLowerCase() === "pending";
-  return (
-    hasVisibleActionSurface ||
-    hasDreamBuilderCompare ||
-    hasDreamBuilderStatements ||
-    hasStructuredContent ||
-    hasPendingCompare
-  );
+  return hasPendingCompare || hasDreamBuilderOwner(uiPayload) || hasRenderableUiContentOwner(uiPayload);
 }
 
 function synchronizeComparePickActionsFromOwner(response: RunStepContractResponse): void {
@@ -736,19 +721,14 @@ function ensureUnifiedUiActionContract(response: RunStepContractResponse, deps?:
   }
 
   if (actionCodes.length > 0) {
-    const currentStep = String(response.current_step_id || state.current_step || "").trim();
-    const contractId = String(ui.contract_id || "").trim();
-    const menuId =
-      deps && currentStep && contractId ? deps.parseMenuFromContractIdForStep(contractId, currentStep) : "";
-    const labelKeys =
-      deps && menuId ? deps.labelKeysForMenuActionCodes(menuId, actionCodes) : [];
+    const labelKeys = resolveLabelKeysForActionCodes(deps, actionCodes);
     for (let i = 0; i < actionCodes.length; i += 1) {
       const actionCode = actionCodes[i];
       if (!actionCode || seenByActionCode.has(actionCode)) continue;
       const role = inferUiActionRoleFromActionCode(actionCode);
       const surface = defaultSurfaceForRole(role);
       const descriptor = buildStateActionDescriptor(state, role);
-      const fallbackLabelKey = menuId ? labelKeyForMenuAction(menuId, actionCode, i) : "";
+      const fallbackLabelKey = labelKeyForActionCode(actionCode);
       const labelKey = String(labelKeys[i] || fallbackLabelKey || descriptor?.labelKey || "").trim();
       const label = String(uiLabelForKey(state, labelKey) || descriptor?.label || "").trim();
       seenByActionCode.add(actionCode);
@@ -838,6 +818,7 @@ function applyDeterministicUiActionRenderPolicy(response: RunStepContractRespons
   const variant = String(view.variant || "").trim().toLowerCase();
   const currentStep = String(response.current_step_id || state.current_step || "").trim();
   const bypassInteractiveStep0RoleGate = mode === "interactive" && currentStep === STEP_0_ID;
+  const hasRenderableContentOwner = hasRenderableUiContentOwner(ui);
   const hasChoiceActions = actions.some(
     (action) => normalizeUiActionRole(action.role, "choice") === "choice"
   );
@@ -847,15 +828,20 @@ function applyDeterministicUiActionRenderPolicy(response: RunStepContractRespons
     variant === "dream_builder_collect" ||
     variant === "dream_builder_refine" ||
     variant === "dream_builder_scoring";
-  const dreamBuilderCompareActive =
-    String(toRecord(ui.dream_builder_contract).phase || "").trim() === "compare";
+  const dreamBuilderPhase = String(toRecord(ui.dream_builder_contract).phase || "").trim();
+  const dreamBuilderCompareActive = dreamBuilderPhase === "compare";
+  const ordinaryCompareInputActive = hasActiveNormalCompareSource(response);
+  const dreamBuilderTextInputActive = dreamBuilderPhase === "collect" || dreamBuilderPhase === "refine";
+  const dreamBuilderScoringActive = dreamBuilderPhase === "scoring";
   const compareSurfaceActive =
-    hasActiveNormalCompareSource(response) || dreamBuilderCompareActive;
+    ordinaryCompareInputActive || dreamBuilderCompareActive;
   if (mode === "prestart") {
     allowedRoles.add("start");
   } else if (mode === "interactive") {
-    allowedRoles.add("text_submit");
-    if (variant === "dream_builder_scoring") {
+    if (ordinaryCompareInputActive || dreamBuilderTextInputActive) {
+      allowedRoles.add("text_submit");
+    }
+    if (dreamBuilderScoringActive) {
       allowedRoles.add("score_submit");
     }
     if (!compareSurfaceActive) {
@@ -864,13 +850,11 @@ function applyDeterministicUiActionRenderPolicy(response: RunStepContractRespons
         allowedRoles.add("dream_start_exercise");
       }
     }
-    if (hasChoiceActions) {
+    if (hasChoiceActions && hasRenderableContentOwner) {
       allowedRoles.add("choice");
     } else if (compareSurfaceActive) {
       allowedRoles.add("compare_pick_user");
       allowedRoles.add("compare_pick_suggestion");
-    } else {
-      allowedRoles.add("choice");
     }
   }
 
@@ -1004,35 +988,23 @@ export function validateUiPayloadContractParity(
     String(((response.state as Record<string, unknown> | undefined) || {}).current_step || "");
   const contractId = String(ui.contract_id || "").trim();
   if (!stepId || !contractId) return "ui_contract_missing_step_or_contract_id";
-  const menuId = deps.parseMenuFromContractIdForStep(contractId, stepId);
-  if (!menuId) return "ui_contract_missing_menu_id";
   const actionContract = toRecord(ui.action_contract);
   const actions = Array.isArray(actionContract.actions) ? (actionContract.actions as Array<Record<string, unknown>>) : [];
-  const contractMenuActionCodes = actions
-    .filter((action) => {
-      const source = String(action.source || "").trim();
-      return source === "ui.actions" || source === "ui.action_codes";
-    })
+  const expectedActionCodes = actions
     .map((action) => String(action.action_code || "").trim())
     .filter(Boolean);
-  const expectedActionCodes =
-    contractMenuActionCodes.length > 0
-      ? contractMenuActionCodes
-      : Array.isArray(ACTIONCODE_REGISTRY.menus[menuId])
-        ? ACTIONCODE_REGISTRY.menus[menuId].map((code) => String(code || "").trim()).filter(Boolean)
-        : [];
   if (expectedActionCodes.length === 0) return null;
   const menuActions = expectedActionCodes.map((actionCode) =>
     actions.find((action) => String(action.action_code || "").trim() === actionCode) || {}
   );
-  if (menuActions.some((action) => Object.keys(action).length === 0)) return "ui_action_contract_missing_menu_action";
-  const expectedLabelKeys = deps.labelKeysForMenuActionCodes(menuId, expectedActionCodes);
+  if (menuActions.some((action) => Object.keys(action).length === 0)) return "ui_action_contract_missing_action";
+  const expectedLabelKeys = resolveLabelKeysForActionCodes(deps, expectedActionCodes);
   if (expectedLabelKeys.length !== expectedActionCodes.length) return "ui_contract_labelkeys_or_actioncodes_mismatch";
   for (let i = 0; i < expectedActionCodes.length; i += 1) {
     const action = menuActions[i] || {};
     const actionCode = String(action.action_code || "").trim();
     const labelKeyRaw = String(action.label_key || "").trim();
-    const labelKey = labelKeyRaw || labelKeyForMenuAction(menuId, actionCode, i);
+    const labelKey = labelKeyRaw || labelKeyForActionCode(actionCode);
     const label = String(action.label || "").trim();
     if (actionCode !== expectedActionCodes[i]) return `ui_actions_actioncode_mismatch_at_${i + 1}`;
     if (!actionLabelKeyMatchesState(((response.state as Record<string, unknown> | undefined) || {}), actionCode, labelKey, expectedLabelKeys[i])) {
@@ -1057,9 +1029,11 @@ function repairUiPayloadContractParity(
     String(((response.state as Record<string, unknown> | undefined) || {}).current_step || "");
   const contractId = String(ui.contract_id || "").trim();
   if (!stepId || !contractId) return validateUiPayloadContractParity(response, deps);
-  const menuId = deps.parseMenuFromContractIdForStep(contractId, stepId);
-  const expectedActionCodes = Array.isArray(ACTIONCODE_REGISTRY.menus[menuId])
-    ? ACTIONCODE_REGISTRY.menus[menuId].map((code) => String(code || "").trim()).filter(Boolean)
+  const actionContract = toRecord(ui.action_contract);
+  const expectedActionCodes = Array.isArray(actionContract.actions)
+    ? (actionContract.actions as Array<Record<string, unknown>>)
+      .map((action) => String(action.action_code || "").trim())
+      .filter(Boolean)
     : [];
   if (expectedActionCodes.length === 0) return validateUiPayloadContractParity(response, deps);
 
@@ -1182,13 +1156,11 @@ export function finalizeResponseContractInternals<T extends RunStepContractRespo
     options.applyUiClientActionContract(responseStateForCleanup);
   }
   ensureUnifiedUiActionContract(finalResponse, {
-    parseMenuFromContractIdForStep: options.parseMenuFromContractIdForStep,
-    labelKeysForMenuActionCodes: options.labelKeysForMenuActionCodes,
+    labelKeysForActionCodes: options.labelKeysForActionCodes,
   });
   synchronizeComparePickActionsFromOwner(finalResponse);
   ensureUnifiedUiActionContract(finalResponse, {
-    parseMenuFromContractIdForStep: options.parseMenuFromContractIdForStep,
-    labelKeysForMenuActionCodes: options.labelKeysForMenuActionCodes,
+    labelKeysForActionCodes: options.labelKeysForActionCodes,
   });
   const finalUi = toRecord(finalResponse.ui);
   delete finalUi.actions;
@@ -1200,8 +1172,7 @@ export function finalizeResponseContractInternals<T extends RunStepContractRespo
   applyDeterministicUiActionRenderPolicy(finalResponse);
   if (finalResponse?.ok === true) {
     const uiViolation = validateUiPayloadContractParity(finalResponse, {
-      parseMenuFromContractIdForStep: options.parseMenuFromContractIdForStep,
-      labelKeysForMenuActionCodes: options.labelKeysForMenuActionCodes,
+      labelKeysForActionCodes: options.labelKeysForActionCodes,
     });
     if (uiViolation) {
       options.onUiParityError();
@@ -1213,8 +1184,7 @@ export function finalizeResponseContractInternals<T extends RunStepContractRespo
         : [];
       if (actions.length === 0) {
         const repairedViolation = repairUiPayloadContractParity(finalResponse, {
-          parseMenuFromContractIdForStep: options.parseMenuFromContractIdForStep,
-          labelKeysForMenuActionCodes: options.labelKeysForMenuActionCodes,
+          labelKeysForActionCodes: options.labelKeysForActionCodes,
         });
         const repairedActionContract = toRecord(toRecord(finalResponse.ui).action_contract);
         const repairedActions = Array.isArray(repairedActionContract.actions)
@@ -1224,7 +1194,7 @@ export function finalizeResponseContractInternals<T extends RunStepContractRespo
           options.onUiParityError();
           return buildContractFailurePayload(
             finalResponse,
-            repairedViolation || "ui_action_contract_missing_menu_action"
+            repairedViolation || "ui_action_contract_missing_action"
           ) as T;
         }
       }

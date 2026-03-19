@@ -30,17 +30,12 @@
           "suggestion_text": "Mindd sets standards for purpose-driven business.",
           "suggestion_items": [],
           "base_items": [],
-          "list_semantics": "delta",
           "user_label": "",
           "suggestion_label": "",
-          "grouped_mode": "",
-          "grouped_cursor": "",
           "grouped_units": [],
-          "grouped_segments": [],
-          "feedback_reason_text": "",
-          "pending_text_intent": "",
-          "pending_text_anchor": "",
-          "pending_text_presentation_mode": ""
+          "active_unit_index": 0,
+          "grouped_layout": [],
+          "feedback_reason_text": ""
         }
       }
     }

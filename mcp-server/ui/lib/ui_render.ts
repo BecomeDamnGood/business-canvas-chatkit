@@ -298,12 +298,11 @@ export function shouldSuppressPromptForCompare(params: {
 export function shouldShowTextInputForCompare(params: {
   textSubmitAvailable?: boolean;
   compareActive?: boolean;
+  dreamBuilderTextInputActive?: boolean;
 }): boolean {
   if (params.textSubmitAvailable !== true) return false;
   if (params.compareActive === true) return true;
-  return !shouldSuppressPromptForCompare({
-    compareActive: params.compareActive,
-  });
+  return params.dreamBuilderTextInputActive === true;
 }
 
 export function shouldDisableTextInputForCompare(): boolean {
@@ -1812,17 +1811,11 @@ export function render(overrideToolOutput?: unknown): void {
   const uiSubtitleFailureEl = document.getElementById("uiSubtitle");
 
   const hasSemanticCardContent = Boolean(singleValueContent) || Boolean(structuredSuggestionsContent);
-  const hasBodyContent = stripInlineText(String(body || "")).trim().length > 0;
-  const hasPromptContent = stripInlineText(String(promptSource || "")).trim().length > 0;
   const hasOwnerBackedInteractiveContent =
     compareActive ||
     Boolean(dreamBuilderContract) ||
     hasSemanticCardContent;
-  const hasRenderableInteractiveContent =
-    hasOwnerBackedInteractiveContent ||
-    hasBodyContent ||
-    hasPromptContent ||
-    hasStructuredActions;
+  const hasRenderableInteractiveContent = hasOwnerBackedInteractiveContent;
   if (!hasRenderableInteractiveContent) {
     console.warn("[ui_contract_interactive_content_absent]", {
       current_step: current,
@@ -2186,17 +2179,10 @@ export function render(overrideToolOutput?: unknown): void {
       });
     });
 
-    const textSubmitActionCode = actionCodeForRole(result, "text_submit");
-    const textSubmitAvailable = textSubmitActionCode.length > 0;
-    inputWrap.style.display = textSubmitAvailable ? "flex" : "none";
+    inputWrap.style.display = "none";
     const input = document.getElementById("input");
     if (input) (input as HTMLInputElement).placeholder = t(lang, "inputPlaceholder");
-    if (!textSubmitAvailable) {
-      setSendEnabled(false);
-    } else {
-      const inputVal = ((input as HTMLInputElement | null)?.value || "").trim();
-      setSendEnabled(inputVal.length > 0);
-    }
+    setSendEnabled(false);
 
     const latestScoringState = retainCanonicalStepContinuity(
       state,
@@ -2322,9 +2308,11 @@ export function render(overrideToolOutput?: unknown): void {
 
   const textSubmitActionCode = actionCodeForRole(result, "text_submit");
   const textSubmitAvailable = textSubmitActionCode.length > 0;
+  const dreamBuilderTextInputActive = isViewModeDreamBuilderCollect || isViewModeDreamBuilderRefine;
   const showTextSubmit = shouldShowTextInputForCompare({
     textSubmitAvailable,
     compareActive,
+    dreamBuilderTextInputActive,
   });
   const disableTextSubmit = shouldDisableTextInputForCompare();
   inputWrap.style.display = showTextSubmit ? "flex" : "none";

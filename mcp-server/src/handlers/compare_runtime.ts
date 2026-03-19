@@ -60,8 +60,6 @@ export type CompareRuntimeMode = "text" | "list";
 export type CompareRuntimeKind = "text_compare" | "list_compare";
 export type CompareRuntimeStatus = "pending" | "resolved";
 export type CompareRuntimePresentation = "picker" | "canonical";
-export type CompareRuntimeListSemantics = "delta" | "full";
-export type CompareRuntimeGroupedMode = "" | "grouped_units";
 export type CompareRuntimeResolution = "" | "user" | "suggestion";
 
 export type CompareRuntimeState = {
@@ -76,17 +74,12 @@ export type CompareRuntimeState = {
   suggestion_text: string;
   suggestion_items: string[];
   base_items: string[];
-  list_semantics: CompareRuntimeListSemantics;
   user_label: string;
   suggestion_label: string;
-  grouped_mode: CompareRuntimeGroupedMode;
-  grouped_cursor: string;
   grouped_units: unknown[];
-  grouped_segments: unknown[];
+  active_unit_index: number;
+  grouped_layout: unknown[];
   feedback_reason_text: string;
-  pending_text_intent: string;
-  pending_text_anchor: string;
-  pending_text_presentation_mode: string;
 };
 
 const DEFAULT_COMPARE_RUNTIME: CompareRuntimeState = {
@@ -101,17 +94,12 @@ const DEFAULT_COMPARE_RUNTIME: CompareRuntimeState = {
   suggestion_text: "",
   suggestion_items: [],
   base_items: [],
-  list_semantics: "delta",
   user_label: "",
   suggestion_label: "",
-  grouped_mode: "",
-  grouped_cursor: "",
   grouped_units: [],
-  grouped_segments: [],
+  active_unit_index: 0,
+  grouped_layout: [],
   feedback_reason_text: "",
-  pending_text_intent: "",
-  pending_text_anchor: "",
-  pending_text_presentation_mode: "",
 };
 
 function normalizeMode(raw: unknown): CompareRuntimeMode {
@@ -141,14 +129,6 @@ function normalizeResolution(raw: unknown): CompareRuntimeResolution {
   return "";
 }
 
-function normalizeListSemantics(raw: unknown): CompareRuntimeListSemantics {
-  return trimString(raw).toLowerCase() === "full" ? "full" : "delta";
-}
-
-function normalizeGroupedMode(raw: unknown): CompareRuntimeGroupedMode {
-  return trimString(raw) === "grouped_units" ? "grouped_units" : "";
-}
-
 function normalizeCompareRuntimeRecord(runtimeRaw: unknown): CompareRuntimeState | null {
   const runtime = toRecord(runtimeRaw);
   if (Object.keys(runtime).length === 0) return null;
@@ -167,17 +147,14 @@ function normalizeCompareRuntimeRecord(runtimeRaw: unknown): CompareRuntimeState
     suggestion_text: trimString(runtime.suggestion_text),
     suggestion_items: normalizeStringArray(runtime.suggestion_items),
     base_items: normalizeStringArray(runtime.base_items),
-    list_semantics: normalizeListSemantics(runtime.list_semantics),
     user_label: trimString(runtime.user_label),
     suggestion_label: trimString(runtime.suggestion_label),
-    grouped_mode: normalizeGroupedMode(runtime.grouped_mode),
-    grouped_cursor: trimString(runtime.grouped_cursor),
     grouped_units: Array.isArray(runtime.grouped_units) ? runtime.grouped_units : [],
-    grouped_segments: Array.isArray(runtime.grouped_segments) ? runtime.grouped_segments : [],
+    active_unit_index: Number.isFinite(Number(runtime.active_unit_index))
+      ? Math.max(0, Math.trunc(Number(runtime.active_unit_index)))
+      : 0,
+    grouped_layout: Array.isArray(runtime.grouped_layout) ? runtime.grouped_layout : [],
     feedback_reason_text: trimString(runtime.feedback_reason_text),
-    pending_text_intent: trimString(runtime.pending_text_intent),
-    pending_text_anchor: trimString(runtime.pending_text_anchor),
-    pending_text_presentation_mode: trimString(runtime.pending_text_presentation_mode),
   };
 }
 
@@ -260,17 +237,12 @@ export function attachCompareRuntime(raw: unknown): Record<string, unknown> {
     suggestion_text: compare.suggestion_text,
     suggestion_items: [...compare.suggestion_items],
     base_items: [...compare.base_items],
-    list_semantics: compare.list_semantics,
     user_label: compare.user_label,
     suggestion_label: compare.suggestion_label,
-    grouped_mode: compare.grouped_mode,
-    grouped_cursor: compare.grouped_cursor,
     grouped_units: Array.isArray(compare.grouped_units) ? [...compare.grouped_units] : [],
-    grouped_segments: Array.isArray(compare.grouped_segments) ? [...compare.grouped_segments] : [],
+    active_unit_index: compare.active_unit_index,
+    grouped_layout: Array.isArray(compare.grouped_layout) ? [...compare.grouped_layout] : [],
     feedback_reason_text: compare.feedback_reason_text,
-    pending_text_intent: compare.pending_text_intent,
-    pending_text_anchor: compare.pending_text_anchor,
-    pending_text_presentation_mode: compare.pending_text_presentation_mode,
   };
   return next;
 }

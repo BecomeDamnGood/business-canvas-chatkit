@@ -1,5 +1,4 @@
 import { ACTIONCODE_REGISTRY } from "./actioncode_registry.js";
-import { MENU_LABEL_DEFAULTS, MENU_LABEL_KEYS, labelKeyForMenuAction } from "./menu_contract.js";
 import { getFinalFieldForStepId, type CanvasState } from "./state.js";
 import { currentTurnSupportMode } from "./stuck_support.js";
 import { actionCodeToIntent } from "./actioncode_intent.js";
@@ -9,12 +8,14 @@ import type {
   UiStructuredSuggestionsContent,
 } from "../contracts/ui_actions.js";
 import {
-  DEFAULT_MENU_BY_STATUS,
+  ACTION_LABEL_DEFAULTS,
+  DEFAULT_ACTION_CODES_BY_STEP_STATUS,
   UI_CONTRACT_VERSION,
   buildContractId,
   buildContractTextKeys,
+  labelKeyForActionCode,
 } from "./ui_contract_matrix.js";
-import { parseUiContractMenuForStep } from "./ui_contract_id.js";
+import { parseUiContractOwnerForStep } from "./ui_contract_id.js";
 import {
   buildStrategyContextBlock,
   extractStatementCount,
@@ -39,7 +40,6 @@ import { isStructuredPresentationRecap } from "../handlers/run_step_presentation
 import {
   attachCompareRuntime,
   hasRenderablePendingCompareState,
-  patchCompareRuntime,
   readCompareRuntime,
 } from "../handlers/compare_runtime.js";
 import {
@@ -181,20 +181,6 @@ function parseStep0Line(step0Line: string): { venture: string; name: string; sta
   };
 }
 
-function isEscapeMenu(menuId: string): boolean {
-  return menuId.endsWith("_MENU_ESCAPE");
-}
-
-function menuBelongsToStep(menuId: string, stepId: string): boolean {
-  const actions = ACTIONCODE_REGISTRY.menus[menuId];
-  if (!Array.isArray(actions) || actions.length === 0) return false;
-  return actions.every((actionCode) => {
-    const entry = ACTIONCODE_REGISTRY.actions[actionCode];
-    const actionStep = String(entry?.step || "").trim();
-    return actionStep === stepId || actionStep === "system";
-  });
-}
-
 function normalizeChoiceLine(value: string): string {
   return String(value || "")
     .trim()
@@ -227,19 +213,14 @@ function stripStructuredChoiceLinesForPrompt(promptRaw: string, state: CanvasSta
   return kept.join("\n").trim();
 }
 
-function buildRenderedActions(
-  menuId: string,
-  actionCodes: string[],
-  labels: string[],
-  labelKeys: string[]
-): RenderedAction[] {
+function buildRenderedActions(actionCodes: string[], labels: string[], labelKeys: string[]): RenderedAction[] {
   return actionCodes.map((code, idx) => {
     const entry = ACTIONCODE_REGISTRY.actions[code];
     const route = String(entry?.route || code).trim();
     return {
       id: `${code}:${idx + 1}`,
       label: String(labels[idx] || code).trim() || code,
-      label_key: String(labelKeys[idx] || labelKeyForMenuAction(menuId, code, idx)).trim(),
+      label_key: String(labelKeys[idx] || labelKeyForActionCode(code)).trim(),
       action_code: code,
       intent: actionCodeToIntent({ actionCode: code, route }),
       primary: idx === 0,
@@ -271,47 +252,19 @@ function shouldEnforceSingleValueConfirmVisibility(params: {
   return true;
 }
 
-function shouldClearStaleDreamSelfCompare(params: {
-  stepId: string;
-  state: CanvasState;
-  specialist: Record<string, unknown>;
-}): boolean {
-  const { stepId, state, specialist } = params;
-  if (stepId !== "dream") return false;
-  if (!shouldEnforceSingleValueConfirmVisibility({ stepId, state, specialist })) return false;
-  const compare = readCompareRuntime(specialist);
-  if (!compare) return false;
-  if (compare.status !== "pending") return false;
-  return !hasRenderablePendingCompare(compare);
-}
-
 function hasSingleValueStructuredContent(stepId: string): boolean {
   return isSingleValueCompareStep(stepId);
-}
-
-const PURPOSE_INTRO_VIDEO_MENU_IDS = new Set([
-  "PURPOSE_MENU_INTRO",
-]);
-
-function menuRequiresKnownOutput(menuId: string): boolean {
-  const actions = Array.isArray(ACTIONCODE_REGISTRY.menus[menuId]) ? ACTIONCODE_REGISTRY.menus[menuId] : [];
-  if (actions.some((code) => isConfirmActionCode(code))) return true;
-  return actions.some((code) => {
-    const upper = String(code || "").trim().toUpperCase();
-    return upper.includes("_REFINE_") || upper.includes("_POSTREFINE_");
-  });
 }
 
 function isSemanticPurposeIntroVisibleState(params: {
   stepId: string;
   status: TurnOutputStatus;
-  menuId: string;
   comparePending: boolean;
 }): boolean {
   if (params.stepId !== "purpose") return false;
   if (params.comparePending) return false;
   if (params.status === "valid_output") return false;
-  return PURPOSE_INTRO_VIDEO_MENU_IDS.has(String(params.menuId || "").trim());
+  return true;
 }
 
 function renderModeForStep(state: CanvasState, stepId: string): "menu" | "no_buttons" {
@@ -515,8 +468,8 @@ function isDreamBuilderSingleValueContext(stepId: string, state: CanvasState, sp
   if (activeSpecialist === "DreamExplainer") return true;
   if (String((specialist as any).suggest_dreambuilder || "").trim() === "true") return true;
   const contractId = String((specialist as any).ui_contract_id || "").trim();
-  const menuId = parseUiContractMenuForStep(contractId, stepId);
-  return menuId.startsWith("DREAM_EXPLAINER_MENU_");
+  const owner = parseUiContractOwnerForStep(contractId, stepId);
+  return owner === "dream_builder_contract";
 }
 
 function canonicalParagraphBlocks(raw: string): string[] {
@@ -707,9 +660,8 @@ function buildSingleValueUiContent(params: {
   };
 }
 
-function buildStructuredSuggestionsUiContent(params: {
+function buildStructuredSuggestionsContentOwner(params: {
   stepId: string;
-  menuId: string;
   state: CanvasState;
   message: string;
   specialist?: Record<string, unknown> | null;
@@ -1530,77 +1482,22 @@ function buildKnownFactsRecap(state: CanvasState): string {
   return blocks.join("\n\n").trim();
 }
 
-function labelsForMenu(
-  menuId: string,
-  actionCodes: string[],
-  state: CanvasState
-): string[] {
-  if (!menuId || actionCodes.length <= 0) return [];
-
-  const fullActionCodes = Array.isArray(ACTIONCODE_REGISTRY.menus[menuId])
-    ? ACTIONCODE_REGISTRY.menus[menuId]
-    : [];
-  if (fullActionCodes.length === 0) return [];
-
-  const usedIndices = new Set<number>();
-  const filteredLabels: string[] = [];
-  const labelKeys = labelKeysForMenu(menuId, actionCodes);
-  if (labelKeys.length !== actionCodes.length) return [];
-  const fullLabelKeys = labelKeysForMenu(menuId, fullActionCodes);
-  if (fullLabelKeys.length !== fullActionCodes.length) return [];
-  for (const actionCode of actionCodes) {
-    let matchedIndex = -1;
-    for (let i = 0; i < fullActionCodes.length; i += 1) {
-      if (usedIndices.has(i)) continue;
-      if (String(fullActionCodes[i] || "").trim() !== String(actionCode || "").trim()) continue;
-      matchedIndex = i;
-      break;
-    }
-    if (matchedIndex < 0) return [];
-    usedIndices.add(matchedIndex);
-    const key = String(labelKeys[filteredLabels.length] || "").trim();
-    const localized = uiStringFromState(state, key, "");
-    const fallbackKey = String(fullLabelKeys[matchedIndex] || "").trim();
-    const fallback = String(MENU_LABEL_DEFAULTS[fallbackKey] || "").trim();
-    const label = localized || fallback;
-    if (!label) return [];
-    filteredLabels.push(label);
-  }
-  if (filteredLabels.some((label) => !label)) return [];
-  return filteredLabels;
+function labelsForActionCodes(actionCodes: string[], state: CanvasState): string[] {
+  if (actionCodes.length <= 0) return [];
+  return actionCodes.map((actionCode) => {
+    const labelKey = labelKeyForActionCode(actionCode);
+    const localized = uiStringFromState(state, labelKey, "");
+    const fallback = String(ACTION_LABEL_DEFAULTS[labelKey] || "").trim();
+    return localized || fallback;
+  });
 }
 
-function labelKeysForMenu(menuId: string, actionCodes: string[]): string[] {
-  if (!menuId || actionCodes.length <= 0) return [];
-  const fullActionCodes = Array.isArray(ACTIONCODE_REGISTRY.menus[menuId])
-    ? ACTIONCODE_REGISTRY.menus[menuId]
-    : [];
-  if (fullActionCodes.length === 0) return [];
-
-  const allLabelKeys = (MENU_LABEL_KEYS[menuId] || []).slice(0, fullActionCodes.length);
-  if (allLabelKeys.length !== fullActionCodes.length) {
-    return actionCodes.map((actionCode, idx) => labelKeyForMenuAction(menuId, actionCode, idx));
-  }
-
-  const usedIndices = new Set<number>();
-  const filteredLabelKeys: string[] = [];
-  for (const actionCode of actionCodes) {
-    let matchedIndex = -1;
-    for (let i = 0; i < fullActionCodes.length; i += 1) {
-      if (usedIndices.has(i)) continue;
-      if (String(fullActionCodes[i] || "").trim() !== String(actionCode || "").trim()) continue;
-      matchedIndex = i;
-      break;
-    }
-    if (matchedIndex < 0) return [];
-    usedIndices.add(matchedIndex);
-    filteredLabelKeys.push(String(allLabelKeys[matchedIndex] || "").trim());
-  }
-  if (filteredLabelKeys.some((labelKey) => !labelKey)) return [];
-  return filteredLabelKeys;
+function labelKeysForActionCodes(actionCodes: string[]): string[] {
+  if (actionCodes.length <= 0) return [];
+  return actionCodes.map((actionCode) => labelKeyForActionCode(actionCode));
 }
 
-function resolveMenuContract(params: {
+function resolveActionSurface(params: {
   stepId: string;
   status: TurnOutputStatus;
   confirmEligible: boolean;
@@ -1608,13 +1505,10 @@ function resolveMenuContract(params: {
   specialist: Record<string, unknown>;
   prev: Record<string, unknown>;
   renderModeOverride?: "menu" | "no_buttons";
-}): { menuId: string; actionCodes: string[]; labels: string[]; labelKeys: string[] } {
+}): { actionCodes: string[]; labels: string[]; labelKeys: string[] } {
   const { stepId, status, confirmEligible, state, specialist, prev, renderModeOverride } = params;
   if ((renderModeOverride || renderModeForStep(state, stepId)) === "no_buttons") {
-    return { menuId: "", actionCodes: [], labels: [], labelKeys: [] };
-  }
-  if (hasRenderablePendingCompare(readCompareRuntime(specialist))) {
-    return { menuId: "", actionCodes: [], labels: [], labelKeys: [] };
+    return { actionCodes: [], labels: [], labelKeys: [] };
   }
   if (stepId === "dream") {
     const dreamMode = dreamRuntimeModeFromState(state);
@@ -1623,54 +1517,20 @@ function resolveMenuContract(params: {
       dreamMode === "builder_refine" ||
       dreamMode === "builder_scoring"
     ) {
-      return { menuId: "", actionCodes: [], labels: [], labelKeys: [] };
+      return { actionCodes: [], labels: [], labelKeys: [] };
     }
   }
-
-  const defaults = DEFAULT_MENU_BY_STATUS[stepId];
-  let defaultMenu = defaults ? String(defaults[status] || "").trim() : "";
-  if (stepId === "presentation" && status === "valid_output" && hasGeneratedPresentationAssets(state)) {
-    defaultMenu = "PRESENTATION_MENU_RECREATE";
-  }
-  const isOfftopic = specialist.is_offtopic === true;
-  const ignorePhaseForOfftopicNoOutput = isOfftopic && status === "no_output";
-  const forceDefaultMenuForValidOutput = stepId !== "step_0" && status === "valid_output";
-  const phaseMap = (state as any).__ui_phase_by_step && typeof (state as any).__ui_phase_by_step === "object"
-    ? ((state as any).__ui_phase_by_step as Record<string, unknown>)
-    : {};
-  const specialistPhaseMenu = parseUiContractMenuForStep((specialist as any).ui_contract_id, stepId);
-  const previousPhaseMenu = parseUiContractMenuForStep((prev as any).ui_contract_id, stepId);
-  const phaseMenu = (ignorePhaseForOfftopicNoOutput || forceDefaultMenuForValidOutput)
-    ? ""
-    : parseUiContractMenuForStep(phaseMap[stepId], stepId) || specialistPhaseMenu || previousPhaseMenu;
-  const menuIsValidForStep = (menuRaw: string): boolean => {
-    const menu = String(menuRaw || "").trim();
-    if (!menu || isEscapeMenu(menu)) return false;
-    if (!ACTIONCODE_REGISTRY.menus[menu]) return false;
-    if (!menuBelongsToStep(menu, stepId)) return false;
-    return true;
-  };
-  let menuId = menuIsValidForStep(phaseMenu)
-    ? phaseMenu
-    : defaultMenu;
+  const defaults = DEFAULT_ACTION_CODES_BY_STEP_STATUS[stepId];
+  if (!defaults) return { actionCodes: [], labels: [], labelKeys: [] };
+  let allActions = Array.isArray(defaults[status]) ? defaults[status] : [];
   if (
     (status === "no_output" || (stepId === "dream" && status === "incomplete_output")) &&
-    shouldEnforceSingleValueConfirmVisibility({ stepId, state, specialist }) &&
-    menuRequiresKnownOutput(menuId)
+    shouldEnforceSingleValueConfirmVisibility({ stepId, state, specialist })
   ) {
-    menuId = menuIsValidForStep(defaultMenu) ? defaultMenu : "";
+    allActions = allActions.filter((code) => !isConfirmActionCode(String(code || "").trim()));
   }
-  if (!menuIsValidForStep(menuId)) {
-    menuId = menuIsValidForStep(defaultMenu) ? defaultMenu : "";
-  }
-
-  if (!menuId || isEscapeMenu(menuId)) return { menuId: "", actionCodes: [], labels: [], labelKeys: [] };
-  if (!ACTIONCODE_REGISTRY.menus[menuId]) return { menuId: "", actionCodes: [], labels: [], labelKeys: [] };
-  if (!menuBelongsToStep(menuId, stepId)) return { menuId: "", actionCodes: [], labels: [], labelKeys: [] };
-
-  const allActions = Array.isArray(ACTIONCODE_REGISTRY.menus[menuId]) ? ACTIONCODE_REGISTRY.menus[menuId] : [];
   let actionCodes = allActions.filter((code) => (confirmEligible ? true : !isConfirmActionCode(code)));
-  if (stepId === "strategy" && menuId === "STRATEGY_MENU_CONFIRM") {
+  if (stepId === "strategy" && status === "valid_output") {
     const strategyCount = strategyStatementsFromSources(state, specialist, prev, { provisionalForStep }).length;
     const overflow = strategyCount > 7;
     actionCodes = actionCodes.filter((code) => {
@@ -1680,15 +1540,15 @@ function resolveMenuContract(params: {
       return true;
     });
   }
-  if (actionCodes.length === 0) return { menuId: "", actionCodes: [], labels: [], labelKeys: [] };
+  if (actionCodes.length === 0) return { actionCodes: [], labels: [], labelKeys: [] };
 
-  const labels = labelsForMenu(menuId, actionCodes, state);
-  const labelKeys = labelKeysForMenu(menuId, actionCodes);
+  const labels = labelsForActionCodes(actionCodes, state);
+  const labelKeys = labelKeysForActionCodes(actionCodes);
   if (labels.length !== actionCodes.length || labelKeys.length !== actionCodes.length) {
-    return { menuId: "", actionCodes: [], labels: [], labelKeys: [] };
+    return { actionCodes: [], labels: [], labelKeys: [] };
   }
 
-  return { menuId, actionCodes, labels, labelKeys };
+  return { actionCodes, labels, labelKeys };
 }
 
 export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPolicyRenderResult {
@@ -1721,10 +1581,7 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     effectiveConfirmEligible = false;
   }
 
-  let specialistForDisplay: Record<string, unknown> = attachCompareRuntime(specialist);
-  if (shouldClearStaleDreamSelfCompare({ stepId, state, specialist: specialistForDisplay })) {
-    specialistForDisplay = patchCompareRuntime(specialistForDisplay, null);
-  }
+  const specialistForDisplay: Record<string, unknown> = attachCompareRuntime(specialist);
   const recapRequested = isRecapRequestedSpecialist(specialistForDisplay);
   const compareState = readCompareRuntime(specialistForDisplay);
   const comparePending = hasRenderablePendingCompare(compareState);
@@ -1880,20 +1737,11 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     const suppressEscapeMenu =
       sourceAction === "ESCAPE" &&
       !(isStep0EscapeReadyGuardV1Enabled() && hasKnownStep0Output);
-    const step0MenuId = suppressEscapeMenu
-      ? ""
-      : effectiveStatus === "valid_output"
-        ? "STEP0_MENU_READY_START"
-        : "";
-    const step0ActionCodes = step0MenuId
-      ? ((ACTIONCODE_REGISTRY.menus[step0MenuId] || []).map((code) => String(code || "").trim()).filter(Boolean))
-      : [];
-    const step0Labels = step0MenuId
-      ? labelsForMenu(step0MenuId, step0ActionCodes, state)
-      : [];
-    const step0LabelKeys = step0MenuId
-      ? labelKeysForMenu(step0MenuId, step0ActionCodes)
-      : [];
+    const step0ActionCodes = suppressEscapeMenu || effectiveStatus !== "valid_output"
+      ? []
+      : ["ACTION_STEP0_READY_START"];
+    const step0Labels = labelsForActionCodes(step0ActionCodes, state);
+    const step0LabelKeys = labelKeysForActionCodes(step0ActionCodes);
     const preserveEscapeHeadline =
       sourceAction === "ESCAPE" &&
       specialistQuestion &&
@@ -1910,8 +1758,8 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
         ? interactiveAskPromptFallback(state, stepId)
         : step0Headline;
     const step0Question = step0HeadlineSafe;
-    const step0ContractId = buildContractId(stepId, effectiveStatus, step0MenuId);
-    const step0TextKeys = buildContractTextKeys({ stepId, status: effectiveStatus, menuId: step0MenuId });
+    const step0ContractId = buildContractId(stepId, effectiveStatus, "no_feedback");
+    const step0TextKeys = buildContractTextKeys({ stepId, status: effectiveStatus, owner: "no_feedback" });
     const step0Specialist: Record<string, unknown> = {
       ...specialistForDisplay,
       action: "ASK",
@@ -1926,7 +1774,7 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
       confirmEligible: effectiveConfirmEligible,
       specialist: step0Specialist,
       uiActionCodes: step0ActionCodes,
-      uiActions: buildRenderedActions(step0MenuId, step0ActionCodes, step0Labels, step0LabelKeys),
+      uiActions: buildRenderedActions(step0ActionCodes, step0Labels, step0LabelKeys),
       contractId: step0ContractId,
       contractVersion: UI_CONTRACT_VERSION,
       textKeys: step0TextKeys,
@@ -1951,7 +1799,7 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
   const normalizedComparePending =
     dreamSelfViewVariant === "stuck_support" ? false : comparePending;
 
-  const resolved = resolveMenuContract({
+  const resolved = resolveActionSurface({
     stepId,
     status: effectiveStatus,
     confirmEligible: effectiveConfirmEligible,
@@ -1960,7 +1808,6 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     prev: prevForMenu,
     renderModeOverride,
   });
-  let menuId = resolved.menuId;
   let safeActionCodes = resolved.actionCodes;
   let safeLabels = resolved.labels;
   let safeLabelKeys = resolved.labelKeys;
@@ -1985,7 +1832,6 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
       ? isSemanticPurposeIntroVisibleState({
         stepId,
         status: effectiveStatus,
-        menuId,
         comparePending: normalizedComparePending,
       }) || legacyShowStepIntroChrome
       : legacyShowStepIntroChrome;
@@ -2003,7 +1849,7 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     stepId === "dream" &&
     activeSpecialist === "DreamExplainer" &&
     !isOfftopic &&
-    menuId === "DREAM_EXPLAINER_MENU_SWITCH_SELF"
+    dreamSelfViewVariant !== "picker"
       ? stripStructuredChoiceLinesForPrompt(
           String((specialistForDisplay as any).question || "").trim(),
           state
@@ -2022,8 +1868,6 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
       ? ""
       : stripStructuredChoiceLinesForPrompt(dreamExplainerPrompt || headline || fallbackPrompt, state);
   let effectiveUiStatus: TurnOutputStatus = effectiveStatus;
-  let contractId = buildContractId(stepId, effectiveUiStatus, menuId);
-  let textKeys = buildContractTextKeys({ stepId, status: effectiveUiStatus, menuId });
   const explicitFeedbackReasonForDisplay =
     String((specialistForDisplay as any).feedback_reason_text || "").trim();
   const sanitizedExplicitFeedbackReasonForDisplay = sanitizeFeedbackReasonForDisplay({
@@ -2125,13 +1969,25 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     feedbackReasonText: effectiveFeedbackReasonForDisplay,
     rawFeedbackReasonText: effectiveRawFeedbackReasonForDisplay,
   });
-  const structuredSuggestionsUiContent = buildStructuredSuggestionsUiContent({
+  const structuredSuggestionsUiContent = buildStructuredSuggestionsContentOwner({
     stepId,
-    menuId,
     state,
     message: messageForDisplay,
     specialist: specialistForDisplay,
   });
+  const dreamBuilderContractActive =
+    stepId === "dream" &&
+    (dreamRuntimeModeFromState(state) !== "self" || activeSpecialist === "DreamExplainer");
+  const contractOwner =
+    stepId === "presentation"
+      ? "terminal"
+      : normalizedComparePending
+        ? "pending_interaction"
+        : dreamBuilderContractActive
+          ? "dream_builder_contract"
+          : "content";
+  let contractId = buildContractId(stepId, effectiveUiStatus, contractOwner);
+  let textKeys = buildContractTextKeys({ stepId, status: effectiveUiStatus, owner: contractOwner });
 
   const {
     ui_content: _staleUiContent,
@@ -2160,7 +2016,7 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     confirmEligible: effectiveConfirmEligible,
     specialist: attachCompareRuntime(nextSpecialist),
     uiActionCodes: safeActionCodes,
-    uiActions: buildRenderedActions(menuId, safeActionCodes, safeLabels, safeLabelKeys),
+    uiActions: buildRenderedActions(safeActionCodes, safeLabels, safeLabelKeys),
     contractId,
     contractVersion: UI_CONTRACT_VERSION,
     textKeys,

@@ -79,7 +79,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     dreamExplainerSwitchSelfMenuId: string;
   };
   action: {
-    nextMenuByActionCode: Record<string, unknown>;
+    pretransitionByActionCode: Record<string, unknown>;
     dreamStartExerciseActionCodes: Set<string>;
     resolveActionCodeTransition: (
       actionCode: string,
@@ -88,11 +88,9 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     ) =>
       | {
           targetStepId: string;
-          targetMenuId: string;
           renderMode: "menu" | "no_buttons";
         }
       | null;
-    inferCurrentMenuForStep: (state: CanvasState, stepId: string) => string;
     setUiRenderModeByStep: (
       state: CanvasState,
       stepId: string,
@@ -106,8 +104,8 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
       state: CanvasState,
       lastSpecialistResult: Record<string, unknown>
     ) => string;
-    firstConfirmActionCodeForMenu: (menuId: string) => string;
-    firstGuidanceActionCodeForMenu: (menuId: string) => string;
+    firstConfirmActionCodeForStep: (stepId: string) => string;
+    firstGuidanceActionCodeForStep: (stepId: string) => string;
     shouldPretransitionActionCode: (actionCode: string) => boolean;
     setDreamRuntimeMode: (
       state: CanvasState,
@@ -602,11 +600,10 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
       step0Id: ids.step0Id,
       presentationStepId: ids.presentationStepId,
     });
-    const sourceMenuForTransition = action.inferCurrentMenuForStep(state, stepId);
     const resolvedTransition = action.resolveActionCodeTransition(
       runtime.actionCodeRaw,
       stepId,
-      sourceMenuForTransition
+      ""
     );
 
     if (!(finalInfo.field && !finalInfo.value)) {
@@ -634,7 +631,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
           action.buildContractId(
             resolvedTransition.targetStepId,
             "incomplete_output",
-            resolvedTransition.renderMode === "no_buttons" ? "NO_MENU" : resolvedTransition.targetMenuId
+            resolvedTransition.targetStepId === ids.presentationStepId ? "terminal" : "content"
           )
         );
       } else {
@@ -670,8 +667,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
   if (!forcedProceed && !userMessage.startsWith("ACTION_") && !compare.isComparePickRouteToken(userMessage)) {
     const stepId = String(state.current_step || "").trim();
     if (stepId) {
-      const sourceMenuId = action.inferCurrentMenuForStep(state, stepId);
-      const confirmActionCode = action.firstConfirmActionCodeForMenu(String(sourceMenuId || "").trim());
+      const confirmActionCode = action.firstConfirmActionCodeForStep(stepId);
       if (confirmActionCode && looksLikeProceedTextIntent(userMessage)) {
         userMessage = confirmActionCode;
       } else if (stepId === ids.rulesofthegameStepId && looksLikeProceedTextIntent(userMessage)) {
@@ -727,7 +723,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
         if (hasPendingCompare) {
           userMessage = "__COMPARE_PICK_SUGGESTION__";
         } else {
-          const guidanceActionCode = action.firstGuidanceActionCodeForMenu(String(sourceMenuId || "").trim());
+          const guidanceActionCode = action.firstGuidanceActionCodeForStep(stepId);
           if (guidanceActionCode) {
             userMessage = guidanceActionCode;
           }
@@ -740,12 +736,11 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     const actionCodeInput = userMessage;
     const safeActionCodeInput = String(actionCodeInput || "").trim().toUpperCase();
     const currentStepForMenuTransition = String(state.current_step || "").trim();
-    const sourceMenuForTransition = action.inferCurrentMenuForStep(state, currentStepForMenuTransition);
-    const transitionSpec = params.action.nextMenuByActionCode[safeActionCodeInput];
+    const transitionSpec = params.action.pretransitionByActionCode[safeActionCodeInput];
     const resolvedTransition = action.resolveActionCodeTransition(
       safeActionCodeInput,
       currentStepForMenuTransition,
-      sourceMenuForTransition
+      ""
     );
 
     if (transitionSpec && !resolvedTransition) {
@@ -764,7 +759,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
         action.buildContractId(
           resolvedTransition.targetStepId,
           "incomplete_output",
-          resolvedTransition.renderMode === "no_buttons" ? "NO_MENU" : resolvedTransition.targetMenuId
+          resolvedTransition.targetStepId === ids.presentationStepId ? "terminal" : "content"
         )
       );
     }
@@ -1098,19 +1093,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     submittedTextAnchor = pendingIntentResolution.anchor;
     if (pendingIntentResolution.intent !== "accept_suggestion_explicit") {
       const pendingFeedbackText = String(userMessage || "").trim();
-      const preservedPresentation = String(readCompareRuntime(pendingBeforeTurn)?.presentation || "").trim();
-      const nextPending = patchCompareRuntime(pendingBeforeTurn, {
-        pending_text_intent: pendingIntentResolution.intent,
-        pending_text_anchor: pendingIntentResolution.anchor,
-        pending_text_presentation_mode:
-          pendingIntentResolution.anchor === "suggestion" &&
-          (
-            pendingIntentResolution.intent === "feedback_on_suggestion" ||
-            pendingIntentResolution.intent === "reject_suggestion_explicit"
-          )
-            ? "canonical"
-            : (preservedPresentation || "picker"),
-      });
+      const nextPending = patchCompareRuntime(pendingBeforeTurn, {});
       writeLastSpecialist(state, nextPending);
       pendingBeforeTurn = nextPending;
     }

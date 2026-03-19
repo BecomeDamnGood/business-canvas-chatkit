@@ -90,7 +90,7 @@ test("final ownership: dream builder summary does not get staged as dream output
   assert.equal(String((next as any).dream_final || ""), "");
 });
 
-test("dream builder scoring keeps separate text and score submit actions", () => {
+test("dream builder scoring without a dream_builder_contract owner fails closed", () => {
   const response = finalizeResponseContractInternals(
     {
       ok: true,
@@ -129,25 +129,11 @@ test("dream builder scoring keeps separate text and score submit actions", () =>
     }
   );
 
-  const state = (response.state || {}) as Record<string, unknown>;
-  const actions = ((((response.ui || {}) as Record<string, unknown>).action_contract || {}) as Record<string, unknown>)
-    .actions as Array<Record<string, unknown>>;
-
-  assert.equal(String(state.ui_action_text_submit || ""), "ACTION_TEXT_SUBMIT");
-  assert.equal(String(state.ui_action_text_submit_payload_mode || ""), "text");
-  assert.equal(String((state as any).ui_action_score_submit || ""), "");
-  assert.ok(
-    actions.some(
-      (action) =>
-        String(action.role || "") === "text_submit" &&
-        String(action.action_code || "") === "ACTION_TEXT_SUBMIT" &&
-        String(action.payload_mode || "") === "text"
-    )
-  );
-  assert.ok(!actions.some((action) => String(action.role || "") === "score_submit"));
+  assert.equal(response.ok, false);
+  assert.equal(String(((response as any).error || {}).reason || ""), "ui_interactive_content_absent");
 });
 
-test("dream intro contract keeps the original menu copy and choice layout for exercise entry", () => {
+test("dream intro menu without an owner fails closed", () => {
   const response = finalizeResponseContractInternals(
     {
       ok: true,
@@ -178,17 +164,11 @@ test("dream intro contract keeps the original menu copy and choice layout for ex
     }
   );
 
-  const actions = ((((response.ui || {}) as Record<string, unknown>).action_contract || {}) as Record<string, unknown>)
-    .actions as Array<Record<string, unknown>>;
-  const exerciseAction = actions.find((action) => String(action.role || "") === "dream_start_exercise");
-
-  assert.equal(String((((response.state || {}) as Record<string, unknown>).ui_action_dream_start_exercise || "")), "");
-  assert.equal(String(exerciseAction?.label_key || ""), "menuLabel.DREAM_MENU_INTRO.ACTION_DREAM_INTRO_START_EXERCISE");
-  assert.equal(String(exerciseAction?.label || ""), "Do a small exercise that helps to define your dream.");
-  assert.equal(String(exerciseAction?.surface || ""), "choice");
+  assert.equal(response.ok, false);
+  assert.equal(String(((response as any).error || {}).reason || ""), "ui_interactive_content_absent");
 });
 
-test("interactive contract keeps the Dream exercise button in the shared choice layout without duplicates", () => {
+test("interactive menu-only dream intro payload fails closed without an owner", () => {
   const response = finalizeResponseContractInternals(
     {
       ok: true,
@@ -241,37 +221,11 @@ test("interactive contract keeps the Dream exercise button in the shared choice 
     }
   );
 
-  const actions = ((((response.ui || {}) as Record<string, unknown>).action_contract || {}) as Record<string, unknown>)
-    .actions as Array<Record<string, unknown>>;
-
-  assert.ok(
-    actions.some(
-      (action) =>
-        String(action.action_code || "") === "ACTION_DREAM_INTRO_EXPLAIN_MORE" &&
-        String(action.role || "") === "choice"
-    )
-  );
-  assert.ok(
-    actions.some(
-      (action) =>
-        String(action.action_code || "") === "ACTION_DREAM_INTRO_START_EXERCISE" &&
-        String(action.role || "") === "dream_start_exercise" &&
-        String(action.surface || "") === "choice"
-    )
-  );
-  assert.equal(
-    actions.filter((action) => String(action.role || "") === "dream_start_exercise").length,
-    1
-  );
-  assert.equal(Object.prototype.hasOwnProperty.call((response.ui || {}) as Record<string, unknown>, "actions"), false);
-  assert.equal(Object.prototype.hasOwnProperty.call((response.ui || {}) as Record<string, unknown>, "action_codes"), false);
-  assert.equal(
-    Object.prototype.hasOwnProperty.call((response.ui || {}) as Record<string, unknown>, "expected_choice_count"),
-    false
-  );
+  assert.equal(response.ok, false);
+  assert.equal(String(((response as any).error || {}).reason || ""), "ui_interactive_content_absent");
 });
 
-test("dream intro contract keeps the original menu copy even when Dream Builder context can be resumed", () => {
+test("dream intro resume menu without an owner fails closed", () => {
   const response = finalizeResponseContractInternals(
     {
       ok: true,
@@ -305,30 +259,11 @@ test("dream intro contract keeps the original menu copy even when Dream Builder 
     }
   );
 
-  const ui = ((response.ui || {}) as Record<string, unknown>);
-  const actions = ((ui.action_contract || {}) as Record<string, unknown>).actions as Array<Record<string, unknown>>;
-  const exerciseAction = actions.find((action) => String(action.role || "") === "dream_start_exercise");
-
-  assert.equal(String((((response.state || {}) as Record<string, unknown>).ui_action_dream_start_exercise || "")), "");
-  assert.equal(String(exerciseAction?.label_key || ""), "menuLabel.DREAM_MENU_INTRO.ACTION_DREAM_INTRO_START_EXERCISE");
-  assert.equal(
-    String(exerciseAction?.label || ""),
-    "Do a small exercise that helps to define your dream."
-  );
-  assert.equal(String(exerciseAction?.surface || ""), "choice");
-  assert.equal(
-    validateUiPayloadContractParity(
-      response as any,
-      {
-        parseMenuFromContractIdForStep: () => "DREAM_MENU_INTRO",
-        labelKeysForMenuActionCodes: () => ["menuLabel.DREAM_MENU_INTRO.ACTION_DREAM_INTRO_START_EXERCISE"],
-      }
-    ),
-    null
-  );
+  assert.equal(response.ok, false);
+  assert.equal(String(((response as any).error || {}).reason || ""), "ui_interactive_content_absent");
 });
 
-test("dream follow-up menus keep exactly one exercise button with the original menu label and choice layout", () => {
+test("dream follow-up menus without an owner fail closed", () => {
   const scenarios = [
     {
       menuId: "DREAM_MENU_WHY",
@@ -401,33 +336,12 @@ test("dream follow-up menus keep exactly one exercise button with the original m
       }
     );
 
-    const ui = ((response.ui || {}) as Record<string, unknown>);
-    const actions = ((ui.action_contract || {}) as Record<string, unknown>).actions as Array<Record<string, unknown>>;
-    const exerciseActions = actions.filter((action) => String(action.role || "") === "dream_start_exercise");
-
-    assert.equal(exerciseActions.length, 1);
-    assert.equal(String(exerciseActions[0]?.action_code || ""), scenario.expectedActionCode);
-    assert.equal(String(exerciseActions[0]?.label_key || ""), scenario.expectedLabelKey);
-    assert.equal(String(exerciseActions[0]?.label || ""), scenario.expectedLabel);
-    assert.equal(String(exerciseActions[0]?.surface || ""), "choice");
-    assert.equal(
-      actions.some((action) => String(action.action_code || "") === "ACTION_DREAM_INTRO_START_EXERCISE"),
-      false
-    );
-    assert.equal(
-      validateUiPayloadContractParity(
-        response as any,
-        {
-          parseMenuFromContractIdForStep: () => scenario.menuId,
-          labelKeysForMenuActionCodes: () => [...scenario.labelKeys],
-        }
-      ),
-      null
-    );
+    assert.equal(response.ok, false);
+    assert.equal(String(((response as any).error || {}).reason || ""), "ui_interactive_content_absent");
   }
 });
 
-test("dream canonical refine recovers missing menu actions from the final contract", () => {
+test("dream canonical refine without explicit owner actions fails closed", () => {
   const response = finalizeResponseContractInternals(
     {
       ok: true,
@@ -443,7 +357,7 @@ test("dream canonical refine recovers missing menu actions from the final contra
         view: {
           mode: "interactive",
         },
-        contract_id: "dream::valid_output::DREAM_MENU_NEXT_STEP",
+        contract_id: "dream:valid_output:content",
         content: {
           kind: "single_value",
           heading: "Op basis van je input stel ik de volgende droom voor",
@@ -453,39 +367,20 @@ test("dream canonical refine recovers missing menu actions from the final contra
     } as any,
     {
       applyUiClientActionContract: () => {},
-      parseMenuFromContractIdForStep: () => "DREAM_MENU_NEXT_STEP",
-      labelKeysForMenuActionCodes: () => [
-        "menuLabel.DREAM_MENU_NEXT_STEP.ACTION_DREAM_REFINE_CONFIRM",
-        "menuLabel.DREAM_MENU_NEXT_STEP.ACTION_DREAM_REFINE_START_EXERCISE",
+      labelKeysForActionCodes: () => [
+        "actionLabel.ACTION_DREAM_REFINE_CONFIRM",
+        "actionLabel.ACTION_DREAM_REFINE_START_EXERCISE",
       ],
       onUiParityError: () => {},
       attachRegistryPayload: (payload) => payload,
     }
   );
 
-  assert.equal(response.ok, true);
-  const ui = ((response.ui || {}) as Record<string, unknown>);
-  const actions = ((ui.action_contract || {}) as Record<string, unknown>).actions as Array<Record<string, unknown>>;
-  assert.deepEqual(
-    actions.map((action) => String(action.action_code || "")),
-    ["ACTION_DREAM_REFINE_CONFIRM", "ACTION_DREAM_REFINE_START_EXERCISE"]
-  );
-  assert.equal(
-    validateUiPayloadContractParity(
-      response as any,
-      {
-        parseMenuFromContractIdForStep: () => "DREAM_MENU_NEXT_STEP",
-        labelKeysForMenuActionCodes: () => [
-          "menuLabel.DREAM_MENU_NEXT_STEP.ACTION_DREAM_REFINE_CONFIRM",
-          "menuLabel.DREAM_MENU_NEXT_STEP.ACTION_DREAM_REFINE_START_EXERCISE",
-        ],
-      }
-    ),
-    null
-  );
+  assert.equal(response.ok, false);
+  assert.equal(String(((response as any).error || {}).reason || ""), "ui_action_contract_missing_action");
 });
 
-test("dream builder interactive variants suppress the start-exercise action once the exercise is already active", () => {
+test("dream builder interactive variants without a builder owner fail closed", () => {
   const response = finalizeResponseContractInternals(
     {
       ok: true,
@@ -522,17 +417,8 @@ test("dream builder interactive variants suppress the start-exercise action once
     }
   );
 
-  const ui = ((response.ui || {}) as Record<string, unknown>);
-  const actions = ((ui.action_contract || {}) as Record<string, unknown>).actions as Array<Record<string, unknown>>;
-
-  assert.equal(
-    actions.some((action) => String(action.role || "") === "dream_start_exercise"),
-    false
-  );
-  assert.equal(
-    actions.some((action) => String(action.role || "") === "dream_switch_to_self"),
-    true
-  );
+  assert.equal(response.ok, false);
+  assert.equal(String(((response as any).error || {}).reason || ""), "ui_interactive_content_absent");
 });
 
 test("pending interaction derives text_compare from compare text", () => {

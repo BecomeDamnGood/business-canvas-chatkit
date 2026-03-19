@@ -1,6 +1,7 @@
 import type { RenderedAction } from "../contracts/ui_actions.js";
 import type { StepIntent } from "../contracts/intents.js";
 import type { CanvasState } from "../core/state.js";
+import { ACTION_LABEL_DEFAULTS, labelKeyForActionCode } from "../core/ui_contract_matrix.js";
 import { hasRenderablePendingCompareState, readCompareRuntime } from "./compare_runtime.js";
 
 type ActioncodeRegistryEntry = {
@@ -9,7 +10,6 @@ type ActioncodeRegistryEntry = {
 
 type ActioncodeRegistryShape = {
   actions: Record<string, ActioncodeRegistryEntry>;
-  menus: Record<string, string[]>;
 };
 
 export type PromptInvariantContext = {
@@ -22,9 +22,6 @@ export type PromptInvariantContext = {
 type CreateRunStepRuntimeTextUiHelpersDeps = {
   step0Id: string;
   uiDefaultString: (key: string, fallback?: string) => string;
-  menuLabelDefaults: Record<string, string>;
-  menuLabelKeys: Record<string, string[]>;
-  labelKeyForMenuAction: (menuId: string, actionCode: string, idx: number) => string;
   actioncodeRegistry: ActioncodeRegistryShape;
   actionCodeToIntent: (params: { actionCode: string; route: string }) => StepIntent;
   shouldSuppressFallbackText: (state: CanvasState | null | undefined) => boolean;
@@ -64,8 +61,8 @@ export function createRunStepRuntimeTextUiHelpers(deps: CreateRunStepRuntimeText
 
   function step0ReadyActionLabel(state: CanvasState | null | undefined): string {
     if (deps.shouldSuppressFallbackText(state)) return "";
-    const key = deps.labelKeyForMenuAction("STEP0_MENU_READY_START", "ACTION_STEP0_READY_START", 0);
-    const fallback = String(deps.menuLabelDefaults[key] || deps.uiDefaultString(key)).trim();
+    const key = labelKeyForActionCode("ACTION_STEP0_READY_START");
+    const fallback = String(ACTION_LABEL_DEFAULTS[key] || deps.uiDefaultString(key)).trim();
     return uiStringFromStateMap(state, key, fallback);
   }
 
@@ -134,66 +131,17 @@ export function createRunStepRuntimeTextUiHelpers(deps: CreateRunStepRuntimeText
     return count;
   }
 
-  function labelKeysForMenuActionCodes(menuId: string, actionCodes: string[]): string[] {
-    const safeMenuId = String(menuId || "").trim();
+  function labelKeysForActionCodes(actionCodes: string[]): string[] {
     const safeActionCodes = actionCodes.map((code) => String(code || "").trim()).filter(Boolean);
-    if (!safeMenuId || safeActionCodes.length === 0) return [];
-    const fullActionCodes = Array.isArray(deps.actioncodeRegistry.menus[safeMenuId])
-      ? deps.actioncodeRegistry.menus[safeMenuId].map((code) => String(code || "").trim()).filter(Boolean)
-      : [];
-    const fullLabelKeys = Array.isArray(deps.menuLabelKeys[safeMenuId])
-      ? deps.menuLabelKeys[safeMenuId].map((labelKey) => String(labelKey || "").trim())
-      : [];
-    if (fullActionCodes.length === 0) return [];
-    if (fullActionCodes.length !== fullLabelKeys.length) {
-      return safeActionCodes.map((actionCode, idx) => deps.labelKeyForMenuAction(safeMenuId, actionCode, idx));
-    }
-    const usedIndices = new Set<number>();
-    const filteredLabelKeys: string[] = [];
-    for (const actionCode of safeActionCodes) {
-      let matchedIndex = -1;
-      for (let i = 0; i < fullActionCodes.length; i += 1) {
-        if (usedIndices.has(i)) continue;
-        if (fullActionCodes[i] !== actionCode) continue;
-        matchedIndex = i;
-        break;
-      }
-      if (matchedIndex < 0) return [];
-      usedIndices.add(matchedIndex);
-      const labelKey = String(fullLabelKeys[matchedIndex] || "").trim();
-      if (!labelKey) return [];
-      filteredLabelKeys.push(labelKey);
-    }
-    return filteredLabelKeys;
+    return safeActionCodes.map((actionCode) => labelKeyForActionCode(actionCode));
   }
 
-  function labelsForMenuActionCodes(menuId: string, actionCodes: string[]): string[] {
-    const safeMenuId = String(menuId || "").trim();
+  function labelsForActionCodes(actionCodes: string[]): string[] {
     const safeActionCodes = actionCodes.map((code) => String(code || "").trim()).filter(Boolean);
-    if (!safeMenuId || safeActionCodes.length === 0) return [];
-    const fullActionCodes = Array.isArray(deps.actioncodeRegistry.menus[safeMenuId])
-      ? deps.actioncodeRegistry.menus[safeMenuId].map((code) => String(code || "").trim()).filter(Boolean)
-      : [];
-    const fullLabelKeys = labelKeysForMenuActionCodes(safeMenuId, fullActionCodes);
-    if (fullActionCodes.length === 0 || fullLabelKeys.length !== fullActionCodes.length) return [];
-    const usedIndices = new Set<number>();
-    const filteredLabels: string[] = [];
-    for (const actionCode of safeActionCodes) {
-      let matchedIndex = -1;
-      for (let i = 0; i < fullActionCodes.length; i += 1) {
-        if (usedIndices.has(i)) continue;
-        if (fullActionCodes[i] !== actionCode) continue;
-        matchedIndex = i;
-        break;
-      }
-      if (matchedIndex < 0) return [];
-      usedIndices.add(matchedIndex);
-      const labelKey = String(fullLabelKeys[matchedIndex] || "").trim();
-      const label = String(deps.menuLabelDefaults[labelKey] || "").trim();
-      if (!label) return [];
-      filteredLabels.push(label);
-    }
-    return filteredLabels;
+    return safeActionCodes.map((actionCode) => {
+      const labelKey = labelKeyForActionCode(actionCode);
+      return String(ACTION_LABEL_DEFAULTS[labelKey] || "").trim();
+    });
   }
 
   function stripNumberedOptions(prompt: string): string {
@@ -223,19 +171,18 @@ export function createRunStepRuntimeTextUiHelpers(deps: CreateRunStepRuntimeText
     return kept.join("\n").trim();
   }
 
-  function buildRenderedActionsFromMenu(
-    menuId: string,
+  function buildRenderedActionsFromActionCodes(
     actionCodes: string[],
     stateForLabels?: CanvasState | null
   ): RenderedAction[] {
     const safeCodes = actionCodes.map((code) => String(code || "").trim()).filter(Boolean);
-    const labels = labelsForMenuActionCodes(menuId, safeCodes);
-    const labelKeys = labelKeysForMenuActionCodes(menuId, safeCodes);
+    const labels = labelsForActionCodes(safeCodes);
+    const labelKeys = labelKeysForActionCodes(safeCodes);
     if (!safeCodes.length || labels.length !== safeCodes.length || labelKeys.length !== safeCodes.length) return [];
     return safeCodes.map((actionCode, idx) => {
       const entry = deps.actioncodeRegistry.actions[actionCode];
       const route = String(entry?.route || actionCode).trim();
-      const labelKey = labelKeys[idx] || deps.labelKeyForMenuAction(menuId, actionCode, idx);
+      const labelKey = labelKeys[idx] || labelKeyForActionCode(actionCode);
       const label = uiStringFromStateMap(stateForLabels || null, labelKey, labels[idx]);
       return {
         id: `${actionCode}:${idx + 1}`,
@@ -301,9 +248,9 @@ export function createRunStepRuntimeTextUiHelpers(deps: CreateRunStepRuntimeText
     step0ReadinessStatement,
     step0ReadinessQuestion,
     countNumberedOptions,
-    labelKeysForMenuActionCodes,
-    labelsForMenuActionCodes,
-    buildRenderedActionsFromMenu,
+    labelKeysForActionCodes,
+    labelsForActionCodes,
+    buildRenderedActionsFromActionCodes,
     buildQuestionTextFromActions,
     promptFallbackForInteractiveAsk,
     enforcePromptInvariants,

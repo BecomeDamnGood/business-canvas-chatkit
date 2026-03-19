@@ -38,12 +38,9 @@ type CreateRunStepRuntimeSemanticHelpersDeps = {
   dreamExplainerSwitchSelfMenuId: string;
   dreamExplainerRefineMenuId: string;
   actioncodeRegistry: ActioncodeRegistryShape;
-  defaultMenuByStatus: Record<string, Partial<Record<TurnOutputStatus, string>>>;
   finalFieldByStepId: Record<string, string>;
   getDreamRuntimeMode: (state: CanvasState) => string;
-  parseMenuFromContractIdForStep: (contractIdRaw: string, stepId: string) => string;
   isConfirmActionCode: (actionCode: string) => boolean;
-  menuHasConfirmAction: (menuId: string) => boolean;
   inferUiRenderModeForStep: (state: CanvasState, stepId: string) => "menu" | "no_buttons";
   fieldForStep: (stepId: string) => string;
   provisionalValueForStep: (state: CanvasState, stepId: string) => string;
@@ -142,7 +139,6 @@ export function createRunStepRuntimeSemanticHelpers(deps: CreateRunStepRuntimeSe
     const specialist = (rendered.specialist || {}) as Record<string, unknown>;
     const action = String(specialist.action || "").trim().toUpperCase();
     const contractId = String(rendered.contractId || specialist.ui_contract_id || "").trim();
-    const menuId = deps.parseMenuFromContractIdForStep(contractId, stepId);
     const actionCodes = Array.isArray(rendered.uiActionCodes)
       ? rendered.uiActionCodes.map((code) => String(code || "").trim()).filter(Boolean)
       : [];
@@ -187,20 +183,14 @@ export function createRunStepRuntimeSemanticHelpers(deps: CreateRunStepRuntimeSe
 
     if (action !== "ASK") return "rendered_action_not_ask";
     if (!contractId) return "missing_contract_id";
-    if (menuId && !deps.actioncodeRegistry.menus[menuId]) return "unknown_menu_id";
-    if (menuId && actionCodes.length === 0) return "menu_without_action_codes";
     if (actionCodes.length !== uiActions.length) return "ui_action_count_mismatch";
     if (actionCodes.length > 0 && numberedCount !== actionCodes.length) return "numbered_prompt_action_count_mismatch";
     if (stepId === deps.dreamStepId && state) {
       const dreamMode = deps.getDreamRuntimeMode(state);
       if (dreamMode === "builder_collect") {
-        if (menuId) return "dream_builder_collect_menu_mismatch";
         if (actionCodes.length > 0) {
           return "dream_builder_collect_action_mismatch";
         }
-      }
-      if (dreamMode === "builder_refine" && menuId) {
-        return "dream_builder_refine_menu_mismatch";
       }
       if (dreamMode === "builder_scoring" && actionCodes.length > 0) {
         return "dream_builder_scoring_should_not_render_actions";
@@ -225,14 +215,6 @@ export function createRunStepRuntimeSemanticHelpers(deps: CreateRunStepRuntimeSe
         }
       }
     }
-    if (menuId) {
-      const allowed = new Set((deps.actioncodeRegistry.menus[menuId] || []).map((code) => String(code || "").trim()));
-      if (allowed.size === 0) return "menu_has_no_registry_actions";
-      for (const code of actionCodes) {
-        if (!allowed.has(code)) return `action_code_not_in_menu:${code}`;
-      }
-    }
-
     if (stepId === deps.dreamStepId && renderMode === "no_buttons" && !explicitDreamStuckSupport) {
       return "dream_no_buttons_requires_explicit_stuck_support";
     }
@@ -293,11 +275,9 @@ export function createRunStepRuntimeSemanticHelpers(deps: CreateRunStepRuntimeSe
         stepId === deps.dreamStepId &&
         state &&
         deps.getDreamRuntimeMode(state) !== "self";
-      if (!inDreamBuilderMode) {
-        const expectedMenuId = String(deps.defaultMenuByStatus[stepId]?.valid_output || "").trim();
-        if (expectedMenuId && menuId !== expectedMenuId) {
-          return `invalid_valid_output_menu:${menuId || "NO_MENU"}_expected:${expectedMenuId}`;
-        }
+      if (!inDreamBuilderMode && actionCodes.length > 0) {
+        const hasConfirm = actionCodes.some((code) => deps.isConfirmActionCode(code));
+        if (!hasConfirm) return "missing_confirm_action_for_valid_output";
       }
     }
 
@@ -315,8 +295,7 @@ export function createRunStepRuntimeSemanticHelpers(deps: CreateRunStepRuntimeSe
     if (
       rendered.status === "valid_output" &&
       rendered.confirmEligible &&
-      menuId &&
-      deps.menuHasConfirmAction(menuId)
+      actionCodes.length > 0
     ) {
       const hasConfirm = actionCodes.some((code) => deps.isConfirmActionCode(code));
       if (!hasConfirm) return "missing_confirm_action_for_valid_output";

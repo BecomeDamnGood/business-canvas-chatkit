@@ -138,8 +138,7 @@ const STRUCTURED_SUGGESTION_STEP_LABEL_FALLBACKS: Record<string, string> = {
   strategy: "Strategy",
 };
 
-function structuredSuggestionMenuConfigFor(contractStepId: string, menuId: string): StructuredSuggestionMenuConfig | null {
-  void menuId;
+function structuredSuggestionMenuConfigFor(contractStepId: string): StructuredSuggestionMenuConfig | null {
   const entry = getChooseForMeRegistryEntry(contractStepId);
   if (!entry) return null;
   return {
@@ -406,14 +405,13 @@ function normalizeStructuredSuggestionMessage(params: {
   tokenizeWords: (text: string) => string[];
   specialist?: Record<string, unknown> | null;
 }): string {
-  const config = structuredSuggestionMenuConfigFor(params.contractStepId, params.menuId);
+  const config = structuredSuggestionMenuConfigFor(params.contractStepId);
   if (!config) return String(params.messageRaw || "").trim();
   const message = String(params.messageRaw || "").replace(/\r/g, "\n").trim();
   if (!message) return "";
   if (looksLikeStructuredDiscoveryQuestions(message)) return message;
   const content = deriveStructuredSuggestionsContent({
     stepId: params.contractStepId,
-    menuId: params.menuId,
     message,
     uiStrings: params.stateUiStrings,
     specialist: params.specialist || null,
@@ -1117,7 +1115,7 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
     const contractParts = contractId.split(":");
     const contractStepId = String(contractParts[0] || "").trim();
     const menuId = deps.parseMenuFromContractIdForStep(contractId, contractStepId).toUpperCase();
-    const config = structuredSuggestionMenuConfigFor(contractStepId, menuId);
+    const config = structuredSuggestionMenuConfigFor(contractStepId);
     if (!config) return null;
     const uiStrings =
       params.state && typeof (params.state as Record<string, unknown>).ui_strings === "object"
@@ -1125,7 +1123,6 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
         : null;
     const content = deriveStructuredSuggestionsContent({
       stepId: contractStepId,
-      menuId,
       message: String((params.specialist as Record<string, unknown>).message || "").trim(),
       uiStrings,
       specialist: params.specialist,
@@ -1224,7 +1221,8 @@ type RunStepRuntimeFinalizeResponseDeps<TPayload> = {
   tokenLoggingEnabled: boolean;
   baselineModel: string;
   parseMenuFromContractIdForStep: (contractIdRaw: unknown, stepId: string) => string;
-  labelKeysForMenuActionCodes: (menuId: string, actionCodes: string[]) => string[];
+  labelKeysForActionCodes?: (actionCodes: string[]) => string[];
+  labelKeysForMenuActionCodes?: (menuId: string, actionCodes: string[]) => string[];
   onUiParityError: () => void;
   attachRegistryPayload: RunStepAttachRegistryPayload<TPayload>;
   uiI18nTelemetry: unknown;
@@ -1427,8 +1425,8 @@ export function createRunStepRuntimeFinalizeLayer<TPayload extends Record<string
 
   const { finalizeResponse } = createRunStepResponseHelpers({
     applyUiClientActionContract,
-    parseMenuFromContractIdForStep: response.parseMenuFromContractIdForStep,
-    labelKeysForMenuActionCodes: response.labelKeysForMenuActionCodes,
+    ...(response.labelKeysForActionCodes ? { labelKeysForActionCodes: response.labelKeysForActionCodes } : {}),
+    ...(response.labelKeysForMenuActionCodes ? { labelKeysForMenuActionCodes: response.labelKeysForMenuActionCodes } : {}),
     onUiParityError: response.onUiParityError,
     attachRegistryPayload: (payload, specialist, flagsOverride) =>
       response.attachRegistryPayload(payload, specialist, flagsOverride),

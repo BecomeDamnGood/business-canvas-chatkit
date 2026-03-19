@@ -359,8 +359,9 @@ test("shouldShowTextInputForCompare keeps the field visible while a compare pick
     shouldShowTextInputForCompare({
       textSubmitAvailable: true,
       compareActive: false,
+      dreamBuilderTextInputActive: false,
     }),
-    true
+    false
   );
 });
 

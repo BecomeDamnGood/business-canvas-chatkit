@@ -571,11 +571,7 @@ function stateWithCurrentValueFeedbackContext(
       feedback_mode: "refine_current",
       refined_formulation: currentValue,
       [stepId]: currentValue,
-    }, {
-      pending_text_intent: "feedback_on_current_value",
-      pending_text_anchor: "current_value",
-      pending_text_presentation_mode: "",
-    }),
+    }, {}),
   };
 }
 
@@ -1302,7 +1298,6 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
       const normalizeStructuredSuggestionRouteResult = (candidateResult: Record<string, unknown>) => {
         const content = deriveStructuredSuggestionsContent({
           stepId: structuredSuggestionRouteSpec.stepId,
-          menuId: structuredSuggestionRouteSpec.menuId,
           message: String(candidateResult.message || "").trim(),
           uiStrings:
             state && typeof (state as Record<string, unknown>).ui_strings === "object"
@@ -1659,7 +1654,7 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
       const offTopicContractId = deps.buildContractId(
         currentStepId,
         renderedStatusForPolicy as TurnOutputStatus,
-        deps.dreamExplainerSwitchSelfMenuId
+        currentStepId === "presentation" ? "terminal" : "content"
       );
       deps.applyUiPhaseByStep(nextState, currentStepId, offTopicContractId);
       const rerender = deps.turnResponseEngine.renderValidateRecover({
@@ -1825,7 +1820,7 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
         ? buildUiContractId(
             specialistContractIdParsed.stepId,
             specialistContractIdParsed.status,
-            specialistContractIdParsed.menuId
+            specialistContractIdParsed.owner
           )
         : String(specialistContractIdRaw || "").trim();
     if (currentStepForContract && specialistContractId) {

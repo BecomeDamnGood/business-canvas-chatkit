@@ -1,4 +1,5 @@
 import type { CanvasState } from "../core/state.js";
+import { DEFAULT_ACTION_CODES_BY_STEP_STATUS } from "../core/ui_contract_matrix.js";
 
 type ActioncodeRegistryEntry = {
   route?: string;
@@ -108,17 +109,23 @@ export function createRunStepRuntimeActionHelpers(deps: CreateRunStepRuntimeActi
     return upper.includes("_CONFIRM") || upper.includes("FINAL_CONTINUE");
   }
 
-  function menuHasConfirmAction(menuId: string): boolean {
-    const actionCodes = Array.isArray(deps.actioncodeRegistry.menus[menuId])
-      ? deps.actioncodeRegistry.menus[menuId]
-      : [];
+  function actionCodesForStep(stepId: string): string[] {
+    const defaults = DEFAULT_ACTION_CODES_BY_STEP_STATUS[String(stepId || "").trim()];
+    if (!defaults) return [];
+    return [
+      ...(Array.isArray(defaults.no_output) ? defaults.no_output : []),
+      ...(Array.isArray(defaults.incomplete_output) ? defaults.incomplete_output : []),
+      ...(Array.isArray(defaults.valid_output) ? defaults.valid_output : []),
+    ].map((code) => String(code || "").trim()).filter(Boolean);
+  }
+
+  function stepHasConfirmAction(stepId: string): boolean {
+    const actionCodes = actionCodesForStep(stepId);
     return actionCodes.some((code) => isConfirmActionCode(String(code || "").trim()));
   }
 
-  function firstConfirmActionCodeForMenu(menuId: string): string {
-    const actionCodes = Array.isArray(deps.actioncodeRegistry.menus[menuId])
-      ? deps.actioncodeRegistry.menus[menuId]
-      : [];
+  function firstConfirmActionCodeForStep(stepId: string): string {
+    const actionCodes = actionCodesForStep(stepId);
     for (const rawCode of actionCodes) {
       const code = String(rawCode || "").trim();
       if (!code) continue;
@@ -127,10 +134,8 @@ export function createRunStepRuntimeActionHelpers(deps: CreateRunStepRuntimeActi
     return "";
   }
 
-  function firstGuidanceActionCodeForMenu(menuId: string): string {
-    const actionCodes = Array.isArray(deps.actioncodeRegistry.menus[menuId])
-      ? deps.actioncodeRegistry.menus[menuId]
-      : [];
+  function firstGuidanceActionCodeForStep(stepId: string): string {
+    const actionCodes = actionCodesForStep(stepId);
     const candidates = actionCodes
       .map((rawCode) => String(rawCode || "").trim())
       .filter(Boolean)
@@ -154,8 +159,8 @@ export function createRunStepRuntimeActionHelpers(deps: CreateRunStepRuntimeActi
     shouldPretransitionActionCode,
     deriveUiViewPayload,
     isConfirmActionCode,
-    menuHasConfirmAction,
-    firstConfirmActionCodeForMenu,
-    firstGuidanceActionCodeForMenu,
+    stepHasConfirmAction,
+    firstConfirmActionCodeForStep,
+    firstGuidanceActionCodeForStep,
   };
 }

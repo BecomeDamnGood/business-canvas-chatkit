@@ -32,9 +32,7 @@ export type StepRegistryUiMode =
 
 export type StepRegistryChooseForMe = {
   routeToken: string;
-  menuId: string;
   actionCode: string;
-  nextMenuId: string;
   mode: StepRegistryChooseForMeMode;
   itemKind: StepRegistryChooseForMeItemKind;
   field: StepRegistryChooseForMeField;
@@ -88,9 +86,7 @@ export const STEP_REGISTRY_BY_STEP_ID = {
     uiMode: "text_compare",
     chooseForMe: {
       routeToken: "__ROUTE__DREAM_PICK_ONE__",
-      menuId: "DREAM_MENU_SUGGESTIONS",
       actionCode: "ACTION_DREAM_SUGGESTIONS_PICK_ONE",
-      nextMenuId: "DREAM_MENU_NEXT_STEP",
       mode: "suggestions",
       itemKind: "sentence",
       field: "dream",
@@ -110,9 +106,7 @@ export const STEP_REGISTRY_BY_STEP_ID = {
     uiMode: "text_compare",
     chooseForMe: {
       routeToken: "__ROUTE__PURPOSE_CHOOSE_FOR_ME__",
-      menuId: "PURPOSE_MENU_EXAMPLES",
       actionCode: "ACTION_PURPOSE_EXAMPLES_CHOOSE_FOR_ME",
-      nextMenuId: "PURPOSE_MENU_AFTER_CHOOSE",
       mode: "examples",
       itemKind: "sentence",
       field: "purpose",
@@ -132,9 +126,7 @@ export const STEP_REGISTRY_BY_STEP_ID = {
     uiMode: "text_compare",
     chooseForMe: {
       routeToken: "__ROUTE__BIGWHY_CHOOSE_FOR_ME__",
-      menuId: "BIGWHY_MENU_FROM_GIVE",
       actionCode: "ACTION_BIGWHY_SUGGESTIONS_CHOOSE_FOR_ME",
-      nextMenuId: "BIGWHY_MENU_REFINE",
       mode: "suggestions",
       itemKind: "sentence",
       field: "bigwhy",
@@ -154,9 +146,7 @@ export const STEP_REGISTRY_BY_STEP_ID = {
     uiMode: "text_compare",
     chooseForMe: {
       routeToken: "__ROUTE__ROLE_CHOOSE_FOR_ME__",
-      menuId: "ROLE_MENU_EXAMPLES",
       actionCode: "ACTION_ROLE_EXAMPLES_CHOOSE_FOR_ME",
-      nextMenuId: "ROLE_MENU_REFINE",
       mode: "examples",
       itemKind: "sentence",
       field: "role",
@@ -176,9 +166,7 @@ export const STEP_REGISTRY_BY_STEP_ID = {
     uiMode: "text_compare",
     chooseForMe: {
       routeToken: "__ROUTE__ENTITY_CHOOSE_FOR_ME__",
-      menuId: "ENTITY_MENU_SUGGESTIONS",
       actionCode: "ACTION_ENTITY_SUGGESTIONS_CHOOSE_FOR_ME",
-      nextMenuId: "ENTITY_MENU_EXAMPLE",
       mode: "suggestions",
       itemKind: "phrase",
       field: "entity",
@@ -198,9 +186,7 @@ export const STEP_REGISTRY_BY_STEP_ID = {
     uiMode: "list_compare",
     chooseForMe: {
       routeToken: "__ROUTE__STRATEGY_CHOOSE_FOR_ME__",
-      menuId: "STRATEGY_MENU_EXAMPLES",
       actionCode: "ACTION_STRATEGY_EXAMPLES_CHOOSE_FOR_ME",
-      nextMenuId: "STRATEGY_MENU_CONFIRM",
       mode: "examples",
       itemKind: "multiline_list",
       field: "strategy",
@@ -318,17 +304,6 @@ export function formatStepSectionTitle(params: {
 
 export function getChooseForMeRouteTokenForStep(stepId: string): string {
   return getChooseForMeRegistryEntry(stepId)?.chooseForMe.routeToken || "";
-}
-
-export function getChooseForMeRegistryEntryForMenu(
-  stepId: string,
-  menuId: string
-): StepRegistryChooseForMeEntry | null {
-  const normalizedStepId = String(stepId || "").trim();
-  const normalizedMenuId = String(menuId || "").trim().toUpperCase();
-  const entry = getChooseForMeRegistryEntry(normalizedStepId);
-  if (!entry) return null;
-  return entry.chooseForMe.menuId === normalizedMenuId ? entry : null;
 }
 
 export function isSingleValueStep(stepId: string): boolean {

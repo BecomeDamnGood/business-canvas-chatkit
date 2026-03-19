@@ -103,12 +103,10 @@ function extractExplicitItems(
 
 export function deriveStructuredSuggestionsContent(params: {
   stepId: string;
-  menuId?: string;
   message: string;
   uiStrings?: Record<string, unknown> | null;
   specialist?: Record<string, unknown> | null;
 }): StructuredSuggestionsContent | null {
-  void params.menuId;
   const entry = getChooseForMeRegistryEntry(params.stepId);
   if (!entry) return null;
   const itemKind = entry.chooseForMe.itemKind;
