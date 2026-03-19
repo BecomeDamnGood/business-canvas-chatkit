@@ -86,6 +86,7 @@ export function resolveRequiredFinalValue(params: {
 
   const specialistField = stepId === presentationStepId ? "presentation_brief" : stepId;
   const previousCanonicalText = pickCanonicalTextFromUiContent(previousSpecialist);
+  const previousCompare = readCompareRuntime(previousSpecialist);
   return {
     field: finalField,
     value: pickFirstValidForStep(
@@ -93,9 +94,10 @@ export function resolveRequiredFinalValue(params: {
       provisionalValue,
       previousSpecialist[specialistField],
       previousSpecialist.refined_formulation,
-      previousSpecialist.compare_agent_current,
+      previousCompare?.suggestion_text,
       previousCanonicalText,
       state[finalField]
     ),
   };
 }
+import { readCompareRuntime } from "./compare_runtime.js";

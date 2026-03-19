@@ -4,9 +4,10 @@ This contract governs compare selection when both user and suggestion variants a
 
 ## Trigger
 
-- Compare mode is active when specialist payload exposes pending compare choice fields:
-- `compare_pending="true"`
-- `compare_user_*` and suggestion counterpart present
+- Compare mode is active when specialist payload exposes `compare_runtime` with:
+- `status="pending"`
+- `kind="text_compare"` or `kind="list_compare"`
+- `user_*` and suggestion counterpart present
 - Runtime trigger rule:
 - If suggestion differs from user input in wording/content/order, show the compare panel.
 - Exception: do **not** show the compare panel only when the difference is strictly spelling/surface correction and the sentence/list content is otherwise identical.
@@ -32,9 +33,9 @@ This contract governs compare selection when both user and suggestion variants a
 
 On pick:
 
-1. Clear pending compare flags and raw comparison buffers.
+1. Clear the pending `compare_runtime` state and raw comparison buffers.
 2. Persist selected variant as staged value (`provisional_by_step[step]`) for active step.
-3. Set `compare_selected` to `user` or `suggestion`.
+3. Mark the resolved compare owner with `resolution="user"` or `resolution="suggestion"`.
 4. Rebuild menu contract for parent step (do not branch into unrelated flow).
 
 ## Staged vs Committed

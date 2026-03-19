@@ -86,6 +86,7 @@ import {
   runStepRuntimeSpecialRoutesLayer,
   runStepRuntimePostPipelineLayer,
 } from "./run_step_modules.js";
+import { clearCompareRuntime } from "./compare_runtime.js";
 import { pickDualChoiceSuggestion } from "./run_step_compare_heuristics_defaults.js";
 import {
   createRunStepI18nRuntimeHelpers,
@@ -389,26 +390,10 @@ function sanitizeEscapeInWidget(specialist: unknown): Record<string, unknown> {
       .join("\n")
       .trim();
   }
-  safe.compare_pending = "false";
-  safe.compare_selected = "";
-  safe.compare_list_semantics = "delta";
-  safe.compare_variant = "";
-  safe.compare_user_label = "";
-  safe.compare_suggestion_label = "";
-  safe.compare_compare_mode = "";
-  safe.compare_compare_cursor = "";
-  safe.compare_compare_units = [];
-  safe.compare_compare_segments = [];
-  safe.compare_user_variant_semantics = "";
-  safe.compare_user_variant_stepworthy = "";
+  Object.assign(safe, clearCompareRuntime(safe));
   safe.feedback_mode = "none";
   safe.feedback_reason_key = "";
   safe.feedback_reason_text = "";
-  safe.pending_suggestion_intent = "";
-  safe.pending_suggestion_anchor = "";
-  safe.pending_suggestion_seed_source = "";
-  safe.pending_suggestion_feedback_text = "";
-  safe.pending_suggestion_presentation_mode = "";
   return safe;
 }
 

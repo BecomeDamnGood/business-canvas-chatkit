@@ -1,6 +1,7 @@
 import { normalizeDreamBuilderStatements, type BoolString, type CanvasState, type ProvisionalSource } from "../core/state.js";
 import type { OrchestratorOutput } from "../core/orchestrator.js";
 import { canonicalPresentationRecapForState } from "./run_step_presentation_recap.js";
+import { attachCompareRuntime } from "./compare_runtime.js";
 import { isValidStepValueForStorage } from "./run_step_value_shape.js";
 
 type DreamRuntimeMode = "self" | "builder_collect" | "builder_scoring" | "builder_refine";
@@ -147,7 +148,7 @@ export function createRunStepStateUpdateHelpers(deps: RunStepStateUpdateDeps) {
       current_step: nextStep,
       active_specialist: activeSpecialist,
       last_specialist_result:
-        typeof specialistResult === "object" && specialistResult !== null ? specialistResult : {},
+        typeof specialistResult === "object" && specialistResult !== null ? attachCompareRuntime(specialistResult) : {},
       intro_shown_session: showSessionIntroUsed === "true" ? "true" : (prev as any).intro_shown_session,
       intro_shown_for_step: action === "INTRO" ? nextStep : (prev as any).intro_shown_for_step,
     };
@@ -310,7 +311,7 @@ export function createRunStepStateUpdateHelpers(deps: RunStepStateUpdateDeps) {
     }
 
     (nextState as any).last_specialist_result =
-      typeof specialistResult === "object" && specialistResult !== null ? specialistResult : {};
+      typeof specialistResult === "object" && specialistResult !== null ? attachCompareRuntime(specialistResult) : {};
 
     return nextState;
   }

@@ -4,6 +4,7 @@ import type {
   TurnPolicyRenderResult,
 } from "../core/turn_policy_renderer.js";
 import { evaluateRulesRuntimeGate } from "../steps/rulesofthegame_runtime_policy.js";
+import { attachCompareRuntime, patchCompareRuntime, readCompareRuntime } from "./compare_runtime.js";
 
 type ActioncodeRegistryEntry = {
   route?: string;
@@ -68,7 +69,7 @@ type SemanticViolationReason =
   | "missing_prompt_for_interactive_ask"
   | "confirm_present_without_accepted_evidence"
   | "intro_mode_must_not_expose_confirm"
-  | "compare_mode_requires_instruction_or_context"
+  | "compare_requires_instruction_or_context"
   | "rules_confirm_policy_violation"
   | "dream_no_buttons_requires_explicit_stuck_support"
   | "user_facing_markup_detected";
@@ -77,7 +78,7 @@ const SEMANTIC_VIOLATION_REASONS = new Set<SemanticViolationReason>([
   "missing_prompt_for_interactive_ask",
   "confirm_present_without_accepted_evidence",
   "intro_mode_must_not_expose_confirm",
-  "compare_mode_requires_instruction_or_context",
+  "compare_requires_instruction_or_context",
   "rules_confirm_policy_violation",
   "dream_no_buttons_requires_explicit_stuck_support",
   "user_facing_markup_detected",
@@ -147,23 +148,20 @@ export function createRunStepRuntimeSemanticHelpers(deps: CreateRunStepRuntimeSe
     const explicitDreamStuckSupport =
       stepId === deps.dreamStepId &&
       String((specialist as Record<string, unknown>).step_support_state || "").trim().toLowerCase() === "stuck";
+    const compareStateForValidation = readCompareRuntime(specialist);
     const userFacingCandidates: string[] = [
       String((specialist as Record<string, unknown>).message || ""),
       String((specialist as Record<string, unknown>).question || ""),
       String((specialist as Record<string, unknown>).refined_formulation || ""),
-      String((specialist as Record<string, unknown>).compare_user_raw || ""),
-      String((specialist as Record<string, unknown>).compare_user_normalized || ""),
-      String((specialist as Record<string, unknown>).compare_agent_current || ""),
+      String(compareStateForValidation?.user_text || ""),
+      String(compareStateForValidation?.user_normalized_text || ""),
+      String(compareStateForValidation?.suggestion_text || ""),
     ];
     const userFacingListCandidates: string[] = [
-      ...(Array.isArray((specialist as Record<string, unknown>).compare_user_items)
-        ? ((specialist as Record<string, unknown>).compare_user_items as unknown[]).map((item) => String(item || ""))
-        : []),
-      ...(Array.isArray((specialist as Record<string, unknown>).compare_suggestion_items)
-        ? ((specialist as Record<string, unknown>).compare_suggestion_items as unknown[]).map((item) => String(item || ""))
-        : []),
-      ...(Array.isArray((specialist as Record<string, unknown>).compare_compare_units)
-        ? ((specialist as Record<string, unknown>).compare_compare_units as unknown[]).flatMap((entry) => {
+      ...((compareStateForValidation?.user_items || []).map((item) => String(item || ""))),
+      ...((compareStateForValidation?.suggestion_items || []).map((item) => String(item || ""))),
+      ...(Array.isArray(compareStateForValidation?.grouped_units)
+        ? ((compareStateForValidation?.grouped_units as unknown[]) || []).flatMap((entry) => {
             const record = entry && typeof entry === "object" && !Array.isArray(entry)
               ? (entry as Record<string, unknown>)
               : {};
@@ -242,7 +240,7 @@ export function createRunStepRuntimeSemanticHelpers(deps: CreateRunStepRuntimeSe
       return "confirm_present_without_accepted_evidence";
     }
     if (stepId === "rulesofthegame" && state && hasConfirmAction) {
-      const comparePending = String((specialist as Record<string, unknown>).compare_pending || "").trim() === "true";
+      const comparePending = readCompareRuntime(specialist)?.status === "pending";
       const acceptedOutput = hasAcceptedOutputEvidence(state, stepId);
       const acceptedValue = acceptedValueForStep(state, stepId);
       const visibleValue =
@@ -268,18 +266,17 @@ export function createRunStepRuntimeSemanticHelpers(deps: CreateRunStepRuntimeSe
         return "missing_prompt_for_interactive_ask";
       }
     }
-    if (String((specialist as Record<string, unknown>).compare_pending || "").trim() === "true") {
+    const compareState = readCompareRuntime(specialist);
+    if (compareState?.status === "pending") {
       const hasCompareContext =
         Boolean(String((specialist as Record<string, unknown>).message || "").trim()) ||
         Boolean(question) ||
-        Boolean(String((specialist as Record<string, unknown>).compare_user_raw || "").trim()) ||
-        Boolean(String((specialist as Record<string, unknown>).compare_user_normalized || "").trim()) ||
-        Boolean(String((specialist as Record<string, unknown>).compare_agent_current || "").trim()) ||
-        (Array.isArray((specialist as Record<string, unknown>).compare_user_items) &&
-          ((specialist as Record<string, unknown>).compare_user_items as unknown[]).length > 0) ||
-        (Array.isArray((specialist as Record<string, unknown>).compare_suggestion_items) &&
-          ((specialist as Record<string, unknown>).compare_suggestion_items as unknown[]).length > 0);
-      if (!hasCompareContext) return "compare_mode_requires_instruction_or_context";
+        Boolean(String(compareState.user_text || "").trim()) ||
+        Boolean(String(compareState.user_normalized_text || "").trim()) ||
+        Boolean(String(compareState.suggestion_text || "").trim()) ||
+        compareState.user_items.length > 0 ||
+        compareState.suggestion_items.length > 0;
+      if (!hasCompareContext) return "compare_requires_instruction_or_context";
     }
 
     if (stepId !== deps.step0Id && rendered.status === "valid_output") {
@@ -331,11 +328,11 @@ export function createRunStepRuntimeSemanticHelpers(deps: CreateRunStepRuntimeSe
     reason: SemanticViolationReason,
     state: CanvasState
   ): Record<string, unknown> {
-    const next = { ...specialist };
+    let next = { ...specialist };
     if (reason === "missing_prompt_for_interactive_ask") {
       (next as Record<string, unknown>).question = deps.promptFallbackForInteractiveAsk(state, stepId);
     }
-    if (reason === "compare_mode_requires_instruction_or_context") {
+    if (reason === "compare_requires_instruction_or_context") {
       const existingMessage = String((next as Record<string, unknown>).message || "").trim();
       if (!existingMessage) {
         (next as Record<string, unknown>).message = deps.uiStringFromStateMap(
@@ -363,29 +360,10 @@ export function createRunStepRuntimeSemanticHelpers(deps: CreateRunStepRuntimeSe
       (next as Record<string, unknown>).refined_formulation = stripMarkupPreserveLines(
         String((next as Record<string, unknown>).refined_formulation || "")
       );
-      (next as Record<string, unknown>).compare_user_raw = stripMarkupPreserveLines(
-        String((next as Record<string, unknown>).compare_user_raw || "")
-      );
-      (next as Record<string, unknown>).compare_user_normalized = stripMarkupPreserveLines(
-        String((next as Record<string, unknown>).compare_user_normalized || "")
-      );
-      (next as Record<string, unknown>).compare_agent_current = stripMarkupPreserveLines(
-        String((next as Record<string, unknown>).compare_agent_current || "")
-      );
-      if (Array.isArray((next as Record<string, unknown>).compare_user_items)) {
-        (next as Record<string, unknown>).compare_user_items = (
-          (next as Record<string, unknown>).compare_user_items as unknown[]
-        ).map((item) => stripMarkupPreserveLines(String(item || ""))).filter(Boolean);
-      }
-      if (Array.isArray((next as Record<string, unknown>).compare_suggestion_items)) {
-        (next as Record<string, unknown>).compare_suggestion_items = (
-          (next as Record<string, unknown>).compare_suggestion_items as unknown[]
-        ).map((item) => stripMarkupPreserveLines(String(item || ""))).filter(Boolean);
-      }
-      if (Array.isArray((next as Record<string, unknown>).compare_compare_units)) {
-        (next as Record<string, unknown>).compare_compare_units = (
-          (next as Record<string, unknown>).compare_compare_units as unknown[]
-        ).map((entry, index) => {
+      const compareState = readCompareRuntime(next);
+      if (compareState) {
+        const groupedUnits = Array.isArray(compareState.grouped_units)
+          ? (compareState.grouped_units as unknown[]).map((entry, index) => {
           const record: Record<string, unknown> = entry && typeof entry === "object" && !Array.isArray(entry)
             ? { ...(entry as Record<string, unknown>) }
             : { id: `unit_${index + 1}` };
@@ -397,11 +375,22 @@ export function createRunStepRuntimeSemanticHelpers(deps: CreateRunStepRuntimeSe
           record.suggestion_items = Array.isArray(record.suggestion_items)
             ? (record.suggestion_items as unknown[]).map((item) => stripMarkupPreserveLines(String(item || ""))).filter(Boolean)
             : [];
-          return record;
+            return record;
+          })
+          : [];
+        next = patchCompareRuntime(next, {
+          user_text: stripMarkupPreserveLines(String(compareState.user_text || "")),
+          user_normalized_text: stripMarkupPreserveLines(String(compareState.user_normalized_text || "")),
+          suggestion_text: stripMarkupPreserveLines(String(compareState.suggestion_text || "")),
+          user_items: compareState.user_items.map((item) => stripMarkupPreserveLines(String(item || ""))).filter(Boolean),
+          suggestion_items: compareState.suggestion_items
+            .map((item) => stripMarkupPreserveLines(String(item || "")))
+            .filter(Boolean),
+          grouped_units: groupedUnits,
         });
       }
     }
-    return next;
+    return attachCompareRuntime(next);
   }
 
   function validateRenderedContractOrRecover(params: {

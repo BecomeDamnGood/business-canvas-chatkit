@@ -12,6 +12,11 @@ import {
 import { buildContextSafeLastSpecialistResult } from "./run_step_context_whitelist.js";
 import { isValidStepValueForStorage } from "./run_step_value_shape.js";
 import { productsServicesItemsFromText } from "../shared/productsservices_items.js";
+import {
+  attachCompareRuntime,
+  clearCompareRuntime,
+  readCompareRuntime,
+} from "./compare_runtime.js";
 
 type ParseStep0FinalFn = (raw: string, fallbackName: string) => { name?: string } | null | undefined;
 
@@ -295,43 +300,18 @@ export function createRunStepRuntimeStateHelpers(deps: CreateRunStepRuntimeState
         ? { ...((next as any).last_specialist_result as Record<string, unknown>) }
         : null;
     if (!last) return next;
-    const targetField = String((last as any).compare_target_field || "").trim();
+    const compareState = readCompareRuntime(last);
+    const targetField = String(compareState?.target_field || "").trim();
     const currentStep = String((next as any).current_step || "").trim();
     const shouldResetCompareState =
       targetField === stepId ||
       (targetField === "" && currentStep === stepId) ||
-      String((last as any).compare_pending || "").trim() === "true";
+      compareState?.status === "pending";
     if (!shouldResetCompareState) return next;
     const resetLast = {
-      ...last,
-      compare_pending: "false",
-      compare_selected: "",
-      compare_user_raw: "",
-      compare_user_normalized: "",
-      compare_user_items: [],
-      compare_suggestion_items: [],
-      compare_base_items: [],
-      compare_list_semantics: "delta",
-      compare_agent_current: "",
-      compare_mode: "",
-      compare_target_field: "",
-      compare_presentation: "",
-      compare_variant: "",
-      compare_user_label: "",
-      compare_suggestion_label: "",
-      compare_compare_mode: "",
-      compare_compare_cursor: "",
-      compare_compare_units: [],
-      compare_compare_segments: [],
-      compare_user_variant_semantics: "",
-      compare_user_variant_stepworthy: "",
+      ...clearCompareRuntime(last),
       feedback_reason_key: "",
       feedback_reason_text: "",
-      pending_suggestion_intent: "",
-      pending_suggestion_anchor: "",
-      pending_suggestion_seed_source: "",
-      pending_suggestion_feedback_text: "",
-      pending_suggestion_presentation_mode: "",
       current_value_refinement_pending: "false",
       current_value_refinement_target_field: "",
       current_value_refinement_feedback_text: "",
@@ -340,7 +320,7 @@ export function createRunStepRuntimeStateHelpers(deps: CreateRunStepRuntimeState
       proceed_block_reason_codes: [],
       proceed_block_rule_count: 0,
     };
-    (next as any).last_specialist_result = resetLast;
+    (next as any).last_specialist_result = attachCompareRuntime(resetLast);
     return next;
   }
 
@@ -520,7 +500,7 @@ export function createRunStepRuntimeStateHelpers(deps: CreateRunStepRuntimeState
     const field = fieldForStep(stepId);
     const fieldValue = field ? String(last[field] || "").trim() : "";
     const refined = String(last.refined_formulation || "").trim();
-    const wordingValue = String(last.compare_agent_current || "").trim();
+    const wordingValue = String(readCompareRuntime(last)?.suggestion_text || "").trim();
     const provisional = provisionalValueForStep(state, stepId);
     const finalField = FINAL_FIELD_BY_STEP_ID[stepId] || "";
     const finalValue = finalField ? String((state as any)?.[finalField] || "").trim() : "";
@@ -631,13 +611,14 @@ export function createRunStepRuntimeStateHelpers(deps: CreateRunStepRuntimeState
     const contextSnapshotV2Enabled = String(process.env.BSC_CONTEXT_SNAPSHOT_V2 || "1").trim() !== "0";
     const lastRaw =
       state.last_specialist_result && typeof state.last_specialist_result === "object"
-        ? (state.last_specialist_result as Record<string, unknown>)
+        ? ({ ...(state.last_specialist_result as Record<string, unknown>) })
         : {};
-    const pendingSuggestionIntent = String(lastRaw.pending_suggestion_intent || "").trim();
-    const pendingSuggestionAnchor = String(lastRaw.pending_suggestion_anchor || "").trim();
-    const pendingSuggestionSeedSource = String(lastRaw.pending_suggestion_seed_source || "").trim();
-    const pendingSuggestionFeedbackText = String(lastRaw.pending_suggestion_feedback_text || "").trim();
-    const pendingSuggestionPresentationMode = String(lastRaw.pending_suggestion_presentation_mode || "").trim();
+    const compareState = readCompareRuntime(lastRaw);
+    const pendingSuggestionIntent = String(compareState?.pending_text_intent || "").trim();
+    const pendingSuggestionAnchor = String(compareState?.pending_text_anchor || "").trim();
+    const pendingSuggestionSeedSource = String(compareState?.pending_text_seed_source || "").trim();
+    const pendingSuggestionFeedbackText = String(compareState?.pending_text_feedback_text || "").trim();
+    const pendingSuggestionPresentationMode = String(compareState?.pending_text_presentation_mode || "").trim();
     const proceedRequestIntent = String(lastRaw.proceed_request_intent || "").trim();
     const proceedBlockReasonCodes = Array.isArray(lastRaw.proceed_block_reason_codes)
       ? (lastRaw.proceed_block_reason_codes as unknown[]).map((value) => String(value || "").trim()).filter(Boolean)

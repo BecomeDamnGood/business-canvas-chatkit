@@ -6,7 +6,8 @@ import type { CanvasState } from "../core/state.js";
 import {
   normalizeStringArray,
   parseRetainedInstruction,
-} from "../core/ui_feedback_contract.js";
+  readCompareRuntime,
+} from "./compare_runtime.js";
 import { labelKeyForMenuAction } from "../core/menu_contract.js";
 import { UI_STRINGS_DEFAULT, UI_STRINGS_WITH_MENU_KEYS } from "../i18n/ui_strings_defaults.js";
 import { resolveUiStringForState } from "../i18n/ui_strings_lookup.js";
@@ -191,24 +192,21 @@ function buildNormalCompareRenderModel(
 ): PendingInteractionCompareRenderModel | null {
   const state = toRecord(response.state);
   const specialist = toRecord(response.specialist);
-  if (String(specialist.compare_pending || "").trim() !== "true") return null;
-  if (String(specialist.compare_presentation || "").trim() === "canonical") return null;
+  const compare = readCompareRuntime(specialist);
+  if (!compare || compare.status !== "pending") return null;
+  if (compare.presentation === "canonical") return null;
   const defaultUserLabel = uiLabelForKey(state, "compareHeading");
   const defaultSuggestionLabel = uiLabelForKey(state, "compareSuggestionLabel");
-  const mode = String(specialist.compare_mode || "text").trim().toLowerCase() === "list"
-    ? "list"
-    : "text";
+  const mode = compare.mode;
   const instructionSource = String(
-    specialist.compare_instruction || specialist.compare_instruction || uiLabelForKey(state, "compareInstruction")
+    specialist.compare_instruction || uiLabelForKey(state, "compareInstruction")
   ).trim();
   const parsedInstruction = parseRetainedInstruction(instructionSource);
-  const feedbackReasonText = String(
-    specialist.feedback_reason_text || specialist.pending_suggestion_feedback_text || ""
-  ).trim();
-  const userText = String(specialist.compare_user_normalized || specialist.compare_user_raw || "").trim();
-  const suggestionText = String(specialist.compare_agent_current || specialist.refined_formulation || "").trim();
-  const userItems = normalizeStringArray(specialist.compare_user_items);
-  const suggestionItems = normalizeStringArray(specialist.compare_suggestion_items);
+  const feedbackReasonText = String(compare.feedback_reason_text || "").trim();
+  const userText = String(compare.user_normalized_text || compare.user_text || "").trim();
+  const suggestionText = String(compare.suggestion_text || specialist.refined_formulation || "").trim();
+  const userItems = normalizeStringArray(compare.user_items);
+  const suggestionItems = normalizeStringArray(compare.suggestion_items);
   const hasComparableValues =
     mode === "list"
       ? userItems.length > 0 && suggestionItems.length > 0
@@ -216,11 +214,11 @@ function buildNormalCompareRenderModel(
   if (!feedbackReasonText || !hasComparableValues) return null;
   return {
     mode,
-    variant: normalizePendingInteractionVariant(specialist.compare_variant),
+    variant: normalizePendingInteractionVariant(compare.variant),
     instruction: parsedInstruction.instructionText,
     feedback_reason_text: feedbackReasonText,
-    user_label: String(specialist.compare_user_label || "").trim() || defaultUserLabel,
-    suggestion_label: String(specialist.compare_suggestion_label || "").trim() || defaultSuggestionLabel,
+    user_label: String(compare.user_label || "").trim() || defaultUserLabel,
+    suggestion_label: String(compare.suggestion_label || "").trim() || defaultSuggestionLabel,
     user_text: userText,
     suggestion_text: suggestionText,
     user_items: userItems,

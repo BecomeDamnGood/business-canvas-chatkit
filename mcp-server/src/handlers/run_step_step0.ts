@@ -1,4 +1,5 @@
 import type { CanvasState } from "../core/state.js";
+import { clearCompareRuntime } from "./compare_runtime.js";
 
 type Step0Parsed = { venture: string; name: string; status: string };
 type Step0TurnIntent = "confirm_start" | "change_name" | "other";
@@ -197,13 +198,10 @@ export function createRunStepStep0DisplayHelpers(deps: RunStepStep0DisplayDeps) 
     const cleanedMessage = deps.stripChoiceInstructionNoise(rawMessage);
     const hasMessage = Boolean(cleanedMessage);
     const output = {
-      ...next,
+      ...clearCompareRuntime(next),
       action: "ASK",
       message: hasMessage ? cleanedMessage : deps.step0CardDescForState(state),
       question: deps.step0QuestionForState(state),
-      compare_pending: "false",
-      compare_selected: "",
-      compare_list_semantics: "delta",
       feedback_reason_key: "",
       feedback_reason_text: "",
       step_0: "",
@@ -239,15 +237,12 @@ export function createRunStepStep0DisplayHelpers(deps: RunStepStep0DisplayDeps) 
       if (hasStep0) {
         const parsed = parseStep0Final(step0FinalRaw, String((state as any).business_name || "TBD"));
         const output = {
-          ...next,
+          ...clearCompareRuntime(next),
           action: "ASK",
           message: deps.buildBenProfileMessage(state),
           question: deps.step0ReadinessQuestion(state, parsed),
           business_name: parsed.name || "TBD",
           step_0: step0FinalRaw,
-          compare_pending: "false",
-          compare_selected: "",
-          compare_list_semantics: "delta",
           feedback_reason_key: "",
           feedback_reason_text: "",
           is_offtopic: true,
@@ -290,13 +285,11 @@ export function createRunStepStep0DisplayHelpers(deps: RunStepStep0DisplayDeps) 
         userIntent === "change_name" && (hasNameMutation || hasTupleMutation);
       if (shouldApplyEdit && candidateStep0) {
         const parsedEdit = parseStep0Final(candidateStep0, parsedFromState.name || "TBD");
+        Object.assign(next, clearCompareRuntime(next));
         next.action = "ASK";
         next.question = deps.step0ReadinessQuestion(state, parsedEdit);
         next.business_name = parsedEdit.name || "TBD";
         next.step_0 = candidateStep0;
-        next.compare_pending = "false";
-        next.compare_selected = "";
-        next.compare_list_semantics = "delta";
         next.feedback_reason_key = "";
         next.feedback_reason_text = "";
         if (!String(next.message || "").trim()) {
@@ -305,13 +298,11 @@ export function createRunStepStep0DisplayHelpers(deps: RunStepStep0DisplayDeps) 
         applyStep0InteractionMetadata(next, "step0_editing");
         return next;
       }
+      Object.assign(next, clearCompareRuntime(next));
       next.action = "ASK";
       next.question = deps.step0ReadinessQuestion(state, parsedFromState);
       next.business_name = parsedFromState.name || "TBD";
       next.step_0 = step0FinalRaw;
-      next.compare_pending = "false";
-      next.compare_selected = "";
-      next.compare_list_semantics = "delta";
       next.feedback_reason_key = "";
       next.feedback_reason_text = "";
       applyStep0InteractionMetadata(next, "step0_ready");

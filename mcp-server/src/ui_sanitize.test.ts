@@ -2422,20 +2422,18 @@ test("bundled runtime fail-closes missing canonical widget payloads", () => {
   assert.match(source, /widget_result:/);
 });
 
-test("bundled compare view prefers the server feedback contract over legacy compare shadows", () => {
+test("bundled compare view reads feedback only from pending_interaction and not from legacy feedback contracts", () => {
   const source = fs.readFileSync(new URL("../ui/step-card.bundled.html", import.meta.url), "utf8");
-  assert.match(source, /class="compareFeedback" id="compareFeedback"/);
-  assert.match(source, /function readFeedbackContract\(uiPayloadRaw\)/);
+  assert.doesNotMatch(source, /function readFeedbackContract\(uiPayloadRaw\)/);
   assert.match(source, /function readPendingInteraction\(uiPayloadRaw\)/);
   assert.match(source, /const feedbackEl = document\.getElementById\("compareFeedback"\);/);
   assert.doesNotMatch(source, /function readCompareCompareFeedbackText\(compareRaw\)/);
   assert.match(source, /const pendingInteraction = readPendingInteraction\(uiPayload\);/);
   assert.match(source, /const feedbackReasonText = pendingInteraction\.renderModel\.feedbackReasonText;/);
   assert.match(source, /renderStructuredText\(feedbackEl, feedbackReasonText\);/);
-  assert.match(source, /feedbackContract = readFeedbackContract\(uiPayload\);/);
+  assert.doesNotMatch(source, /feedbackContract = readFeedbackContract\(uiPayload\);/);
   assert.match(source, /retainedHeading: pendingInteraction\.renderModel\.retainedHeading,/);
   assert.match(source, /feedbackEl\.style\.display = feedbackReasonText \? "block" : "none";/);
-  assert.match(source, /\.compareFeedback p,/);
   assert.match(source, /\.cardDesc \.cardFeedbackNote/);
 });
 

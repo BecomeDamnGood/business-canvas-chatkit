@@ -8,6 +8,12 @@ import {
 import type { CompareUiPayload } from "./run_step_ui_payload.js";
 import type { AcceptedOutputUserTurnClassification } from "./run_step_accepted_output_semantics.js";
 import { resolveBusinessListTurn } from "./run_step_business_list_turn.js";
+import {
+  attachCompareRuntime,
+  clearCompareRuntime,
+  patchCompareRuntime,
+  readCompareRuntime,
+} from "./compare_runtime.js";
 
 type CompareMode = "text" | "list";
 type CompareVariant = "default" | "clarify_dual" | "grouped_list_units";
@@ -491,8 +497,8 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
       uiStringLocaleFirst(state, "compareGroupedCompareRetainedHeading"),
       clarifyUserLabelForState(state),
       clarifySuggestionLabelForState(state),
-      String(specialist?.compare_user_label || ""),
-      String(specialist?.compare_suggestion_label || ""),
+      String(readCompareRuntime(specialist)?.user_label || ""),
+      String(readCompareRuntime(specialist)?.suggestion_label || ""),
     ];
     return new Set(
       labels
@@ -540,8 +546,8 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
     void activeSpecialist;
     if (!isCompareEligibleStep(stepId)) return false;
     if (!isDreamBuilderContext(stepId, dreamRuntimeModeRaw)) return true;
-    const current = specialist && typeof specialist === "object" ? specialist : {};
-    const previous = previousSpecialist && typeof previousSpecialist === "object" ? previousSpecialist : {};
+    const current = specialist || {};
+    const previous = previousSpecialist || {};
     if (deps.normalizeDreamRuntimeMode(dreamRuntimeModeRaw) === "builder_scoring") return false;
     const currentScoringPhase = String(current.scoring_phase || "").trim() === "true";
     const previousScoringPhase = String(previous.scoring_phase || "").trim() === "true";
@@ -628,9 +634,10 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
   }): ComparePresentation {
     const { stepId, mode, previousSpecialist, forcePending } = params;
     if (!isSingleValueTextChoiceStep(stepId, mode)) return "picker";
+    const previousCompare = readCompareRuntime(previousSpecialist);
     const preservedPresentation =
-      forcePending && String(previousSpecialist.compare_pending || "") === "true"
-        ? String(previousSpecialist.compare_presentation || "").trim()
+      forcePending && previousCompare?.status === "pending"
+        ? String(previousCompare.presentation || "").trim()
         : "";
     if (preservedPresentation === "canonical" || preservedPresentation === "picker") {
       return preservedPresentation;
@@ -664,66 +671,38 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
   }
 
   function copyPendingCompareState(current: unknown, previous: Record<string, unknown>): Record<string, unknown> {
-    const pending = String(previous.compare_pending || "") === "true";
-    if (!pending || !current || typeof current !== "object") return (current || {}) as Record<string, unknown>;
-    return {
-      ...(current as Record<string, unknown>),
-      compare_pending: "true",
-      compare_selected: "",
-      compare_user_raw: String(previous.compare_user_raw || ""),
-      compare_user_normalized: String(previous.compare_user_normalized || ""),
-      compare_user_items: Array.isArray(previous.compare_user_items)
-        ? previous.compare_user_items
-        : [],
-      compare_suggestion_items: Array.isArray(previous.compare_suggestion_items)
-        ? previous.compare_suggestion_items
-        : [],
-      compare_base_items: Array.isArray(previous.compare_base_items)
-        ? previous.compare_base_items
-        : [],
-      compare_list_semantics: String(previous.compare_list_semantics || "delta"),
-      compare_agent_current: String(previous.compare_agent_current || ""),
-      compare_mode: String(previous.compare_mode || ""),
-      compare_target_field: String(previous.compare_target_field || ""),
-      compare_presentation: String(previous.compare_presentation || ""),
-      compare_variant: String(previous.compare_variant || ""),
-      compare_user_label: String(previous.compare_user_label || ""),
-      compare_suggestion_label: String(previous.compare_suggestion_label || ""),
-      compare_compare_mode: String(previous.compare_compare_mode || ""),
-      compare_compare_cursor: String(previous.compare_compare_cursor || ""),
-      compare_compare_units: Array.isArray(previous.compare_compare_units)
-        ? previous.compare_compare_units
-        : [],
-      compare_compare_segments: Array.isArray(previous.compare_compare_segments)
-        ? previous.compare_compare_segments
-        : [],
-      compare_user_variant_semantics: String(previous.compare_user_variant_semantics || ""),
-      compare_user_variant_stepworthy: String(previous.compare_user_variant_stepworthy || ""),
-      feedback_reason_key: String(previous.feedback_reason_key || ""),
-      feedback_reason_text: String(previous.feedback_reason_text || ""),
-      pending_suggestion_intent: String(previous.pending_suggestion_intent || ""),
-      pending_suggestion_anchor: String(previous.pending_suggestion_anchor || ""),
-      pending_suggestion_seed_source: String(previous.pending_suggestion_seed_source || ""),
-      pending_suggestion_feedback_text: String(previous.pending_suggestion_feedback_text || ""),
-      pending_suggestion_presentation_mode: String(previous.pending_suggestion_presentation_mode || ""),
-      feedback_mode: String(previous.feedback_mode || "none"),
-    };
+    const currentRecord = current && typeof current === "object" ? { ...(current as Record<string, unknown>) } : {};
+    const previousCompare = readCompareRuntime(previous);
+    if (previousCompare?.status !== "pending") return attachCompareRuntime(currentRecord);
+    return patchCompareRuntime(
+      {
+        ...currentRecord,
+        feedback_mode: String((previous as Record<string, unknown>).feedback_mode || "none"),
+      },
+      {
+        ...previousCompare,
+        status: "pending",
+        resolution: "",
+      }
+    );
   }
 
   function clearedResolvedCompareTransientFields(): Record<string, unknown> {
     return {
       feedback_reason_key: "",
       feedback_reason_text: "",
-      pending_suggestion_intent: "",
-      pending_suggestion_anchor: "",
-      pending_suggestion_seed_source: "",
-      pending_suggestion_feedback_text: "",
-      pending_suggestion_presentation_mode: "",
       feedback_mode: "none",
       current_value_refinement_pending: "false",
       current_value_refinement_target_field: "",
       current_value_refinement_feedback_text: "",
       current_value_refinement_anchor_value: "",
+    };
+  }
+
+  function clearCompareForResolvedDisplay(base: Record<string, unknown>): Record<string, unknown> {
+    return {
+      ...clearCompareRuntime(base),
+      ...clearedResolvedCompareTransientFields(),
     };
   }
 
@@ -1572,39 +1551,13 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
       committedText,
       baseItems,
     } = params;
-    return {
-      ...specialistResult,
+    return attachCompareRuntime({
+      ...clearCompareRuntime(specialistResult),
       ...clearedResolvedCompareTransientFields(),
       ...clearedDreamBuilderCompareFields(),
       message,
-      compare_pending: "false",
-      compare_selected: "",
-      compare_user_raw: "",
-      compare_user_normalized: "",
-      compare_user_items: [],
-      compare_suggestion_items: [],
-      compare_base_items: [],
-      compare_list_semantics: "delta",
-      compare_agent_current: "",
-      compare_mode: "",
-      compare_target_field: "",
-      compare_presentation: "",
-      compare_variant: "",
-      compare_user_label: "",
-      compare_suggestion_label: "",
-      compare_compare_mode: "",
-      compare_compare_cursor: "",
-      compare_compare_units: [],
-      compare_compare_segments: [],
-      compare_user_variant_semantics: "",
-      compare_user_variant_stepworthy: "",
       feedback_reason_key: "",
       feedback_reason_text: rationale,
-      pending_suggestion_intent: "",
-      pending_suggestion_anchor: "",
-      pending_suggestion_seed_source: "",
-      pending_suggestion_feedback_text: "",
-      pending_suggestion_presentation_mode: "",
       __dream_builder_compare_pending: "true",
       __dream_builder_compare_kind: compareKind,
       __dream_builder_compare_current_items: comparePlan.initialUnit.user_items,
@@ -1618,7 +1571,7 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
       ...(targetField ? { [targetField]: committedText } : {}),
       statements: baseItems,
       refined_formulation: committedText,
-    };
+    });
   }
 
   function buildDreamBuilderPendingSimpleCompareSpecialist(params: {
@@ -1658,39 +1611,13 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
       segments.push({ kind: "retained", items: retainedItems });
     }
     segments.push({ kind: "unit", unit_id: "unit_1" });
-    return {
-      ...specialistResult,
+    return attachCompareRuntime({
+      ...clearCompareRuntime(specialistResult),
       ...clearedResolvedCompareTransientFields(),
       ...clearedDreamBuilderCompareFields(),
       message,
-      compare_pending: "false",
-      compare_selected: "",
-      compare_user_raw: "",
-      compare_user_normalized: "",
-      compare_user_items: [],
-      compare_suggestion_items: [],
-      compare_base_items: [],
-      compare_list_semantics: "delta",
-      compare_agent_current: "",
-      compare_mode: "",
-      compare_target_field: "",
-      compare_presentation: "",
-      compare_variant: "",
-      compare_user_label: "",
-      compare_suggestion_label: "",
-      compare_compare_mode: "",
-      compare_compare_cursor: "",
-      compare_compare_units: [],
-      compare_compare_segments: [],
-      compare_user_variant_semantics: "",
-      compare_user_variant_stepworthy: "",
       feedback_reason_key: "",
       feedback_reason_text: rationale,
-      pending_suggestion_intent: "",
-      pending_suggestion_anchor: "",
-      pending_suggestion_seed_source: "",
-      pending_suggestion_feedback_text: "",
-      pending_suggestion_presentation_mode: "",
       __dream_builder_compare_pending: "true",
       __dream_builder_compare_kind: compareKind,
       __dream_builder_compare_current_items: currentItems,
@@ -1704,7 +1631,7 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
       ...(targetField ? { [targetField]: committedText } : {}),
       statements: baseItems,
       refined_formulation: committedText,
-    };
+    });
   }
 
   function hasDreamBuilderPendingCompare(specialist: Record<string, unknown>): boolean {
@@ -1959,6 +1886,15 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
     unit: CompareCompareUnit;
     state: CanvasState;
   }): string {
+    const unitReason = String(params.unit.feedback_reason_text || "").trim();
+    if (unitReason) {
+      return sanitizeFeedbackReasonForDisplay({
+        stepId: params.stepId,
+        rawReason: unitReason,
+        resolveString: (key, fallback = "") =>
+          deps.uiStringFromStateMap(params.state, key, fallback || deps.uiDefaultString(key, fallback)),
+      });
+    }
     const explicitReason = resolveFeedbackReasonFromSpecialist(params.state, params.specialistResult);
     if (explicitReason) return explicitReason;
     if (
@@ -2079,8 +2015,9 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
     telemetry?: unknown
   ): string {
     void telemetry;
+    const compare = readCompareRuntime(prev);
     const selectedValue = String(
-      prev.compare_user_normalized || prev.compare_user_raw || prev.refined_formulation || ""
+      compare?.user_normalized_text || compare?.user_text || prev.refined_formulation || ""
     ).trim();
     const selection = deps.compareSelectionMessage(stepId, state, activeSpecialist, selectedValue);
     const rawFeedbackReason = userPickFeedbackReason(state, prev);
@@ -2119,7 +2056,7 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
     const result = lastSpecialistResult && typeof lastSpecialistResult === "object"
       ? (lastSpecialistResult as Record<string, unknown>)
       : {};
-    const stored = stripMarkupPreserveLines(String(result.compare_agent_current || "").trim());
+    const stored = stripMarkupPreserveLines(String(readCompareRuntime(result)?.suggestion_text || "").trim());
     if (stored) return stored;
     return stripMarkupPreserveLines(String(result.refined_formulation || "").trim());
   }
@@ -2182,12 +2119,12 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
     specialist: Record<string, unknown>;
     compare: CompareUiPayload | null;
   } {
+    const previousSpecialist = attachCompareRuntime(params.previousSpecialist);
+    const specialistResult = attachCompareRuntime(params.specialistResult);
     const {
       stepId,
       state,
       activeSpecialist,
-      previousSpecialist,
-      specialistResult,
       userTextRaw,
       isOfftopic,
       forcePending,
@@ -2196,61 +2133,24 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
     } = params;
     if (!isCompareEligibleContext(stepId, activeSpecialist, specialistResult, previousSpecialist, dreamRuntimeModeRaw)) {
       return {
-        specialist: {
-          ...specialistResult,
-          compare_pending: "false",
-          compare_selected: "",
-          compare_list_semantics: "delta",
-          compare_presentation: "",
-          compare_compare_mode: "",
-          compare_compare_cursor: "",
-          compare_compare_units: [],
-          compare_compare_segments: [],
-          compare_user_variant_semantics: "",
-          compare_user_variant_stepworthy: "",
-          feedback_reason_key: "",
-          feedback_reason_text: "",
-          pending_suggestion_intent: "",
-          pending_suggestion_anchor: "",
-          pending_suggestion_seed_source: "",
-          pending_suggestion_feedback_text: "",
-          pending_suggestion_presentation_mode: "",
-        },
+        specialist: clearCompareForResolvedDisplay(specialistResult),
         compare: null,
       };
     }
     if (!isCompareIntentEligibleSpecialist(specialistResult)) {
       return {
-        specialist: {
-          ...specialistResult,
-          compare_pending: "false",
-          compare_selected: "",
-          compare_list_semantics: "delta",
-          compare_presentation: "",
-          compare_compare_mode: "",
-          compare_compare_cursor: "",
-          compare_compare_units: [],
-          compare_compare_segments: [],
-          compare_user_variant_semantics: "",
-          compare_user_variant_stepworthy: "",
-          feedback_reason_key: "",
-          feedback_reason_text: "",
-          pending_suggestion_intent: "",
-          pending_suggestion_anchor: "",
-          pending_suggestion_seed_source: "",
-          pending_suggestion_feedback_text: "",
-          pending_suggestion_presentation_mode: "",
-        },
+        specialist: clearCompareForResolvedDisplay(specialistResult),
         compare: null,
       };
     }
-    if (isOfftopic) return { specialist: specialistResult, compare: null };
+    if (isOfftopic) return { specialist: attachCompareRuntime(specialistResult), compare: null };
+    const previousCompare = readCompareRuntime(previousSpecialist);
     const fallbackUserRaw = forcePending
-      ? String(previousSpecialist.compare_user_normalized || previousSpecialist.compare_user_raw || "").trim()
+      ? String(previousCompare?.user_normalized_text || previousCompare?.user_text || "").trim()
       : "";
     const userRaw = String(userTextRaw || fallbackUserRaw).trim();
     if (!forcePending && !deps.shouldTreatAsStepContributingInput(userRaw, stepId)) {
-      return { specialist: specialistResult, compare: null };
+      return { specialist: attachCompareRuntime(specialistResult), compare: null };
     }
     const submittedIntent = normalizePendingSuggestionIntent(params.submittedTextIntent);
     const submittedAnchor = normalizePendingSuggestionAnchor(params.submittedTextAnchor);
@@ -2268,7 +2168,7 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
       activeSpecialist,
       suggestionRawCandidate
     );
-    if (!userRaw || !suggestionRaw) return { specialist: specialistResult, compare: null };
+    if (!userRaw || !suggestionRaw) return { specialist: attachCompareRuntime(specialistResult), compare: null };
     const mode: CompareMode =
       isListChoiceScope(stepId, activeSpecialist) || dreamBuilderContext ? "list" : "text";
     const basePresentation: ComparePresentation = resolveComparePresentation({
@@ -2385,7 +2285,7 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
       }
     }
     if (mode === "list" && !forcePending && effectiveUserItems.length === 0) {
-      return { specialist: specialistResult, compare: null };
+      return { specialist: attachCompareRuntime(specialistResult), compare: null };
     }
     const userRawSafe = stripMarkupPreserveLines(userRaw);
     const normalizedUserSafe = stripMarkupPreserveLines(normalizedUser);
@@ -2408,23 +2308,24 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
         ? chosenItems.join("\n")
         : (String(suggestionRaw || "").trim() || normalizedUser);
       const autoSelectedBase: Record<string, unknown> = {
-        ...specialistResult,
-        ...clearedResolvedCompareTransientFields(),
-        compare_pending: "false",
-        compare_selected: "suggestion",
-        compare_list_semantics: "delta",
-        compare_presentation: "",
-        compare_compare_mode: "",
-        compare_compare_cursor: "",
-        compare_compare_units: [],
-        compare_compare_segments: [],
-        compare_user_variant_semantics: "",
-        compare_user_variant_stepworthy: "",
+        ...clearCompareForResolvedDisplay(specialistResult),
         refined_formulation: chosen,
         ...(mode === "list" ? { statements: chosenItems } : {}),
       };
-      const autoSelected = withUpdatedTargetField(autoSelectedBase, stepId, chosen);
-      return { specialist: autoSelected, compare: null };
+      const autoSelected = patchCompareRuntime(
+        withUpdatedTargetField(autoSelectedBase, stepId, chosen),
+        {
+          kind: mode === "list" ? "list_compare" : "text_compare",
+          mode,
+          status: "resolved",
+          resolution: "suggestion",
+          target_field: targetField,
+          suggestion_text: chosen,
+          base_items: mode === "list" ? chosenItems : [],
+          list_semantics: "delta",
+        }
+      );
+      return { specialist: attachCompareRuntime(autoSelected), compare: null };
     }
     if (!forcePending && !deps.isMaterialRewriteCandidate(userRaw, suggestionRaw)) {
       if (mode === "text") {
@@ -2441,10 +2342,10 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
             stepId,
             correctedSafe
           );
-          return { specialist: corrected, compare: null };
+          return { specialist: attachCompareRuntime(corrected), compare: null };
         }
       }
-      return { specialist: specialistResult, compare: null };
+      return { specialist: attachCompareRuntime(specialistResult), compare: null };
     }
     const pendingMessage = mode === "list"
       ? sanitizePendingListMessage(
@@ -2526,49 +2427,53 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
       shouldPreferInitialDreamPicker && feedbackMode !== "refine_current"
         ? "compare_suggestion"
         : feedbackMode;
-    const enriched: Record<string, unknown> = {
+    let enriched: Record<string, unknown> = patchCompareRuntime({
       ...specialistResult,
       message: pendingMessage,
-      compare_pending: "true",
-      compare_selected: "",
-      compare_user_raw: userRawSafe,
-      compare_user_normalized: normalizedUserSafe,
-      compare_user_items: effectiveUserItems,
-      compare_base_items: baseItems,
-      compare_list_semantics: listSemantics,
-      compare_agent_current: suggestionRaw,
-      compare_suggestion_items: suggestionItems,
-      compare_mode: mode,
-      compare_target_field: targetField,
-      compare_presentation: presentation,
-      compare_variant: variant === "default" ? "" : variant,
-      compare_user_label: wordingLabels.userLabel || "",
-      compare_suggestion_label: wordingLabels.suggestionLabel || "",
-      compare_compare_mode: comparePlan?.mode || "",
-      compare_compare_cursor: comparePlan ? "0" : "",
-      compare_compare_units: comparePlan?.units || [],
-      compare_compare_segments: comparePlan?.segments || [],
-      compare_user_variant_semantics: acceptedOutputUserTurnClassification?.turn_kind || "",
-      compare_user_variant_stepworthy:
-        acceptedOutputUserTurnClassification
-          ? (acceptedOutputUserTurnClassification.user_variant_is_stepworthy ? "true" : "false")
-          : "",
+      feedback_reason_key: "",
+      feedback_mode: effectiveFeedbackMode,
+    }, {
+      kind: mode === "list" ? "list_compare" : "text_compare",
+      mode,
+      status: "pending",
+      presentation,
+      resolution: "",
+      target_field: targetField,
+      variant: variant === "default" ? "" : variant,
+      user_text: userRawSafe,
+      user_normalized_text: normalizedUserSafe,
+      user_items: effectiveUserItems,
+      suggestion_text: suggestionRaw,
+      suggestion_items: suggestionItems,
+      base_items: baseItems,
+      list_semantics: listSemantics,
+      user_label: wordingLabels.userLabel || "",
+      suggestion_label: wordingLabels.suggestionLabel || "",
+      grouped_mode: comparePlan?.mode || "",
+      grouped_cursor: comparePlan ? "0" : "",
+      grouped_units: comparePlan?.units || [],
+      grouped_segments: comparePlan?.segments || [],
+      user_variant_semantics: acceptedOutputUserTurnClassification?.turn_kind || "",
+      user_variant_stepworthy: Boolean(
+        acceptedOutputUserTurnClassification?.user_variant_is_stepworthy
+      ),
       feedback_reason_key: "",
       feedback_reason_text: effectiveFeedbackReason,
-      feedback_mode: effectiveFeedbackMode,
-      pending_suggestion_intent: submittedIntent,
-      pending_suggestion_anchor: submittedAnchor,
-      pending_suggestion_seed_source: pendingSuggestionSeedSource,
-      pending_suggestion_feedback_text:
+      pending_text_intent: submittedIntent,
+      pending_text_anchor: submittedAnchor,
+      pending_text_seed_source: pendingSuggestionSeedSource,
+      pending_text_feedback_text:
         submittedAnchor === "suggestion" && feedbackText ? stripMarkupPreserveLines(feedbackText) : "",
-      pending_suggestion_presentation_mode: presentation,
-    };
+      pending_text_presentation_mode: presentation,
+    });
     if (comparePlan) {
-      enriched.compare_user_raw = comparePlan.initialUnit.user_text;
-      enriched.compare_user_normalized = comparePlan.initialUnit.user_text;
-      enriched.compare_user_items = comparePlan.initialUnit.user_items;
-      enriched.compare_agent_current = comparePlan.initialUnit.suggestion_text;
-      enriched.compare_suggestion_items = comparePlan.initialUnit.suggestion_items;
+      enriched = patchCompareRuntime(enriched, {
+        user_text: comparePlan.initialUnit.user_text,
+        user_normalized_text: comparePlan.initialUnit.user_text,
+        user_items: comparePlan.initialUnit.user_items,
+        suggestion_text: comparePlan.initialUnit.suggestion_text,
+        suggestion_items: comparePlan.initialUnit.suggestion_items,
+      });
     }
     if (targetField) {
       enriched[targetField] = committedText;
@@ -2582,15 +2487,15 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
       return { specialist: enriched, compare: null };
     }
     if (isAcceptedOutputSingleValueTextStep(stepId, mode) && effectiveFeedbackMode !== "compare_suggestion") {
-      enriched.compare_presentation = "canonical";
+      enriched = patchCompareRuntime(enriched, { presentation: "canonical" });
       return { specialist: enriched, compare: null };
     }
     if (!effectiveFeedbackReason) {
-      enriched.compare_presentation = "canonical";
+      enriched = patchCompareRuntime(enriched, { presentation: "canonical" });
       return { specialist: enriched, compare: null };
     }
     if (comparePlan && !String(comparePlan.initialUnit.feedback_reason_text || "").trim()) {
-      enriched.compare_presentation = "canonical";
+      enriched = patchCompareRuntime(enriched, { presentation: "canonical" });
       return { specialist: enriched, compare: null };
     }
     if (dreamBuilderContext && comparePlan) {
@@ -2621,7 +2526,7 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
         baseItems,
       });
       return {
-        specialist: dreamBuilderSpecialist,
+        specialist: attachCompareRuntime(dreamBuilderSpecialist),
         compare: null,
       };
     }
@@ -2670,7 +2575,7 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
         retainedItems,
       });
       return {
-        specialist: dreamBuilderSpecialist,
+        specialist: attachCompareRuntime(dreamBuilderSpecialist),
         compare: null,
       };
     }
@@ -2719,7 +2624,7 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
             suggestion_items: suggestionItems,
             instruction: compareInstructionForState(state),
           };
-    return { specialist: enriched, compare };
+    return { specialist: attachCompareRuntime(enriched), compare };
   }
 
   function applyComparePickSelection(params: ComparePickSelectionParams): {
@@ -2736,7 +2641,6 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
     ): Record<string, unknown> => {
       const {
         ui_content: _uiContent,
-        ui_feedback_contract: _uiFeedbackContract,
         ui_show_step_intro_chrome: _uiShowStepIntroChrome,
         ui_contract_id: _uiContractId,
         ui_contract_version: _uiContractVersion,
@@ -2745,7 +2649,7 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
       } = value;
       return rest;
     };
-    const prevRaw = ((state as any).last_specialist_result || {}) as Record<string, unknown>;
+    const prevRaw = attachCompareRuntime((state as any).last_specialist_result || {});
     if (stepId === deps.dreamStepId && hasDreamBuilderPendingCompare(prevRaw)) {
       const pickedUser = routeToken === "__COMPARE_PICK_USER__";
       const segments = normalizeCompareSegments(prevRaw.__dream_builder_compare_segments);
@@ -2770,56 +2674,45 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
       );
       const selected = withUpdatedTargetField(
         {
-          ...prevRaw,
+          ...clearCompareForResolvedDisplay(prevRaw),
           ...stripStaleUiContractFields(prevRaw),
-          ...clearedResolvedCompareTransientFields(),
           ...clearedDreamBuilderCompareFields(),
           message: selectedMessage,
-          compare_pending: "false",
-          compare_selected: pickedUser ? "user" : "suggestion",
-          compare_user_raw: "",
-          compare_user_normalized: "",
-          compare_user_items: [],
-          compare_suggestion_items: [],
-          compare_base_items: composedItems,
-          compare_list_semantics: "delta",
           refined_formulation: chosen,
-          compare_agent_current: chosen,
-          compare_presentation: "",
-          compare_variant: "",
-          compare_user_label: "",
-          compare_suggestion_label: "",
-          compare_compare_mode: "",
-          compare_compare_cursor: "",
-          compare_compare_units: [],
-          compare_compare_segments: [],
-          compare_user_variant_semantics: "",
-          compare_user_variant_stepworthy: "",
           feedback_reason_text: pickedUser ? userPickFeedbackReason(state, prevRaw) : "",
           statements: composedItems,
         },
         stepId,
         chosen
       );
+      const selectedWithCompare = patchCompareRuntime(selected, {
+        kind: "list_compare",
+        mode: "list",
+        status: "resolved",
+        resolution: pickedUser ? "user" : "suggestion",
+        target_field: stepId,
+        suggestion_text: chosen,
+        base_items: composedItems,
+        list_semantics: "delta",
+        feedback_reason_text: pickedUser ? userPickFeedbackReason(state, prevRaw) : "",
+      });
       const targetField = deps.fieldForStep(stepId);
-      const provisionalValue = targetField ? String(selected[targetField] || "").trim() : "";
+      const provisionalValue = targetField ? String(selectedWithCompare[targetField] || "").trim() : "";
       const stateForRender = provisionalValue
         ? deps.withProvisionalValue(state, stepId, provisionalValue, "compare_pick" as ProvisionalSource)
         : state;
       const rendered = deps.renderFreeTextTurnPolicy({
         stepId,
         state: stateForRender,
-        specialist: selected as Record<string, unknown>,
+        specialist: selectedWithCompare as Record<string, unknown>,
         previousSpecialist: prevRaw,
       });
       const renderedSpecialist = rendered.specialist as Record<string, unknown>;
       const selectedWithContract: Record<string, unknown> = {
-        ...stripStaleUiContractFields(selected),
+        ...stripStaleUiContractFields(selectedWithCompare),
         action: "ASK",
-        message: String(selected.message || "").trim() || String(renderedSpecialist?.message || "").trim(),
+        message: String(selectedWithCompare.message || "").trim() || String(renderedSpecialist?.message || "").trim(),
         question: String(renderedSpecialist?.question || ""),
-        compare_pending: "false",
-        compare_selected: pickedUser ? "user" : "suggestion",
         ...(typeof renderedSpecialist?.ui_show_step_intro_chrome !== "undefined"
           ? { ui_show_step_intro_chrome: renderedSpecialist.ui_show_step_intro_chrome }
           : {}),
@@ -2840,19 +2733,20 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
         nextState,
       };
     }
-    if (String(prevRaw.compare_pending || "") !== "true") {
+    const prevCompare = readCompareRuntime(prevRaw);
+    if (prevCompare?.status !== "pending") {
       return { handled: false, specialist: prevRaw, nextState: state };
     }
     const pickedUser = routeToken === "__COMPARE_PICK_USER__";
-    const mode: CompareMode = String(prevRaw.compare_mode || "text") === "list" ? "list" : "text";
+    const mode: CompareMode = prevCompare.mode === "list" ? "list" : "text";
     const compareMode: CompareCompareMode =
-      String(prevRaw.compare_compare_mode || "").trim() === "grouped_units"
+      String(prevCompare.grouped_mode || "").trim() === "grouped_units"
         ? "grouped_units"
         : "";
     if (compareMode === "grouped_units" && mode === "list") {
-      const compareUnits = normalizeCompareUnits(prevRaw.compare_compare_units);
-      const compareSegments = normalizeCompareSegments(prevRaw.compare_compare_segments);
-      const cursorRaw = Number.parseInt(String(prevRaw.compare_compare_cursor || "0"), 10);
+      const compareUnits = normalizeCompareUnits(prevCompare.grouped_units);
+      const compareSegments = normalizeCompareSegments(prevCompare.grouped_segments);
+      const cursorRaw = Number.parseInt(String(prevCompare.grouped_cursor || "0"), 10);
       const currentIndex = nextUnresolvedCompareUnitIndex(
         compareUnits,
         Number.isFinite(cursorRaw) ? cursorRaw : 0
@@ -2882,28 +2776,37 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
         if (!nextPayload) {
           return { handled: false, specialist: prevRaw, nextState: state };
         }
-        const nextPending: Record<string, unknown> = {
+        const nextPending: Record<string, unknown> = attachCompareRuntime({
           ...prevRaw,
           ...clearedResolvedCompareTransientFields(),
-          compare_pending: "true",
-          compare_selected: "",
-          compare_compare_mode: "grouped_units",
-          compare_compare_cursor: String(nextIndex),
-          compare_compare_units: updatedUnits,
-          compare_compare_segments: compareSegments,
-          compare_user_raw: nextUnit.user_text,
-          compare_user_normalized: nextUnit.user_text,
-          compare_user_items: nextUnit.user_items,
-          compare_agent_current: nextUnit.suggestion_text,
-          compare_suggestion_items: nextUnit.suggestion_items,
-          compare_variant: "grouped_list_units",
-          compare_user_label: String(nextPayload.user_label || prevRaw.compare_user_label || ""),
-          compare_suggestion_label: String(
-            nextPayload.suggestion_label || prevRaw.compare_suggestion_label || ""
-          ),
-          feedback_reason_text: String(nextUnit.feedback_reason_text || "").trim(),
-          pending_suggestion_presentation_mode: String(prevRaw.compare_presentation || ""),
-        };
+          compare_runtime: {
+            ...(prevCompare || {
+              kind: "list_compare",
+              mode: "list",
+              status: "pending",
+              presentation: "picker",
+              resolution: "",
+            }),
+            kind: "list_compare",
+            mode: "list",
+            status: "pending",
+            resolution: "",
+            grouped_mode: "grouped_units",
+            grouped_cursor: String(nextIndex),
+            grouped_units: updatedUnits,
+            grouped_segments: compareSegments,
+            user_text: nextUnit.user_text,
+            user_normalized_text: nextUnit.user_text,
+            user_items: nextUnit.user_items,
+            suggestion_text: nextUnit.suggestion_text,
+            suggestion_items: nextUnit.suggestion_items,
+            variant: "grouped_list_units",
+            user_label: String(nextPayload.user_label || prevCompare?.user_label || ""),
+            suggestion_label: String(nextPayload.suggestion_label || prevCompare?.suggestion_label || ""),
+            feedback_reason_text: String(nextUnit.feedback_reason_text || "").trim(),
+            pending_text_presentation_mode: String(prevCompare?.presentation || ""),
+          },
+        });
         const nextState: CanvasState = {
           ...state,
           last_specialist_result: nextPending,
@@ -2918,34 +2821,26 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
       const selected = withUpdatedTargetField(
         {
           ...stripStaleUiContractFields(prevRaw),
-          ...clearedResolvedCompareTransientFields(),
+          ...clearCompareForResolvedDisplay(prevRaw),
           message: selectedMessage,
-          compare_pending: "false",
-          compare_selected: pickedUser ? "user" : "suggestion",
-          compare_user_raw: "",
-          compare_user_normalized: "",
-          compare_user_items: [],
-          compare_suggestion_items: [],
-          compare_base_items: composedItems,
-          compare_list_semantics: "delta",
           refined_formulation: chosen,
-          compare_agent_current: chosen,
-          compare_presentation: "",
-          compare_variant: "",
-          compare_user_label: "",
-          compare_suggestion_label: "",
-          compare_compare_mode: "",
-          compare_compare_cursor: "",
-          compare_compare_units: [],
-          compare_compare_segments: [],
-          compare_user_variant_semantics: "",
-          compare_user_variant_stepworthy: "",
           feedback_reason_text: pickedUser ? userPickFeedbackReason(state, prevRaw) : "",
           ...(mode === "list" ? { statements: composedItems } : {}),
         },
         stepId,
         chosen
       );
+      const selectedCompare = patchCompareRuntime(selected, {
+        kind: "list_compare",
+        mode: "list",
+        status: "resolved",
+        resolution: pickedUser ? "user" : "suggestion",
+        target_field: stepId,
+        suggestion_text: chosen,
+        base_items: composedItems,
+        list_semantics: "delta",
+        feedback_reason_text: pickedUser ? userPickFeedbackReason(state, prevRaw) : "",
+      });
       const targetField = deps.fieldForStep(stepId);
       const provisionalValue = targetField ? String(selected[targetField] || "").trim() : "";
       const stateForRender = provisionalValue
@@ -2954,21 +2849,17 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
       const rendered = deps.renderFreeTextTurnPolicy({
         stepId,
         state: stateForRender,
-        specialist: selected as Record<string, unknown>,
+        specialist: selectedCompare as Record<string, unknown>,
         previousSpecialist: prevRaw,
       });
       const renderedSpecialist = rendered.specialist as Record<string, unknown>;
       const renderedUiContent = (renderedSpecialist as Record<string, unknown>).ui_content;
-      const renderedUiFeedbackContract = (renderedSpecialist as Record<string, unknown>).ui_feedback_contract;
-      const selectedWithContract: Record<string, unknown> = {
-        ...stripStaleUiContractFields(selected),
+      const selectedWithContract: Record<string, unknown> = attachCompareRuntime({
+        ...stripStaleUiContractFields(selectedCompare),
         action: "ASK",
-        message: String(selected.message || "").trim() || String(renderedSpecialist?.message || "").trim(),
+        message: String(selectedCompare.message || "").trim() || String(renderedSpecialist?.message || "").trim(),
         question: String(renderedSpecialist?.question || ""),
-        compare_pending: "false",
-        compare_selected: pickedUser ? "user" : "suggestion",
         ...(renderedUiContent ? { ui_content: renderedUiContent } : {}),
-        ...(renderedUiFeedbackContract ? { ui_feedback_contract: renderedUiFeedbackContract } : {}),
         ...(typeof renderedSpecialist?.ui_show_step_intro_chrome !== "undefined"
           ? { ui_show_step_intro_chrome: renderedSpecialist.ui_show_step_intro_chrome }
           : {}),
@@ -2977,7 +2868,7 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
         ui_text_keys: Array.isArray(renderedSpecialist?.ui_text_keys)
           ? renderedSpecialist.ui_text_keys
           : rendered.textKeys,
-      };
+      });
       const selectedContractId = String(rendered.contractId || selectedWithContract.ui_contract_id || "");
       const nextState: CanvasState = {
         ...withAcceptedListSelectionState(stateForRender, stepId, composedItems),
@@ -2987,20 +2878,20 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
       return { handled: true, specialist: selectedWithContract, nextState };
     }
     const listSemantics: CompareListSemantics =
-      String(prevRaw.compare_list_semantics || "delta") === "full" ? "full" : "delta";
+      String(prevCompare.list_semantics || "delta") === "full" ? "full" : "delta";
     const activeSpecialist = String((state as any)?.active_specialist || "").trim();
     const baseItems = mode === "list" ? extractCommittedListItems(stepId, prevRaw) : [];
     const fallbackPickedRaw = pickedUser
-      ? String(prevRaw.compare_user_normalized || prevRaw.compare_user_raw || "").trim()
-      : String(prevRaw.compare_agent_current || prevRaw.refined_formulation || "").trim();
+      ? String(prevCompare.user_normalized_text || prevCompare.user_text || "").trim()
+      : String(prevCompare.suggestion_text || prevRaw.refined_formulation || "").trim();
     const fallbackPickedText = mode === "list"
       ? unwrapSelectionHeadingFromText(stepId, state, activeSpecialist, fallbackPickedRaw)
       : fallbackPickedRaw;
     const pickedItems = mode === "list"
       ? (() => {
-          const fromPending = pickedUser
-            ? toTrimmedStringArray(prevRaw.compare_user_items)
-            : toTrimmedStringArray(prevRaw.compare_suggestion_items);
+        const fromPending = pickedUser
+            ? toTrimmedStringArray(prevCompare.user_items)
+            : toTrimmedStringArray(prevCompare.suggestion_items);
           if (fromPending.length > 0) return fromPending;
           return deps.parseListItems(fallbackPickedText);
         })()
@@ -3025,34 +2916,26 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
     const selected = withUpdatedTargetField(
       {
         ...stripStaleUiContractFields(prevRaw),
-        ...clearedResolvedCompareTransientFields(),
+        ...clearCompareForResolvedDisplay(prevRaw),
         message: selectedMessage,
-        compare_pending: "false",
-        compare_selected: pickedUser ? "user" : "suggestion",
-        compare_user_raw: "",
-        compare_user_normalized: "",
-        compare_user_items: [],
-        compare_suggestion_items: [],
-        compare_base_items: mode === "list" ? mergedPickedItems : [],
-        compare_list_semantics: "delta",
         refined_formulation: chosen,
-        compare_agent_current: chosen,
-        compare_presentation: "",
-        compare_variant: "",
-        compare_user_label: "",
-        compare_suggestion_label: "",
-        compare_compare_mode: "",
-        compare_compare_cursor: "",
-        compare_compare_units: [],
-        compare_compare_segments: [],
-        compare_user_variant_semantics: "",
-        compare_user_variant_stepworthy: "",
         feedback_reason_text: pickedUser ? userPickFeedbackReason(state, prevRaw) : "",
         ...(mode === "list" ? { statements: mergedPickedItems } : {}),
       },
       stepId,
       chosen
     );
+    const selectedCompare = patchCompareRuntime(selected, {
+      kind: mode === "list" ? "list_compare" : "text_compare",
+      mode,
+      status: "resolved",
+      resolution: pickedUser ? "user" : "suggestion",
+      target_field: stepId,
+      suggestion_text: chosen,
+      base_items: mode === "list" ? mergedPickedItems : [],
+      list_semantics: "delta",
+      feedback_reason_text: pickedUser ? userPickFeedbackReason(state, prevRaw) : "",
+    });
     const targetField = deps.fieldForStep(stepId);
     const provisionalValue = targetField ? String(selected[targetField] || "").trim() : "";
     const stateForRender = provisionalValue
@@ -3061,21 +2944,17 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
     const rendered = deps.renderFreeTextTurnPolicy({
       stepId,
       state: stateForRender,
-      specialist: selected as Record<string, unknown>,
+      specialist: selectedCompare as Record<string, unknown>,
       previousSpecialist: prevRaw,
     });
     const renderedSpecialist = rendered.specialist as Record<string, unknown>;
     const renderedUiContent = (renderedSpecialist as Record<string, unknown>).ui_content;
-    const renderedUiFeedbackContract = (renderedSpecialist as Record<string, unknown>).ui_feedback_contract;
-    const selectedWithContract: Record<string, unknown> = {
-      ...stripStaleUiContractFields(selected),
+    const selectedWithContract: Record<string, unknown> = attachCompareRuntime({
+      ...stripStaleUiContractFields(selectedCompare),
       action: "ASK",
-      message: String(selected.message || "").trim() || String(renderedSpecialist?.message || "").trim(),
+      message: String(selectedCompare.message || "").trim() || String(renderedSpecialist?.message || "").trim(),
       question: String(renderedSpecialist?.question || ""),
-      compare_pending: "false",
-      compare_selected: pickedUser ? "user" : "suggestion",
       ...(renderedUiContent ? { ui_content: renderedUiContent } : {}),
-      ...(renderedUiFeedbackContract ? { ui_feedback_contract: renderedUiFeedbackContract } : {}),
       ...(typeof renderedSpecialist?.ui_show_step_intro_chrome !== "undefined"
         ? { ui_show_step_intro_chrome: renderedSpecialist.ui_show_step_intro_chrome }
         : {}),
@@ -3084,7 +2963,7 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
       ui_text_keys: Array.isArray(renderedSpecialist?.ui_text_keys)
         ? renderedSpecialist.ui_text_keys
         : rendered.textKeys,
-    };
+    });
     const selectedContractId = String(rendered.contractId || selectedWithContract.ui_contract_id || "");
     const nextState: CanvasState = {
       ...withAcceptedListSelectionState(stateForRender, stepId, mergedPickedItems),
@@ -3102,14 +2981,17 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
     stepIdHint = "",
     dreamRuntimeModeRaw?: unknown
   ): CompareUiPayload | null {
-    const stepId = String(stepIdHint || specialist?.compare_target_field || "").trim();
+    specialist = attachCompareRuntime(specialist);
+    previousSpecialist = attachCompareRuntime(previousSpecialist);
+    const compareState = readCompareRuntime(specialist);
+    const stepId = String(stepIdHint || compareState?.target_field || "").trim();
     if (stepId === deps.dreamStepId && String(dreamRuntimeModeRaw || "").trim() !== "self") {
       return null;
     }
     const dreamBuilderComparePending =
       stepId === deps.dreamStepId &&
       String(specialist?.__dream_builder_compare_pending || "").trim().toLowerCase() === "true";
-    const comparePending = String(specialist?.compare_pending || "").trim().toLowerCase() === "true";
+    const comparePending = compareState?.status === "pending";
     if (dreamBuilderComparePending) return null;
     if (!comparePending && !dreamBuilderComparePending) return null;
     if (!stepId) return null;
@@ -3125,29 +3007,29 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
     ) {
       return null;
     }
-    const mode: CompareMode = String(specialist?.compare_mode || "text") === "list" ? "list" : "text";
+    const mode: CompareMode = compareState?.mode === "list" ? "list" : "text";
     const presentation: ComparePresentation =
-      String(specialist?.compare_presentation || "").trim() === "canonical"
+      compareState?.presentation === "canonical"
         ? "canonical"
         : "picker";
     if (presentation === "canonical") return null;
     if (
       isAcceptedOutputSingleValueTextStep(stepId, mode) &&
-      String(specialist?.compare_user_variant_stepworthy || "").trim() !== "true"
+      compareState?.user_variant_stepworthy !== true
     ) {
       return null;
     }
     const compareMode: CompareCompareMode =
-      String(specialist?.compare_compare_mode || "").trim() === "grouped_units"
+      String(compareState?.grouped_mode || "").trim() === "grouped_units"
         ? "grouped_units"
         : "";
     const compareUnits = compareMode === "grouped_units"
-      ? normalizeCompareUnits(specialist?.compare_compare_units)
+      ? normalizeCompareUnits(compareState?.grouped_units)
       : [];
     const compareSegments = compareMode === "grouped_units"
-      ? normalizeCompareSegments(specialist?.compare_compare_segments)
+      ? normalizeCompareSegments(compareState?.grouped_segments)
       : [];
-    const compareCursorRaw = Number.parseInt(String(specialist?.compare_compare_cursor || "0"), 10);
+    const compareCursorRaw = Number.parseInt(String(compareState?.grouped_cursor || "0"), 10);
     const compareCursor = Number.isFinite(compareCursorRaw) ? compareCursorRaw : 0;
     const comparePayload = compareMode === "grouped_units"
       ? groupedCompareComparePayload({
@@ -3160,13 +3042,13 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
       : null;
     const userItems = (
       comparePayload?.user_items ||
-      toTrimmedStringArray(specialist?.compare_user_items)
+      toTrimmedStringArray(compareState?.user_items)
     ).map((line) => stripMarkupPreserveLines(line));
     const suggestionItems = (
       comparePayload?.suggestion_items ||
-      toTrimmedStringArray(specialist?.compare_suggestion_items)
+      toTrimmedStringArray(compareState?.suggestion_items)
     ).map((line) => stripMarkupPreserveLines(line));
-    const variantRaw = String(specialist?.compare_variant || "").trim();
+    const variantRaw = String(compareState?.variant || "").trim();
     const variant = variantRaw === "clarify_dual"
       ? "clarify_dual"
       : variantRaw === "grouped_list_units"
@@ -3178,16 +3060,21 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
       state,
       variant,
     });
-    const userLabel = String(specialist?.compare_user_label || "").trim() || wordingLabels.userLabel || "";
+    const userLabel =
+      String(comparePayload?.user_label || compareState?.user_label || "").trim() || wordingLabels.userLabel || "";
     const suggestionLabel =
-      String(specialist?.compare_suggestion_label || "").trim() || wordingLabels.suggestionLabel || "";
-    const feedbackMode = normalizeFeedbackMode(specialist?.feedback_mode);
-    const feedbackReasonText = resolveFeedbackReasonFromSpecialist((state || {}) as CanvasState, specialist);
+      String(comparePayload?.suggestion_label || compareState?.suggestion_label || "").trim() ||
+      wordingLabels.suggestionLabel ||
+      "";
+	    const feedbackMode = normalizeFeedbackMode(specialist?.feedback_mode);
+	    const feedbackReasonText =
+	      String(comparePayload?.compare_feedback?.text || "").trim() ||
+	      resolveFeedbackReasonFromSpecialist((state || {}) as CanvasState, specialist);
     const fallbackUserText = stripMarkupPreserveLines(
       String(
         comparePayload?.user_text ||
-        specialist?.compare_user_normalized ||
-        specialist?.compare_user_raw ||
+        compareState?.user_normalized_text ||
+        compareState?.user_text ||
         ""
       ).trim()
     );
@@ -3198,7 +3085,7 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
           stepId,
           state,
           activeSpecialist,
-          String(specialist?.compare_agent_current || specialist?.refined_formulation || "").trim()
+          String(compareState?.suggestion_text || specialist?.refined_formulation || "").trim()
         )
       ).trim()
     );

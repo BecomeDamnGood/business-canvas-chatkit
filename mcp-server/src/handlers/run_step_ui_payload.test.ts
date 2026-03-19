@@ -1,7 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
+import { createCompareRuntimeState } from "./compare_runtime.js";
 import { createRunStepUiPayloadHelpers } from "./run_step_ui_payload.js";
+
+function compareRuntime(overrides: Record<string, unknown>) {
+  return createCompareRuntimeState(overrides as any);
+}
 
 function buildHelpers() {
   return createRunStepUiPayloadHelpers({
@@ -318,10 +323,13 @@ test("attachRegistryPayload never emits legacy compare payloads for Dream Builde
     {
       ui_contract_id: "dream:incomplete_output:DREAM_EXPLAINER_MENU_SWITCH_SELF:v1",
       suggest_dreambuilder: "true",
-      compare_pending: "true",
-      compare_mode: "list",
-      compare_presentation: "picker",
-      compare_variant: "grouped_list_units",
+      compare_runtime: compareRuntime({
+        kind: "list_compare",
+        mode: "list",
+        status: "pending",
+        presentation: "picker",
+        variant: "grouped_list_units",
+      }),
       __dream_builder_compare_pending: "true",
       __dream_builder_compare_kind: "batch_rewrite_compare",
       __dream_builder_compare_rationale: "Dream Builder zoekt naar bredere maatschappelijke verschuivingen.",
@@ -439,11 +447,11 @@ test("attachRegistryPayload migrates explicit canonical single-value suggestions
     },
     {
       ui_contract_id: "purpose:valid_output:PURPOSE_MENU_REFINE:v1",
-      ui_feedback_contract: {
-        kind: "single_value_canonical_suggestion",
+      ui_content: {
+        kind: "single_value",
         heading: "Op basis van je input stel ik de volgende bestaansreden voor:",
-        suggested_value: "Mindd bestaat om complexe keuzes begrijpelijk en menselijk te maken.",
-        rationale: "Ik heb de formulering zachter en vriendelijker gemaakt.",
+        canonical_text: "Mindd bestaat om complexe keuzes begrijpelijk en menselijk te maken.",
+        feedback_reason_text: "Ik heb de formulering zachter en vriendelijker gemaakt.",
       },
     }
   );
@@ -472,13 +480,17 @@ test("attachRegistryPayload does not synthesize public compare contracts from co
     },
     {
       ui_contract_id: "strategy:valid_output:STRATEGY_MENU_CONFIRM:v1",
-      compare_pending: "true",
-      compare_mode: "list",
-      compare_variant: "grouped_list_units",
-      compare_user_label: "Jouw compacte formulering",
-      compare_suggestion_label: "Mijn suggestie",
-      compare_user_items: ["Punt 1", "Punt 2"],
-      compare_suggestion_items: ["Voorstel A"],
+      compare_runtime: compareRuntime({
+        kind: "list_compare",
+        mode: "list",
+        status: "pending",
+        presentation: "picker",
+        variant: "grouped_list_units",
+        user_label: "Jouw compacte formulering",
+        suggestion_label: "Mijn suggestie",
+        user_items: ["Punt 1", "Punt 2"],
+        suggestion_items: ["Voorstel A"],
+      }),
     },
     { require_compare_pick: true },
     [],
@@ -680,12 +692,15 @@ test("attachRegistryPayload keeps Dream single-value ui.content when stale canon
     },
     {
       ui_contract_id: "dream:ASK:DREAM_MENU_REFINE:v1",
-      compare_pending: "true",
-      compare_mode: "text",
-      compare_presentation: "canonical",
-      compare_target_field: "dream",
-      compare_user_normalized: "Wij willen bedrijven helpen groeien.",
-      compare_agent_current: canonical,
+      compare_runtime: compareRuntime({
+        kind: "text_compare",
+        mode: "text",
+        status: "pending",
+        presentation: "canonical",
+        target_field: "dream",
+        user_normalized_text: "Wij willen bedrijven helpen groeien.",
+        suggestion_text: canonical,
+      }),
       ui_content: {
         kind: "single_value",
         heading: "JE HUIDIGE DROOM VOOR MINDD IS",
@@ -731,12 +746,15 @@ test("attachRegistryPayload suppresses Dream single-value ui.content for active 
     },
     {
       ui_contract_id: "dream:ASK:DREAM_MENU_REFINE:v1",
-      compare_pending: "true",
-      compare_mode: "text",
-      compare_presentation: "picker",
-      compare_target_field: "dream",
-      compare_user_normalized: "Dit gaat over dat mensen het beu zijn om verkeerd voorgelicht te worden.",
-      compare_agent_current: canonical,
+      compare_runtime: compareRuntime({
+        kind: "text_compare",
+        mode: "text",
+        status: "pending",
+        presentation: "picker",
+        target_field: "dream",
+        user_normalized_text: "Dit gaat over dat mensen het beu zijn om verkeerd voorgelicht te worden.",
+        suggestion_text: canonical,
+      }),
       ui_content: {
         kind: "single_value",
         heading: "JE HUIDIGE DROOM VOOR MINDD IS",
@@ -779,12 +797,15 @@ test("attachRegistryPayload does not publish Dream compare payloads when overrid
     },
     {
       ui_contract_id: "dream:ASK:DREAM_MENU_REFINE:v1",
-      compare_pending: "true",
-      compare_mode: "text",
-      compare_presentation: "picker",
-      compare_target_field: "dream",
-      compare_user_normalized: userInput,
-      compare_agent_current: canonical,
+      compare_runtime: compareRuntime({
+        kind: "text_compare",
+        mode: "text",
+        status: "pending",
+        presentation: "picker",
+        target_field: "dream",
+        user_normalized_text: userInput,
+        suggestion_text: canonical,
+      }),
     },
     { require_compare_pick: true },
     [],
@@ -821,12 +842,15 @@ test("attachRegistryPayload does not publish non-Dream compare payloads when ove
     },
     {
       ui_contract_id: "purpose:ASK:PURPOSE_MENU_REFINE:v1",
-      compare_pending: "true",
-      compare_mode: "text",
-      compare_presentation: "picker",
-      compare_target_field: "purpose",
-      compare_user_normalized: userInput,
-      compare_agent_current: canonical,
+      compare_runtime: compareRuntime({
+        kind: "text_compare",
+        mode: "text",
+        status: "pending",
+        presentation: "picker",
+        target_field: "purpose",
+        user_normalized_text: userInput,
+        suggestion_text: canonical,
+      }),
     },
     { require_compare_pick: true },
     [],
@@ -863,24 +887,19 @@ test("attachRegistryPayload ignores explicit single-value compare contracts that
     },
     {
       ui_contract_id: "dream:ASK:DREAM_MENU_REFINE:v1",
-      compare_pending: "true",
-      compare_mode: "text",
-      compare_presentation: "picker",
-      compare_target_field: "dream",
-      compare_user_normalized: userInput,
-      compare_agent_current: canonical,
-      ui_feedback_contract: {
-        version: "2026-03-16.feedback_contract.v1",
-        kind: "single_value_compare",
+      compare_runtime: compareRuntime({
+        kind: "text_compare",
         mode: "text",
-        rationale:
+        status: "pending",
+        presentation: "picker",
+        target_field: "dream",
+        user_normalized_text: userInput,
+        suggestion_text: canonical,
+        feedback_reason_text:
           "Je benoemt een probleem, maar de Droom vraagt om een positief toekomstbeeld.",
-        current_label: "Dit is jouw input",
-        suggested_label: "Dit zou mijn suggestie zijn",
-        current_value: "",
-        suggested_value: canonical,
-        instruction: "Klik alsjeblieft wat het beste bij je past.",
-      },
+        user_label: "Dit is jouw input",
+        suggestion_label: "Dit zou mijn suggestie zijn",
+      }),
     },
     { require_compare_pick: true },
     [],
@@ -907,12 +926,15 @@ test("attachRegistryPayload suppresses single-value ui.content while compare pic
     },
     {
       ui_contract_id: "purpose:ASK:PURPOSE_MENU_REFINE:v1",
-      compare_pending: "true",
-      compare_mode: "text",
-      compare_presentation: "picker",
-      compare_target_field: "purpose",
-      compare_user_normalized: "Wij willen iets goeds doen.",
-      compare_agent_current: canonical,
+      compare_runtime: compareRuntime({
+        kind: "text_compare",
+        mode: "text",
+        status: "pending",
+        presentation: "picker",
+        target_field: "purpose",
+        user_normalized_text: "Wij willen iets goeds doen.",
+        suggestion_text: canonical,
+      }),
       ui_content: {
         kind: "single_value",
         heading: "JE HUIDIGE BESTAANSREDEN VOOR MINDD IS",
@@ -955,12 +977,15 @@ test("attachRegistryPayload omits questionText while compare picker is active", 
     {
       ui_contract_id: "strategy:ASK:STRATEGY_MENU_ASK_MORE:v1",
       question: "Waar focus je nog meer op binnen je strategie?",
-      compare_pending: "true",
-      compare_mode: "list",
-      compare_presentation: "picker",
-      compare_target_field: "strategy",
-      compare_user_items: ["Recurring revenue through retainers"],
-      compare_suggestion_items: [canonical],
+      compare_runtime: compareRuntime({
+        kind: "list_compare",
+        mode: "list",
+        status: "pending",
+        presentation: "picker",
+        target_field: "strategy",
+        user_items: ["Recurring revenue through retainers"],
+        suggestion_items: [canonical],
+      }),
     },
     { require_compare_pick: true },
     [],
@@ -995,12 +1020,15 @@ test("attachRegistryPayload keeps compare feedback internal and out of the publi
     },
     {
       ui_contract_id: "purpose:ASK:PURPOSE_MENU_REFINE:v1",
-      compare_pending: "true",
-      compare_mode: "text",
-      compare_presentation: "picker",
-      compare_target_field: "purpose",
-      compare_user_normalized: "We want to do something good.",
-      compare_agent_current: canonical,
+      compare_runtime: compareRuntime({
+        kind: "text_compare",
+        mode: "text",
+        status: "pending",
+        presentation: "picker",
+        target_field: "purpose",
+        user_normalized_text: "We want to do something good.",
+        suggestion_text: canonical,
+      }),
     },
     { require_compare_pick: true },
     [],
@@ -1037,12 +1065,15 @@ test("attachRegistryPayload keeps grouped compare feedback internal and out of t
     },
     {
       ui_contract_id: "strategy:ASK:STRATEGY_MENU_CONFIRM:v1",
-      compare_pending: "true",
-      compare_mode: "list",
-      compare_presentation: "picker",
-      compare_target_field: "strategy",
-      compare_user_items: ["Operational simplicity"],
-      compare_suggestion_items: ["Operational focus"],
+      compare_runtime: compareRuntime({
+        kind: "list_compare",
+        mode: "list",
+        status: "pending",
+        presentation: "picker",
+        target_field: "strategy",
+        user_items: ["Operational simplicity"],
+        suggestion_items: ["Operational focus"],
+      }),
     },
     { require_compare_pick: true },
     [],

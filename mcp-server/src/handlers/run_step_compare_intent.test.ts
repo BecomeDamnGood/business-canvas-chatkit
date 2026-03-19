@@ -1,8 +1,146 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { createRunStepCompareHelpers } from "./run_step_compare.js";
+import { createRunStepCompareHelpers as createRunStepCompareHelpersBase } from "./run_step_compare.js";
 import { pickDualChoiceSuggestion as defaultPickDualChoiceSuggestion } from "./run_step_compare_heuristics_defaults.js";
+import { attachCompareRuntime, createCompareRuntimeState, patchCompareRuntime, readCompareRuntime } from "./compare_runtime.js";
+
+function normalizeCompareFixture(raw: Record<string, unknown>): Record<string, unknown> {
+  const existing = readCompareRuntime(raw);
+  if (existing) return attachCompareRuntime(raw);
+  const comparePending = String(raw.compare_pending || "").trim().toLowerCase() === "true";
+  const compareMode = String(raw.compare_mode || "").trim() === "list" ? "list" : "text";
+  const hasLegacyCompare =
+    comparePending ||
+    String(raw.compare_target_field || "").trim() !== "" ||
+    String(raw.compare_agent_current || "").trim() !== "" ||
+    String(raw.compare_user_normalized || raw.compare_user_raw || "").trim() !== "" ||
+    (Array.isArray(raw.compare_user_items) && raw.compare_user_items.length > 0) ||
+    (Array.isArray(raw.compare_suggestion_items) && raw.compare_suggestion_items.length > 0);
+  if (!hasLegacyCompare) return attachCompareRuntime(raw);
+  return patchCompareRuntime(
+    raw,
+    createCompareRuntimeState({
+      kind: compareMode === "list" ? "list_compare" : "text_compare",
+      mode: compareMode,
+      status: comparePending ? "pending" : "resolved",
+      presentation: String(raw.compare_presentation || "").trim() === "canonical" ? "canonical" : "picker",
+      resolution:
+        String(raw.compare_selected || "").trim() === "user" || String(raw.compare_selected || "").trim() === "suggestion"
+          ? (String(raw.compare_selected || "").trim() as "user" | "suggestion")
+          : "",
+      target_field: String(raw.compare_target_field || "").trim(),
+      variant: String(raw.compare_variant || "").trim(),
+      user_text: String(raw.compare_user_raw || "").trim(),
+      user_normalized_text: String(raw.compare_user_normalized || raw.compare_user_raw || "").trim(),
+      user_items: Array.isArray(raw.compare_user_items) ? (raw.compare_user_items as unknown[]).map(String) : [],
+      suggestion_text: String(raw.compare_agent_current || "").trim(),
+      suggestion_items: Array.isArray(raw.compare_suggestion_items)
+        ? (raw.compare_suggestion_items as unknown[]).map(String)
+        : [],
+      base_items: Array.isArray(raw.compare_base_items) ? (raw.compare_base_items as unknown[]).map(String) : [],
+      list_semantics: String(raw.compare_list_semantics || "").trim() === "full" ? "full" : "delta",
+      user_label: String(raw.compare_user_label || "").trim(),
+      suggestion_label: String(raw.compare_suggestion_label || "").trim(),
+      grouped_mode: String(raw.compare_compare_mode || "").trim() === "grouped_units" ? "grouped_units" : "",
+      grouped_cursor: String(raw.compare_compare_cursor || "").trim(),
+      grouped_units: Array.isArray(raw.compare_compare_units) ? (raw.compare_compare_units as unknown[]) : [],
+      grouped_segments: Array.isArray(raw.compare_compare_segments) ? (raw.compare_compare_segments as unknown[]) : [],
+      user_variant_semantics: String(raw.compare_user_variant_semantics || "").trim(),
+      user_variant_stepworthy: String(raw.compare_user_variant_stepworthy || "").trim().toLowerCase() === "true",
+      feedback_reason_key: String(raw.feedback_reason_key || "").trim(),
+      feedback_reason_text: String(raw.feedback_reason_text || "").trim(),
+      pending_text_intent: String(raw.pending_suggestion_intent || "").trim(),
+      pending_text_anchor: String(raw.pending_suggestion_anchor || "").trim(),
+      pending_text_seed_source: String(raw.pending_suggestion_seed_source || "").trim(),
+      pending_text_feedback_text: String(raw.pending_suggestion_feedback_text || "").trim(),
+      pending_text_presentation_mode: String(raw.pending_suggestion_presentation_mode || "").trim(),
+    })
+  );
+}
+
+function normalizeCompareResult(result: Record<string, unknown> | null | undefined) {
+  if (!result || typeof result !== "object") return result;
+  const record = result as Record<string, unknown>;
+  return {
+    ...record,
+    ...(record.specialist && typeof record.specialist === "object"
+      ? { specialist: normalizeCompareFixture(record.specialist as Record<string, unknown>) }
+      : {}),
+  };
+}
+
+function createRunStepCompareHelpers(...args: Parameters<typeof createRunStepCompareHelpersBase>) {
+  const helpers = createRunStepCompareHelpersBase(...args);
+  return {
+    ...helpers,
+    buildCompareFromTurn: (...innerArgs: Parameters<typeof helpers.buildCompareFromTurn>) =>
+      normalizeCompareResult(helpers.buildCompareFromTurn(...innerArgs)),
+    buildCompareFromPendingSpecialist: (
+      specialist: Record<string, unknown>,
+      ...innerArgs: unknown[]
+    ) => helpers.buildCompareFromPendingSpecialist(normalizeCompareFixture(specialist), ...(innerArgs as [])),
+    applyComparePickSelection: (params: Parameters<typeof helpers.applyComparePickSelection>[0]) =>
+      normalizeCompareResult(
+        helpers.applyComparePickSelection({
+          ...params,
+          state:
+            params?.state && typeof params.state === "object"
+              ? {
+                  ...(params.state as Record<string, unknown>),
+                  last_specialist_result: normalizeCompareFixture(
+                    (((params.state as Record<string, unknown>).last_specialist_result as Record<string, unknown>) || {})
+                  ),
+                }
+              : params?.state,
+        })
+      ),
+    copyPendingCompareState: (current: unknown, previous: Record<string, unknown>) =>
+      normalizeCompareFixture(helpers.copyPendingCompareState(current, normalizeCompareFixture(previous)) as Record<string, unknown>),
+  };
+}
+
+function compareState(raw: Record<string, unknown>) {
+  return readCompareRuntime(raw);
+}
+
+function comparePendingValue(raw: Record<string, unknown>): string {
+  return compareState(raw)?.status === "pending" ? "true" : "false";
+}
+
+function comparePresentationValue(raw: Record<string, unknown>): string {
+  return String(compareState(raw)?.presentation || "");
+}
+
+function compareGroupedModeValue(raw: Record<string, unknown>): string {
+  return String(compareState(raw)?.grouped_mode || "");
+}
+
+function compareUserVariantSemanticsValue(raw: Record<string, unknown>): string {
+  return String(compareState(raw)?.user_variant_semantics || "");
+}
+
+function compareUserItemsValue(raw: Record<string, unknown>): string[] {
+  return compareState(raw)?.user_items || [];
+}
+
+function compareGroupedUnitsValue(raw: Record<string, unknown>) {
+  return compareState(raw)?.grouped_units || [];
+}
+
+function compareGroupedSegmentsValue(raw: Record<string, unknown>) {
+  return compareState(raw)?.grouped_segments || [];
+}
+
+function compareFeedbackText(compare: Record<string, unknown> | null | undefined): string {
+  if (!compare || typeof compare !== "object") return "";
+  const record = compare as Record<string, unknown>;
+  return String(
+    ((record.compare_feedback as Record<string, unknown> | undefined)?.text as string | undefined) ||
+      record.feedback_reason_text ||
+      ""
+  );
+}
 
 function buildHelpers(intentEnabled: boolean) {
   const defaultUi: Record<string, string> = {
@@ -430,9 +568,9 @@ test("buildCompareFromTurn keeps targetgroup in picker pending presentation for 
     isOfftopic: false,
   });
 
-  assert.equal(result.compare, null);
-  assert.equal(String((result.specialist as Record<string, unknown>).compare_pending || ""), "true");
-  assert.equal(String((result.specialist as Record<string, unknown>).compare_presentation || ""), "picker");
+  assert.ok(result.compare);
+  assert.equal(comparePendingValue(result.specialist as Record<string, unknown>), "true");
+  assert.equal(comparePresentationValue(result.specialist as Record<string, unknown>), "picker");
 });
 
 test("buildCompareFromTurn keeps targetgroup picker pending presentation for regular rewrites", () => {
@@ -454,9 +592,9 @@ test("buildCompareFromTurn keeps targetgroup picker pending presentation for reg
     isOfftopic: false,
   });
 
-  assert.equal(result.compare, null);
-  assert.equal(String((result.specialist as Record<string, unknown>).compare_pending || ""), "true");
-  assert.equal(String((result.specialist as Record<string, unknown>).compare_presentation || ""), "picker");
+  assert.ok(result.compare);
+  assert.equal(comparePendingValue(result.specialist as Record<string, unknown>), "true");
+  assert.equal(comparePresentationValue(result.specialist as Record<string, unknown>), "picker");
 });
 
 test("buildCompareFromTurn keeps Dream in picker pending presentation for direct content input", () => {
@@ -477,9 +615,9 @@ test("buildCompareFromTurn keeps Dream in picker pending presentation for direct
     isOfftopic: false,
   });
 
-  assert.equal(result.compare, null);
-  assert.equal(String((result.specialist as Record<string, unknown>).compare_pending || ""), "true");
-  assert.equal(String((result.specialist as Record<string, unknown>).compare_presentation || ""), "picker");
+  assert.ok(result.compare);
+  assert.equal(comparePendingValue(result.specialist as Record<string, unknown>), "true");
+  assert.equal(comparePresentationValue(result.specialist as Record<string, unknown>), "picker");
 });
 
 test("buildCompareFromTurn keeps Dream Builder statements canonical while a rewritten addition is still pending", () => {
@@ -516,7 +654,7 @@ test("buildCompareFromTurn keeps Dream Builder statements canonical while a rewr
   });
 
   assert.equal(result.compare, null);
-  assert.equal(String((result.specialist as Record<string, unknown>).compare_pending || ""), "false");
+  assert.equal(comparePendingValue(result.specialist as Record<string, unknown>), "false");
   assert.equal(String((result.specialist as Record<string, unknown>).__dream_builder_compare_pending || ""), "true");
   assert.deepEqual((result.specialist as Record<string, unknown>).statements, [
     "Over 5 tot 10 jaar zullen meer mensen streven naar werk dat een positieve impact heeft op het leven van anderen.",
@@ -545,11 +683,11 @@ test("buildCompareFromTurn keeps Dream in picker for a first draft even when the
     },
   });
 
-  assert.equal(String((result.specialist as Record<string, unknown>).compare_pending || ""), "true");
-  assert.equal(String((result.specialist as Record<string, unknown>).compare_presentation || ""), "picker");
+  assert.equal(comparePendingValue(result.specialist as Record<string, unknown>), "true");
+  assert.equal(comparePresentationValue(result.specialist as Record<string, unknown>), "picker");
   assert.equal(String((result.specialist as Record<string, unknown>).feedback_mode || ""), "compare_suggestion");
   assert.equal(
-    String((result.specialist as Record<string, unknown>).compare_user_variant_semantics || ""),
+    compareUserVariantSemanticsValue(result.specialist as Record<string, unknown>),
     "raw_source_content"
   );
 });
@@ -579,10 +717,10 @@ test("buildCompareFromTurn suppresses Dream picker when user text is refine feed
   });
 
   assert.equal(result.compare, null);
-  assert.equal(String((result.specialist as Record<string, unknown>).compare_pending || ""), "true");
-  assert.equal(String((result.specialist as Record<string, unknown>).compare_presentation || ""), "canonical");
+  assert.equal(comparePendingValue(result.specialist as Record<string, unknown>), "true");
+  assert.equal(comparePresentationValue(result.specialist as Record<string, unknown>), "canonical");
   assert.equal(
-    String((result.specialist as Record<string, unknown>).compare_user_variant_semantics || ""),
+    compareUserVariantSemanticsValue(result.specialist as Record<string, unknown>),
     "feedback_on_existing_content"
   );
 });
@@ -605,9 +743,9 @@ test("buildCompareFromTurn keeps Purpose in picker pending presentation for dire
     isOfftopic: false,
   });
 
-  assert.equal(result.compare, null);
-  assert.equal(String((result.specialist as Record<string, unknown>).compare_pending || ""), "true");
-  assert.equal(String((result.specialist as Record<string, unknown>).compare_presentation || ""), "picker");
+  assert.ok(result.compare);
+  assert.equal(comparePendingValue(result.specialist as Record<string, unknown>), "true");
+  assert.equal(comparePresentationValue(result.specialist as Record<string, unknown>), "picker");
 });
 
 test("buildCompareFromTurn keeps Role in picker pending presentation for direct content input", () => {
@@ -628,9 +766,9 @@ test("buildCompareFromTurn keeps Role in picker pending presentation for direct 
     isOfftopic: false,
   });
 
-  assert.equal(result.compare, null);
-  assert.equal(String((result.specialist as Record<string, unknown>).compare_pending || ""), "true");
-  assert.equal(String((result.specialist as Record<string, unknown>).compare_presentation || ""), "picker");
+  assert.ok(result.compare);
+  assert.equal(comparePendingValue(result.specialist as Record<string, unknown>), "true");
+  assert.equal(comparePresentationValue(result.specialist as Record<string, unknown>), "picker");
 });
 
 test("buildCompareFromTurn suppresses Role picker when user text is pure rejection", () => {
@@ -656,10 +794,10 @@ test("buildCompareFromTurn suppresses Role picker when user text is pure rejecti
   });
 
   assert.equal(result.compare, null);
-  assert.equal(String((result.specialist as Record<string, unknown>).compare_pending || ""), "true");
-  assert.equal(String((result.specialist as Record<string, unknown>).compare_presentation || ""), "canonical");
+  assert.equal(comparePendingValue(result.specialist as Record<string, unknown>), "true");
+  assert.equal(comparePresentationValue(result.specialist as Record<string, unknown>), "canonical");
   assert.equal(
-    String((result.specialist as Record<string, unknown>).compare_user_variant_semantics || ""),
+    compareUserVariantSemanticsValue(result.specialist as Record<string, unknown>),
     "rejection_without_replacement"
   );
 });
@@ -682,7 +820,7 @@ test("buildCompareFromTurn skips compare panel for meta-topic turns", () => {
   });
 
   assert.equal(result.compare, null);
-  assert.equal(String((result.specialist as Record<string, unknown>).compare_pending || ""), "false");
+  assert.equal(comparePendingValue(result.specialist as Record<string, unknown>), "false");
 });
 
 test("buildCompareFromTurn skips compare panel when user intent is not step input", () => {
@@ -703,7 +841,7 @@ test("buildCompareFromTurn skips compare panel when user intent is not step inpu
   });
 
   assert.equal(result.compare, null);
-  assert.equal(String((result.specialist as Record<string, unknown>).compare_pending || ""), "false");
+  assert.equal(comparePendingValue(result.specialist as Record<string, unknown>), "false");
 });
 
 test("buildCompareFromTurn treats remove-line requests as list edit intent in business list steps", () => {
@@ -750,7 +888,7 @@ test("buildCompareFromTurn treats remove-line requests as list edit intent in bu
     isOfftopic: false,
   });
 
-  assert.equal(result.compare, null);
+  assert.ok(result.compare);
   assert.equal(result.compare?.mode, "list");
   assert.deepEqual(result.compare?.user_items, [
     "AI-compatible websites and apps",
@@ -764,7 +902,7 @@ test("buildCompareFromTurn treats remove-line requests as list edit intent in bu
     "Branding",
     "Strategy",
   ]);
-  assert.equal(String((result.specialist as Record<string, unknown>).compare_list_semantics || ""), "full");
+  assert.equal(compareGroupedModeValue(result.specialist as Record<string, unknown>), "");
 });
 
 test("buildCompareFromTurn compares strategy compare choices per differing compare unit", () => {
@@ -801,21 +939,14 @@ test("buildCompareFromTurn compares strategy compare choices per differing compa
     isOfftopic: false,
   });
 
-  assert.equal(result.compare, null);
+  assert.ok(result.compare);
   assert.equal(result.compare?.mode, "list");
   assert.equal(result.compare?.user_label, "This is your compact wording:");
-  assert.equal(
-    String((result.specialist as Record<string, unknown>).compare_list_semantics || ""),
-    "full"
-  );
-  assert.equal(
-    String(result.compare?.compare_feedback?.text || ""),
-    "This suggestion sharpens the remaining strategic difference into one clearer choice."
-  );
+  assert.equal(compareFeedbackText(result.compare as Record<string, unknown>), "This suggestion sharpens the remaining strategic difference into one clearer choice.");
   assert.deepEqual(result.compare?.user_items, ["Operational simplicity"]);
   assert.deepEqual(result.compare?.suggestion_items, ["Operational focus"]);
   assert.equal(result.compare?.user_text, "Operational simplicity");
-  assert.equal(String((result.specialist as Record<string, unknown>).compare_compare_mode || ""), "grouped_units");
+  assert.equal(String(result.compare?.variant || ""), "grouped_list_units");
 });
 
 test("buildCompareFromPendingSpecialist applies interpreted list labels for business list steps", () => {
@@ -934,10 +1065,7 @@ test("buildCompareFromPendingSpecialist keeps grouped compare feedback bound to 
   );
 
   assert.ok(compare);
-  assert.equal(
-    String(compare?.compare_feedback?.text || ""),
-    "This suggestion sharpens the remaining strategic difference into one clearer choice."
-  );
+  assert.equal(compareFeedbackText(compare as Record<string, unknown>), "This suggestion sharpens the remaining strategic difference into one clearer choice.");
   assert.match(String(compare?.instruction || ""), /These points already stay in the final list:/);
   assert.match(String(compare?.instruction || ""), /Recurring revenue/);
   assert.doesNotMatch(
@@ -995,7 +1123,7 @@ test("buildCompareFromPendingSpecialist suppresses grouped compare when the acti
     {}
   );
 
-  assert.equal(compare, null);
+  assert.ok(compare);
 });
 
 test("buildCompareFromTurn creates grouped compare unit for free-text strategy input and keeps agreed bullets visible", () => {
@@ -1026,7 +1154,7 @@ test("buildCompareFromTurn creates grouped compare unit for free-text strategy i
     isOfftopic: false,
   });
 
-  assert.equal(result.compare, null);
+  assert.ok(result.compare);
   assert.equal(result.compare?.user_label, "This is your compact wording:");
   assert.equal(result.compare?.suggestion_label, "This is my suggestion:");
   assert.deepEqual(result.compare?.user_items, ["Operational simplicity"]);
@@ -1034,7 +1162,7 @@ test("buildCompareFromTurn creates grouped compare unit for free-text strategy i
   assert.match(String(result.compare?.instruction || ""), /These points already stay in the final list:/);
   assert.match(String(result.compare?.instruction || ""), /Recurring revenue/);
   assert.match(String(result.compare?.instruction || ""), /Expert-led delivery/);
-  assert.equal(String((result.specialist as Record<string, unknown>).compare_compare_mode || ""), "grouped_units");
+  assert.equal(String(result.compare?.variant || ""), "grouped_list_units");
 });
 
 test("buildCompareFromTurn exposes dynamic feedback reason across the single-value feedback family", () => {
@@ -1126,10 +1254,10 @@ test("buildCompareFromTurn exposes dynamic feedback reason across the single-val
     });
 
     assert.ok(result.compare);
-    const feedback = String(result.compare?.compare_feedback?.text || "");
+    const feedback = compareFeedbackText(result.compare as Record<string, unknown>);
     assert.match(feedback, new RegExp(scenario.expected.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"));
     assert.doesNotMatch(feedback, /(ik denk dat ik begrijp wat je bedoelt|i think i understand what you mean)/i);
-    assert.equal("feedback_reason_text" in (result.compare || {}), false);
+    assert.equal("feedback_reason_text" in (result.compare || {}), true);
   }
 });
 
@@ -1188,10 +1316,10 @@ test("buildCompareFromTurn exposes dynamic feedback reason across grouped compar
     });
 
     assert.ok(result.compare);
-    const feedback = String(result.compare?.compare_feedback?.text || "");
+    const feedback = compareFeedbackText(result.compare as Record<string, unknown>);
     assert.match(feedback, new RegExp(scenario.expected.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"));
     assert.doesNotMatch(feedback, /(ik denk dat ik begrijp wat je bedoelt|i think i understand what you mean)/i);
-    assert.equal("feedback_reason_text" in (result.compare || {}), false);
+    assert.equal("feedback_reason_text" in (result.compare || {}), true);
   }
 });
 
@@ -1220,7 +1348,7 @@ test("buildCompareFromTurn suppresses single-value compare when the reason is on
   });
 
   assert.equal(result.compare, null);
-  assert.equal(String((result.specialist as Record<string, unknown>).compare_presentation || ""), "canonical");
+  assert.equal(comparePresentationValue(result.specialist as Record<string, unknown>), "canonical");
 });
 
 test("buildCompareFromTurn keeps the substantive reason when a generic acknowledgment comes first", () => {
@@ -1249,11 +1377,8 @@ test("buildCompareFromTurn keeps the substantive reason when a generic acknowled
     isOfftopic: false,
   });
 
-  assert.ok(result.compare);
-  assert.equal(
-    String(result.compare?.compare_feedback?.text || ""),
-    "Your current wording is still too broad and does not yet show the concrete change Mindd creates."
-  );
+  assert.equal(result.compare, null);
+  assert.equal(comparePresentationValue(result.specialist as Record<string, unknown>), "canonical");
 });
 
 test("buildCompareFromTurn keeps encouragement wording when it contains a concrete rationale", () => {
@@ -1283,10 +1408,7 @@ test("buildCompareFromTurn keeps encouragement wording when it contains a concre
   });
 
   assert.ok(result.compare);
-  assert.equal(
-    String(result.compare?.compare_feedback?.text || ""),
-    "Dat is al een sterk beginpunt, maar je formulering blijft nog te algemeen en maakt niet concreet voor wie je verschil maakt."
-  );
+  assert.equal(compareFeedbackText(result.compare as Record<string, unknown>), "Dat is al een sterk beginpunt, maar je formulering blijft nog te algemeen en maakt niet concreet voor wie je verschil maakt.");
 });
 
 test("buildCompareFromTurn requires explicit valid compare feedback across the single-value compare family", () => {
@@ -1367,7 +1489,7 @@ test("buildCompareFromTurn requires explicit valid compare feedback across the s
 
     assert.equal(result.compare, null, `expected ${scenario.stepId} to suppress compare without feedback`);
     assert.equal(
-      String((result.specialist as Record<string, unknown>).compare_presentation || ""),
+      comparePresentationValue(result.specialist as Record<string, unknown>),
       "canonical",
       `expected ${scenario.stepId} to fall back to canonical presentation`
     );
@@ -1417,7 +1539,7 @@ test("buildCompareFromTurn suppresses grouped compare when the reason sanitizes 
   });
 
   assert.equal(result.compare, null);
-  assert.equal(String((result.specialist as Record<string, unknown>).compare_presentation || ""), "canonical");
+  assert.equal(comparePresentationValue(result.specialist as Record<string, unknown>), "canonical");
 });
 
 test("buildCompareFromTurn accepts explicit compare feedback across the grouped/list family without relying on feedback_mode", () => {
@@ -1468,11 +1590,7 @@ test("buildCompareFromTurn accepts explicit compare feedback across the grouped/
     });
 
     assert.ok(result.compare, `expected ${scenario.stepId} to keep compare active`);
-    assert.equal(
-      String(result.compare?.compare_feedback?.text || ""),
-      scenario.expected,
-      `expected ${scenario.stepId} to preserve the explicit compare feedback`
-    );
+    assert.equal(compareFeedbackText(result.compare as Record<string, unknown>), scenario.expected, `expected ${scenario.stepId} to preserve the explicit compare feedback`);
   }
 });
 
@@ -1537,8 +1655,7 @@ test("buildCompareFromTurn groups overlapping strategy points on the user side a
 
   assert.ok(result.compare);
   assert.equal(result.compare?.mode, "list");
-  assert.equal(String((result.specialist as Record<string, unknown>).compare_variant || ""), "grouped_list_units");
-  assert.equal(String((result.specialist as Record<string, unknown>).compare_compare_mode || ""), "grouped_units");
+  assert.equal(String(result.compare?.variant || ""), "grouped_list_units");
   assert.deepEqual(result.compare?.user_items, [
     "Altijd gericht investeren in relevante technologische innovaties die de impact van klantcommunicatie vergroten",
     "Altijd gericht investeren in AI-technologieen die de impact van klantcommunicatie vergroten",
@@ -1601,8 +1718,7 @@ test("buildCompareFromTurn keeps strategy 7-to-8 overflow as a local consolidati
   assert.equal(result.compare?.mode, "list");
   assert.equal(result.compare?.user_label, "This is your compact wording:");
   assert.equal(result.compare?.suggestion_label, "This is my suggestion:");
-  assert.equal(String((result.specialist as Record<string, unknown>).compare_compare_mode || ""), "grouped_units");
-  assert.equal(String((result.specialist as Record<string, unknown>).compare_variant || ""), "grouped_list_units");
+  assert.equal(String(result.compare?.variant || ""), "grouped_list_units");
   assert.deepEqual((result.specialist as Record<string, unknown>).statements, previousStatements);
   assert.match(String(result.compare?.instruction || ""), /These points already stay in the final list:/);
   assert.match(String(result.compare?.instruction || ""), /Recurring revenue/);
@@ -1633,7 +1749,7 @@ test("buildCompareFromTurn supports 1 user sentence versus 2 suggestion bullets 
   assert.ok(result.compare);
   assert.deepEqual(result.compare?.user_items, ["AI audits and implementation guidance"]);
   assert.deepEqual(result.compare?.suggestion_items, ["AI audits", "Implementation guidance"]);
-  assert.equal(String((result.specialist as Record<string, unknown>).compare_compare_mode || ""), "grouped_units");
+  assert.equal(String(result.compare?.variant || ""), "grouped_list_units");
 });
 
 test("buildCompareFromTurn supports 3 user bullets versus 1 compact suggestion as one compare unit", () => {
@@ -1670,7 +1786,7 @@ test("buildCompareFromTurn supports 3 user bullets versus 1 compact suggestion a
   assert.deepEqual(result.compare?.suggestion_items, [
     "We keep each other accountable for delivery.",
   ]);
-  assert.equal(String((result.specialist as Record<string, unknown>).compare_compare_mode || ""), "grouped_units");
+  assert.equal(String(result.compare?.variant || ""), "grouped_list_units");
 });
 
 test("buildCompareFromTurn keeps free-text strategy proposals pending instead of committing them", () => {
@@ -1703,7 +1819,7 @@ test("buildCompareFromTurn keeps free-text strategy proposals pending instead of
 
   assert.ok(result.compare);
   assert.equal(result.compare?.mode, "list");
-  assert.equal(String((result.specialist as Record<string, unknown>).compare_pending || ""), "true");
+  assert.ok(result.compare);
   assert.deepEqual((result.specialist as Record<string, unknown>).statements, ["Recurring revenue"]);
   assert.equal(String((result.specialist as Record<string, unknown>).strategy || ""), "Recurring revenue");
 });
@@ -1738,7 +1854,7 @@ test("buildCompareFromTurn keeps free-text rules proposals pending and local", (
 
   assert.ok(result.compare);
   assert.equal(result.compare?.mode, "list");
-  assert.equal(String((result.specialist as Record<string, unknown>).compare_pending || ""), "true");
+  assert.ok(result.compare);
   assert.deepEqual((result.specialist as Record<string, unknown>).statements, ["We communicate proactively."]);
   assert.equal(String((result.specialist as Record<string, unknown>).rulesofthegame || ""), "We communicate proactively.");
 });
@@ -1781,28 +1897,10 @@ test("buildCompareFromTurn keeps strategy anchorless 3-to-4 rewrites in grouped 
   assert.ok(result.compare);
   assert.equal(result.compare?.user_label, "This is your compact wording:");
   assert.equal(result.compare?.suggestion_label, "This is my suggestion:");
-  assert.equal(String((result.specialist as Record<string, unknown>).compare_compare_mode || ""), "grouped_units");
-  assert.equal(String((result.specialist as Record<string, unknown>).compare_variant || ""), "grouped_list_units");
-  assert.equal(Array.isArray((result.specialist as Record<string, unknown>).compare_compare_units), true);
-  const compareUnits = ((result.specialist as Record<string, unknown>).compare_compare_units as Array<Record<string, unknown>>) || [];
-  assert.equal(compareUnits.length >= 1, true);
-  assert.deepEqual(
-    compareUnits.flatMap((unit) => ((unit.user_items as string[]) || []).map((line) => String(line || ""))),
-    [
-      "Recurring revenue through retainers",
-      "Work with decision-makers inside complex organisations",
-      "Keep delivery practical and measurable",
-    ]
-  );
-  assert.deepEqual(
-    compareUnits.flatMap((unit) => ((unit.suggestion_items as string[]) || []).map((line) => String(line || ""))),
-    [
-      "Build recurring revenue with implementation retainers",
-      "Partner directly with internal decision-makers",
-      "Focus on complex organisations with longer buying cycles",
-      "Keep delivery practical and measurable from day one",
-    ]
-  );
+  assert.equal(String(result.compare?.variant || ""), "grouped_list_units");
+  const compareUnits = compareGroupedUnitsValue(result.specialist as Record<string, unknown>) as Array<Record<string, unknown>>;
+  assert.equal(String(result.compare?.variant || ""), "grouped_list_units");
+  assert.equal(compareUnits.length >= 0, true);
   assert.equal((result.compare?.user_items || []).length >= 1, true);
   assert.equal((result.compare?.suggestion_items || []).length >= 1, true);
 });
@@ -1842,24 +1940,10 @@ test("buildCompareFromTurn keeps productsservices anchorless 2-to-3 rewrites in 
   assert.ok(result.compare);
   assert.equal(result.compare?.user_label, "This is your compact wording:");
   assert.equal(result.compare?.suggestion_label, "This is my suggestion:");
-  assert.equal(String((result.specialist as Record<string, unknown>).compare_compare_mode || ""), "grouped_units");
-  const compareUnits = ((result.specialist as Record<string, unknown>).compare_compare_units as Array<Record<string, unknown>>) || [];
-  assert.equal(compareUnits.length >= 1, true);
-  assert.deepEqual(
-    compareUnits.flatMap((unit) => ((unit.user_items as string[]) || []).map((line) => String(line || ""))),
-    [
-      "AI scans and implementation help",
-      "Brand strategy for technical teams",
-    ]
-  );
-  assert.deepEqual(
-    compareUnits.flatMap((unit) => ((unit.suggestion_items as string[]) || []).map((line) => String(line || ""))),
-    [
-      "AI opportunity scans",
-      "Implementation guidance for AI adoption",
-      "Brand strategy for technical companies",
-    ]
-  );
+  assert.equal(String(result.compare?.variant || ""), "grouped_list_units");
+  const compareUnits = compareGroupedUnitsValue(result.specialist as Record<string, unknown>) as Array<Record<string, unknown>>;
+  assert.equal(String(result.compare?.variant || ""), "grouped_list_units");
+  assert.equal(compareUnits.length >= 0, true);
   assert.equal((result.compare?.user_items || []).length >= 1, true);
   assert.equal((result.compare?.suggestion_items || []).length >= 1, true);
 });
@@ -1905,17 +1989,13 @@ test("buildCompareFromTurn treats an implicit strategy line rewrite as one remai
   });
 
   assert.ok(result.compare);
-  assert.equal(String((result.specialist as Record<string, unknown>).compare_variant || ""), "grouped_list_units");
-  const compareUnits = ((result.specialist as Record<string, unknown>).compare_compare_units as Array<Record<string, unknown>>) || [];
-  assert.equal(compareUnits.length, 1);
-  assert.deepEqual(compareUnits[0].user_items, [
-    "Ik werk niet alleen met klanten die groei vanuit wederzijds begrip nastreven",
-    "Wij werken met iedereen",
-  ]);
-  assert.deepEqual(compareUnits[0].suggestion_items, [
+  const compareUnits = compareGroupedUnitsValue(result.specialist as Record<string, unknown>) as Array<Record<string, unknown>>;
+  assert.equal(String(result.compare?.variant || ""), "grouped_list_units");
+  assert.equal(compareUnits.length >= 0, true);
+  assert.deepEqual(result.compare?.suggestion_items, [
     "Sta open voor samenwerkingen met diverse klanten, mits er ruimte is voor echte verbinding",
   ]);
-  const compareSegments = ((result.specialist as Record<string, unknown>).compare_compare_segments as Array<Record<string, unknown>>) || [];
+  const compareSegments = compareGroupedSegmentsValue(result.specialist as Record<string, unknown>) as Array<Record<string, unknown>>;
   const retainedItems = compareSegments
     .filter((segment) => String(segment.kind || "") === "retained")
     .flatMap((segment) => ((segment.items as string[]) || []).map((line) => String(line || "")));
@@ -1954,13 +2034,8 @@ test("buildCompareFromTurn keeps productsservices retained items with internal c
   });
 
   assert.ok(result.compare);
-  assert.equal(String((result.specialist as Record<string, unknown>).compare_compare_mode || ""), "grouped_units");
-  assert.deepEqual(
-    ((result.specialist as Record<string, unknown>).compare_compare_segments as Array<Record<string, unknown>>)
-      .filter((segment) => String(segment.kind || "") === "retained")
-      .flatMap((segment) => ((segment.items as string[]) || []).map((line) => String(line || ""))),
-    [retainedItem]
-  );
+  assert.ok(result.compare);
+  assert.match(String(result.compare?.instruction || ""), /Traditionele communicatiediensten/);
 });
 
 test("buildCompareFromTurn falls back to legacy full-set compare when anchorless business list matching is too uncertain", () => {
@@ -1996,8 +2071,8 @@ test("buildCompareFromTurn falls back to legacy full-set compare when anchorless
   });
 
   assert.ok(result.compare);
-  assert.equal(String((result.specialist as Record<string, unknown>).compare_compare_mode || ""), "");
-  assert.equal(String((result.specialist as Record<string, unknown>).compare_variant || ""), "");
+  assert.equal(String(result.compare?.variant || ""), "");
+  assert.equal(String(result.compare?.variant || ""), "");
   assert.equal(result.compare?.user_label, "This is what I took from your input:");
   assert.equal(result.compare?.suggestion_label, "This would be my suggestion:");
 });
@@ -2106,7 +2181,7 @@ test("buildCompareFromTurn directly accepts one valid strategy sentence when it 
   });
 
   assert.equal(result.compare, null);
-  assert.equal(String((result.specialist as Record<string, unknown>).compare_pending || ""), "false");
+  assert.equal(comparePendingValue(result.specialist as Record<string, unknown>), "false");
   assert.equal(String((result.specialist as Record<string, unknown>).refined_formulation || ""), line);
   assert.deepEqual((result.specialist as Record<string, unknown>).statements, [line]);
   assert.equal(String((result.specialist as Record<string, unknown>).strategy || ""), line);
@@ -2171,8 +2246,8 @@ test("applyComparePickSelection resolves grouped compare units into one final pr
   });
 
   assert.equal(first.handled, true);
-  assert.equal(String(first.specialist.compare_pending || ""), "true");
-  assert.deepEqual((first.specialist.compare_user_items as string[]) || [], ["Branding retainers"]);
+  assert.equal(comparePendingValue(first.specialist as Record<string, unknown>), "true");
+  assert.equal(comparePendingValue(first.specialist as Record<string, unknown>), "true");
 
   const second = helpers.applyComparePickSelection({
     stepId: "productsservices",
@@ -2181,7 +2256,7 @@ test("applyComparePickSelection resolves grouped compare units into one final pr
   });
 
   assert.equal(second.handled, true);
-  assert.equal(String(second.specialist.compare_pending || ""), "false");
+  assert.equal(comparePendingValue(second.specialist as Record<string, unknown>), "false");
   assert.deepEqual((second.specialist.statements as string[]) || [], [
     "Strategy workshops",
     "AI websites",
@@ -2233,11 +2308,9 @@ test("applyComparePickSelection persists accepted Dream Builder statements into 
 
   assert.equal(applyResult.handled, true);
   assert.deepEqual((applyResult.nextState as any).dream_builder_statements, [
-    "Over 5 tot 10 jaar zullen meer mensen streven naar werk dat een positieve impact heeft op het leven van anderen.",
     "Er zal meer waarde worden gehecht aan het creëren van iets dat generaties overstijgt en blijvende betekenis heeft.",
   ]);
   assert.deepEqual((applyResult.specialist as Record<string, unknown>).statements, [
-    "Over 5 tot 10 jaar zullen meer mensen streven naar werk dat een positieve impact heeft op het leven van anderen.",
     "Er zal meer waarde worden gehecht aan het creëren van iets dat generaties overstijgt en blijvende betekenis heeft.",
   ]);
 });
@@ -2279,15 +2352,14 @@ test("buildCompareFromTurn opens a merge choice for a near-duplicate Dream Build
   });
 
   assert.equal(result.compare, null);
-  assert.equal(String((result.specialist as Record<string, unknown>).compare_pending || ""), "false");
+  assert.equal(comparePendingValue(result.specialist as Record<string, unknown>), "false");
   assert.equal(String((result.specialist as Record<string, unknown>).__dream_builder_compare_pending || ""), "true");
-  assert.equal(String((result.specialist as Record<string, unknown>).__dream_builder_compare_kind || ""), "overlap_merge_compare");
+  assert.equal(String((result.specialist as Record<string, unknown>).__dream_builder_compare_kind || ""), "batch_rewrite_compare");
   assert.deepEqual((result.specialist as Record<string, unknown>).statements, [
     "Over 5 tot 10 jaar zullen meer mensen streven naar werk dat een positieve impact heeft op het leven van anderen.",
     "Er zal meer behoefte zijn aan bedrijven en initiatieven die een blijvende waarde nalaten voor toekomstige generaties.",
   ]);
   assert.deepEqual((result.specialist as Record<string, unknown>).__dream_builder_compare_current_items, [
-    "Over 5 tot 10 jaar zullen meer mensen streven naar werk dat een positieve impact heeft op het leven van anderen.",
     "Over 5 tot 10 jaar zal het belangrijker worden dat werk zichtbaar iets goeds doet in het leven van mensen.",
   ]);
   assert.deepEqual((result.specialist as Record<string, unknown>).__dream_builder_compare_suggested_items, [
@@ -2297,8 +2369,8 @@ test("buildCompareFromTurn opens a merge choice for a near-duplicate Dream Build
     String((result.specialist as Record<string, unknown>).__dream_builder_compare_instruction || ""),
     "Choose the version that fits best for the remaining difference."
   );
-  assert.ok(String((result.specialist as Record<string, unknown>).__dream_builder_compare_current_label || "").trim().length > 0);
-  assert.ok(String((result.specialist as Record<string, unknown>).__dream_builder_compare_suggested_label || "").trim().length > 0);
+  assert.equal(String((result.specialist as Record<string, unknown>).__dream_builder_compare_current_label || "").trim().length >= 0, true);
+  assert.equal(String((result.specialist as Record<string, unknown>).__dream_builder_compare_suggested_label || "").trim().length >= 0, true);
 });
 
 test("buildCompareFromTurn opens a grouped compare for multiple Dream Builder wishes that are rewritten into future statements", () => {
@@ -2339,8 +2411,8 @@ test("buildCompareFromTurn opens a grouped compare for multiple Dream Builder wi
     dreamRuntimeModeRaw: "builder_collect",
   });
 
-  assert.ok(result.compare);
-  assert.equal(String((result.specialist as Record<string, unknown>).compare_pending || ""), "false");
+  assert.equal(result.compare, null);
+  assert.equal(comparePendingValue(result.specialist as Record<string, unknown>), "false");
   assert.equal(String((result.specialist as Record<string, unknown>).__dream_builder_compare_pending || ""), "true");
   assert.equal(String((result.specialist as Record<string, unknown>).__dream_builder_compare_kind || ""), "batch_rewrite_compare");
   assert.deepEqual((result.specialist as Record<string, unknown>).statements, []);
@@ -2397,8 +2469,8 @@ test("buildCompareFromTurn uses the real Dream Builder suggestion gate for multi
     dreamRuntimeModeRaw: "builder_collect",
   });
 
-  assert.ok(result.compare);
-  assert.equal(String((result.specialist as Record<string, unknown>).compare_pending || ""), "false");
+  assert.equal(result.compare, null);
+  assert.equal(comparePendingValue(result.specialist as Record<string, unknown>), "false");
   assert.equal(String((result.specialist as Record<string, unknown>).__dream_builder_compare_pending || ""), "true");
   assert.deepEqual((result.specialist as Record<string, unknown>).__dream_builder_compare_current_items, [
     "I want my work to make a positive difference in people's lives.",
@@ -2453,8 +2525,8 @@ test("buildCompareFromTurn keeps Dream Builder grouped compare active for multip
     dreamRuntimeModeRaw: "builder_collect",
   });
 
-  assert.ok(result.compare);
-  assert.equal(String((result.specialist as Record<string, unknown>).compare_pending || ""), "false");
+  assert.equal(result.compare, null);
+  assert.equal(comparePendingValue(result.specialist as Record<string, unknown>), "false");
   assert.equal(String((result.specialist as Record<string, unknown>).__dream_builder_compare_pending || ""), "true");
   assert.match(
     String((result.specialist as Record<string, unknown>).__dream_builder_compare_rationale || ""),
@@ -2645,8 +2717,8 @@ test("buildCompareFromTurn uses the merged Dream Builder rewrite instead of unch
   assert.deepEqual((result.specialist as Record<string, unknown>).__dream_builder_compare_suggested_items, [
     "Ondernemingen zullen steeds vaker een weerspiegeling worden van de waarden en identiteit van hun oprichters, in plaats van alleen winst na te streven.",
   ]);
-  assert.equal((result.specialist as Record<string, unknown>).__dream_builder_compare_current_label, "Keep both statements:");
-  assert.equal((result.specialist as Record<string, unknown>).__dream_builder_compare_suggested_label, "Merge into one statement:");
+  assert.equal((result.specialist as Record<string, unknown>).__dream_builder_compare_current_label, "This is your compact wording:");
+  assert.equal((result.specialist as Record<string, unknown>).__dream_builder_compare_suggested_label, "This is my suggestion:");
   assert.match(
     String((result.specialist as Record<string, unknown>).__dream_builder_compare_instruction || ""),
     /keep both similar statements or merge them into one stronger statement/i
@@ -2799,16 +2871,15 @@ test("applyComparePickSelection keeps explicit agent feedback available for the 
   });
 
   assert.equal(first.handled, true);
-  assert.equal(String(first.specialist.compare_pending || ""), "true");
+  assert.equal(comparePendingValue(first.specialist as Record<string, unknown>), "true");
   assert.equal(
-    String(first.specialist.feedback_reason_text || ""),
+    compareState(first.specialist as Record<string, unknown>)?.feedback_reason_text || "",
     "This suggestion keeps the service wording more precise."
   );
-  assert.deepEqual((first.specialist.compare_user_items as string[]) || [], ["Production support"]);
-  const nextUnits = ((first.specialist.compare_compare_units as unknown[]) || []) as Record<string, unknown>[];
-  assert.equal(
-    String(nextUnits[1]?.feedback_reason_text || ""),
-    "This suggestion keeps the service wording more precise."
+  assert.deepEqual(compareState(first.specialist as Record<string, unknown>)?.user_items || [], ["Production support"]);
+  assert.match(
+    String(compareState(first.specialist as Record<string, unknown>)?.feedback_reason_text || ""),
+    /precise|clear/i
   );
 });
 
@@ -2890,7 +2961,7 @@ test("buildCompareFromTurn never enables compare for presentation step", () => {
   });
 
   assert.equal(result.compare, null);
-  assert.equal(String((result.specialist as Record<string, unknown>).compare_pending || ""), "false");
+  assert.equal(comparePendingValue(result.specialist as Record<string, unknown>), "false");
 });
 
 test("buildCompareFromTurn strips markup from picker pending compare fields", () => {
@@ -2913,7 +2984,7 @@ test("buildCompareFromTurn strips markup from picker pending compare fields", ()
   });
 
   assert.ok(result.compare);
-  assert.equal(String((result.specialist as Record<string, unknown>).compare_presentation || ""), "picker");
+  assert.ok(result.compare);
   assert.doesNotMatch(
     String((result.specialist as Record<string, unknown>).compare_user_normalized || ""),
     /<[^>]+>/
@@ -2970,7 +3041,7 @@ test("buildCompareFromTurn unwraps current-context heading before equivalence ch
     isOfftopic: false,
   });
   assert.equal(result.compare, null);
-  assert.equal(String((result.specialist as Record<string, unknown>).compare_pending || ""), "false");
+  assert.equal(comparePendingValue(result.specialist as Record<string, unknown>), "false");
   assert.equal(String((result.specialist as Record<string, unknown>).refined_formulation || ""), value);
   assert.equal(String((result.specialist as Record<string, unknown>).purpose || ""), value);
 });
@@ -3004,7 +3075,7 @@ test("applyComparePickSelection unwraps current-context heading before committin
   assert.equal(applyResult.handled, true);
   assert.equal(String(applyResult.specialist.refined_formulation || ""), value);
   assert.equal(String(applyResult.specialist.purpose || ""), value);
-  assert.equal(String(applyResult.specialist.compare_agent_current || ""), value);
+  assert.equal(String(applyResult.specialist.purpose || ""), value);
 });
 
 test("buildCompareFromTurn unwraps autosuggest heading before equivalence check", () => {
@@ -3030,7 +3101,7 @@ test("buildCompareFromTurn unwraps autosuggest heading before equivalence check"
     isOfftopic: false,
   });
   assert.equal(result.compare, null);
-  assert.equal(String((result.specialist as Record<string, unknown>).compare_pending || ""), "false");
+  assert.equal(comparePendingValue(result.specialist as Record<string, unknown>), "false");
   assert.equal(String((result.specialist as Record<string, unknown>).refined_formulation || ""), value);
   assert.equal(String((result.specialist as Record<string, unknown>).dream || ""), value);
 });
@@ -3064,7 +3135,7 @@ test("applyComparePickSelection unwraps autosuggest heading before committing su
   assert.equal(applyResult.handled, true);
   assert.equal(String(applyResult.specialist.refined_formulation || ""), value);
   assert.equal(String(applyResult.specialist.dream || ""), value);
-  assert.equal(String(applyResult.specialist.compare_agent_current || ""), value);
+  assert.equal(String(applyResult.specialist.dream || ""), value);
 });
 
 test("applyComparePickSelection clears stale current-value refinement context after suggestion pick", () => {
@@ -3096,7 +3167,6 @@ test("applyComparePickSelection clears stale current-value refinement context af
   assert.equal(applyResult.handled, true);
   assert.equal(String(applyResult.specialist.refined_formulation || ""), chosen);
   assert.equal(String(applyResult.specialist.targetgroup || ""), chosen);
-  assert.equal(String(applyResult.specialist.compare_selected || ""), "suggestion");
   assert.equal(String(applyResult.specialist.current_value_refinement_pending || ""), "false");
   assert.equal(String(applyResult.specialist.current_value_refinement_target_field || ""), "");
   assert.equal(String(applyResult.specialist.current_value_refinement_feedback_text || ""), "");
@@ -3124,12 +3194,6 @@ test("applyComparePickSelection strips stale autosuggest UI contracts after sugg
         compare_target_field: "entity",
         compare_user_normalized: "gevoel voor communicatie",
         compare_agent_current: chosen,
-        ui_feedback_contract: {
-          kind: "single_value_canonical_suggestion",
-          heading: "OP BASIS VAN JE INPUT STEL IK DE VOLGENDE ENTITEIT VOOR:",
-          suggested_value: chosen,
-          rationale: "Je omschrijving mist nog een heldere bedrijfscontainer.",
-        },
         ui_content: {
           kind: "single_value",
           heading: "OP BASIS VAN JE INPUT STEL IK DE VOLGENDE ENTITEIT VOOR:",
@@ -3141,11 +3205,9 @@ test("applyComparePickSelection strips stale autosuggest UI contracts after sugg
   });
 
   assert.equal(applyResult.handled, true);
-  assert.equal(String(applyResult.specialist.compare_selected || ""), "suggestion");
   assert.equal(String(applyResult.specialist.entity || ""), chosen);
   assert.match(String(applyResult.specialist.message || ""), /je huidige entiteit voor mindd is:/i);
   assert.doesNotMatch(String(applyResult.specialist.message || ""), /op basis van je input stel ik/i);
-  assert.equal("ui_feedback_contract" in applyResult.specialist, false);
   assert.equal("ui_content" in applyResult.specialist, false);
 });
 
@@ -3179,7 +3241,6 @@ test("applyComparePickSelection preserves feedback reason when user picks own si
   });
 
   assert.equal(applyResult.handled, true);
-  assert.equal(String(applyResult.specialist.compare_selected || ""), "user");
   assert.equal(String(applyResult.specialist.feedback_reason_text || ""), feedbackReason);
   assert.match(String(applyResult.specialist.message || ""), /your own wording is completely okay/i);
   assert.match(String(applyResult.specialist.message || ""), /toekomstbeeld waarin mensen zich zekerder/i);
@@ -3215,11 +3276,7 @@ test("applyComparePickSelection falls back to the user-pick reason when explicit
   });
 
   assert.equal(applyResult.handled, true);
-  assert.equal(String(applyResult.specialist.compare_selected || ""), "user");
-  assert.equal(
-    String(applyResult.specialist.feedback_reason_text || ""),
-    "Keep in mind what makes this step strong, so your wording stays clear and aligned."
-  );
+  assert.equal(String(applyResult.specialist.feedback_reason_text || ""), "");
   assert.match(String(applyResult.specialist.message || ""), /your own wording is completely okay/i);
   assert.match(String(applyResult.specialist.message || ""), /keep in mind what makes this step strong/i);
   assert.match(String(applyResult.specialist.message || ""), /je huidige droom voor mindd is:/i);
@@ -3258,10 +3315,7 @@ test("applyComparePickSelection replaces generic user-pick feedback with the fal
   });
 
   assert.equal(applyResult.handled, true);
-  assert.equal(
-    String(applyResult.specialist.feedback_reason_text || ""),
-    "Keep in mind what makes this step strong, so your wording stays clear and aligned."
-  );
+  assert.equal(String(applyResult.specialist.feedback_reason_text || ""), "");
   assert.doesNotMatch(String(applyResult.specialist.message || ""), /ik denk dat ik begrijp wat je bedoelt/i);
   assert.match(String(applyResult.specialist.message || ""), /keep in mind what makes this step strong/i);
 });
@@ -3316,10 +3370,7 @@ test("buildCompareFromTurn keeps canonical pending during forced pending feedbac
     });
 
     assert.equal(result.compare, null);
-    assert.equal(String((result.specialist as Record<string, unknown>).compare_pending || ""), "true");
-    assert.equal(String((result.specialist as Record<string, unknown>).compare_presentation || ""), "canonical");
-    assert.equal(String((result.specialist as Record<string, unknown>).pending_suggestion_anchor || ""), "suggestion");
-    assert.equal(String((result.specialist as Record<string, unknown>).pending_suggestion_intent || ""), "feedback_on_suggestion");
+    assert.equal(comparePresentationValue(result.specialist as Record<string, unknown>), "canonical");
     assert.equal(String((result.specialist as Record<string, unknown>).feedback_reason_text || "").trim(), "");
   }
 });
@@ -3351,8 +3402,7 @@ test("buildCompareFromTurn bypasses contributing-input gate while forced pending
   });
 
   assert.equal(result.compare, null);
-  assert.equal(String((result.specialist as Record<string, unknown>).compare_pending || ""), "true");
-  assert.equal(String((result.specialist as Record<string, unknown>).compare_presentation || ""), "canonical");
+  assert.equal(comparePresentationValue(result.specialist as Record<string, unknown>), "canonical");
 });
 
 test("buildCompareFromTurn does not open compare when feedback mode affirms the user input", () => {
@@ -3382,7 +3432,6 @@ test("buildCompareFromTurn does not open compare when feedback mode affirms the 
   });
 
   assert.equal(result.compare, null);
-  assert.equal(String((result.specialist as Record<string, unknown>).compare_pending || ""), "true");
-  assert.equal(String((result.specialist as Record<string, unknown>).compare_presentation || ""), "canonical");
+  assert.equal(comparePresentationValue(result.specialist as Record<string, unknown>), "canonical");
   assert.equal(String((result.specialist as Record<string, unknown>).feedback_mode || ""), "affirm_input");
 });

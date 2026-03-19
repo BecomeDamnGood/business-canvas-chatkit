@@ -3,6 +3,7 @@ import {
   buildRulesOfTheGameBullets,
 } from "./rulesofthegame.js";
 import { UI_STRINGS_SOURCE_EN } from "../i18n/ui_strings_defaults.js";
+import { attachCompareRuntime, clearCompareRuntime } from "../handlers/compare_runtime.js";
 
 export const RULESOFTHEGAME_MIN_RULES = 3;
 export const RULESOFTHEGAME_MAX_RULES = 5;
@@ -230,31 +231,47 @@ export function applyRulesRuntimePolicy(params: {
       .join(" ")
       .trim();
 
-    const pendingSpecialist: Record<string, unknown> = {
-      ...specialist,
+    const pendingSpecialist: Record<string, unknown> = attachCompareRuntime({
+      ...clearCompareRuntime(specialist),
       message: joinMessage(String(specialist.message || ""), rationale),
       question: "",
       refined_formulation: "",
       rulesofthegame: "",
       statements: userItems,
-      compare_pending: "true",
-      compare_selected: "",
-      compare_mode: "list",
-      compare_target_field: "rulesofthegame",
-      compare_list_semantics: "full",
-      compare_user_raw: userBullets,
-      compare_user_normalized: userBullets,
-      compare_user_items: userItems,
-      compare_suggestion_items: suggestionItems,
-      compare_base_items: [],
-      compare_agent_current: suggestionBullets,
-      compare_variant: "",
-      compare_user_label: "",
-      compare_suggestion_label: "",
+      compare_runtime: {
+        kind: "list_compare",
+        mode: "list",
+        status: "pending",
+        presentation: "picker",
+        resolution: "",
+        target_field: "rulesofthegame",
+        variant: "",
+        user_text: userBullets,
+        user_normalized_text: userBullets,
+        user_items: userItems,
+        suggestion_text: suggestionBullets,
+        suggestion_items: suggestionItems,
+        base_items: [],
+        list_semantics: "full",
+        user_label: "",
+        suggestion_label: "",
+        grouped_mode: "",
+        grouped_cursor: "",
+        grouped_units: [],
+        grouped_segments: [],
+        user_variant_semantics: "",
+        user_variant_stepworthy: false,
+        feedback_reason_key: "",
+        feedback_reason_text: rationale,
+        pending_text_intent: "",
+        pending_text_anchor: "",
+        pending_text_seed_source: "",
+        pending_text_feedback_text: "",
+        pending_text_presentation_mode: "",
+      },
       feedback_reason_key: "",
-      feedback_reason_text: rationale,
       __rules_policy_applied: "true",
-    };
+    });
 
     return {
       specialist: pendingSpecialist,
@@ -270,24 +287,10 @@ export function applyRulesRuntimePolicy(params: {
   const bullets = buildRulesOfTheGameBullets(finalItems);
 
   const acceptedSpecialist: Record<string, unknown> = {
-    ...specialist,
+    ...clearCompareRuntime(specialist),
     statements: finalItems,
     refined_formulation: bullets,
     rulesofthegame: bullets,
-    compare_pending: "false",
-    compare_selected: "",
-    compare_mode: "",
-    compare_target_field: "",
-    compare_list_semantics: "delta",
-    compare_user_raw: "",
-    compare_user_normalized: "",
-    compare_user_items: [],
-    compare_suggestion_items: [],
-    compare_base_items: [],
-    compare_agent_current: "",
-    compare_variant: "",
-    compare_user_label: "",
-    compare_suggestion_label: "",
     feedback_reason_key: "",
     feedback_reason_text: "",
     __rules_policy_applied: "true",

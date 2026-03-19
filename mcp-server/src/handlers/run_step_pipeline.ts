@@ -45,6 +45,12 @@ import {
   supportsAutoSuggest,
 } from "../steps/step_registry.js";
 import { deriveStructuredSuggestionsContent } from "../core/structured_suggestions.js";
+import {
+  attachCompareRuntime,
+  clearCompareRuntime,
+  patchCompareRuntime,
+  readCompareRuntime,
+} from "./compare_runtime.js";
 type RunPostSpecialistPipelineParams = RunStepPostSpecialistPipelineRequest;
 
 type RunStepPipelineFlatPorts<TPayload> =
@@ -417,8 +423,9 @@ export function resolveCompareSeedUserText(params: {
     ) &&
     submittedAnchor === "suggestion";
   if (seedFromSuggestion) {
+    const previousCompare = readCompareRuntime(params.previousSpecialist);
     return String(
-      params.previousSpecialist.compare_agent_current ||
+      previousCompare?.suggestion_text ||
       params.previousSpecialist.refined_formulation ||
       ""
     ).trim();
@@ -549,16 +556,13 @@ function stateWithCurrentValueFeedbackContext(
   currentValue: string,
   feedbackText: string
 ): CanvasState {
-  const last = ((state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
+  const last = {
+    ...(((state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>),
+  };
   return {
     ...state,
-    last_specialist_result: {
+    last_specialist_result: patchCompareRuntime({
       ...last,
-      pending_suggestion_intent: "feedback_on_current_value",
-      pending_suggestion_anchor: "current_value",
-      pending_suggestion_seed_source: "current_value",
-      pending_suggestion_feedback_text: feedbackText,
-      pending_suggestion_presentation_mode: "",
       feedback_mode: "refine_current",
       current_value_refinement_pending: "true",
       current_value_refinement_target_field: stepId,
@@ -566,7 +570,13 @@ function stateWithCurrentValueFeedbackContext(
       current_value_refinement_anchor_value: currentValue,
       refined_formulation: currentValue,
       [stepId]: currentValue,
-    },
+    }, {
+      pending_text_intent: "feedback_on_current_value",
+      pending_text_anchor: "current_value",
+      pending_text_seed_source: "current_value",
+      pending_text_feedback_text: feedbackText,
+      pending_text_presentation_mode: "",
+    }),
   };
 }
 
@@ -633,34 +643,8 @@ function isAutoSuggestIntentFromSpecialist(specialistResult: Record<string, unkn
 
 function clearPendingCompareFields(specialistResult: Record<string, unknown>): Record<string, unknown> {
   return {
-    ...specialistResult,
-    compare_pending: "false",
-    compare_selected: "",
-    compare_user_raw: "",
-    compare_user_normalized: "",
-    compare_user_items: [],
-    compare_suggestion_items: [],
-    compare_base_items: [],
-    compare_list_semantics: "delta",
-    compare_agent_current: "",
-    compare_mode: "",
-    compare_target_field: "",
-    compare_presentation: "",
-    compare_variant: "",
-    compare_user_label: "",
-    compare_suggestion_label: "",
-    compare_compare_mode: "",
-    compare_compare_cursor: "",
-    compare_compare_units: [],
-    compare_compare_segments: [],
-    compare_user_variant_semantics: "",
-    compare_user_variant_stepworthy: "",
+    ...clearCompareRuntime(specialistResult),
     feedback_mode: "none",
-    pending_suggestion_intent: "",
-    pending_suggestion_anchor: "",
-    pending_suggestion_seed_source: "",
-    pending_suggestion_feedback_text: "",
-    pending_suggestion_presentation_mode: "",
     current_value_refinement_pending: "false",
     current_value_refinement_target_field: "",
     current_value_refinement_feedback_text: "",
@@ -1138,7 +1122,7 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
       decision1.specialist_to_call === deps.dreamExplainerSpecialist &&
       String(decision1.current_step || "") === deps.dreamStepId &&
       !isTrueFlag(specialistResult.is_offtopic) &&
-      !isTrueFlag(specialistResult.compare_pending) &&
+      !(readCompareRuntime(specialistResult)?.status === "pending") &&
       String(specialistResult.action || "").trim() === "ASK" &&
       !String(specialistResult.refined_formulation || "").trim()
     ) {
@@ -1194,7 +1178,7 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
       String(decision1.current_step || "") === deps.dreamStepId &&
       !isTrueFlag(specialistResult.is_offtopic) &&
       !dreamBuilderOverlapRepairApplied &&
-      !isTrueFlag(specialistResult.compare_pending) &&
+      !(readCompareRuntime(specialistResult)?.status === "pending") &&
       String(specialistResult.action || "").trim() === "REFINE" &&
       String(specialistResult.refined_formulation || "").trim()
     ) {
@@ -1742,7 +1726,7 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
       eligibleForCompareTurn &&
       !isCurrentTurnOfftopic &&
       !skipCompareForTurn &&
-      !isTrueFlag(specialistResult.compare_pending)
+      !(readCompareRuntime(specialistResult)?.status === "pending")
     ) {
       const acceptedOutputUserTurnClassification =
         !forcePendingCompare &&
@@ -1785,7 +1769,7 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
       compareOverride = null;
       requireComparePick = false;
     }
-    asStateRecord(nextState).last_specialist_result = specialistResult;
+    asStateRecord(nextState).last_specialist_result = attachCompareRuntime(specialistResult);
     if (
       params.compareEnabled &&
       !dreamBuilderFlowActiveForCompare &&
@@ -1819,8 +1803,8 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
         requireComparePick = true;
         actionCodesOverride = [];
         renderedActionsOverride = [];
-      } else if (isTrueFlag(specialistResult.compare_pending)) {
-        const presentation = String(specialistResult.compare_presentation || "").trim();
+      } else if (readCompareRuntime(specialistResult)?.status === "pending") {
+        const presentation = String(readCompareRuntime(specialistResult)?.presentation || "").trim();
         if (presentation !== "canonical") {
           specialistResult = clearPendingCompareFields(asRecord(specialistResult));
         }
@@ -1829,7 +1813,7 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
       specialistResult = clearDreamBuilderLegacyCompareFields(asRecord(specialistResult));
       compareOverride = null;
       requireComparePick = false;
-    } else if (isTrueFlag(specialistResult.compare_pending)) {
+    } else if (readCompareRuntime(specialistResult)?.status === "pending") {
       specialistResult = clearPendingCompareFields(asRecord(specialistResult));
     }
 
@@ -1845,11 +1829,12 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
           : (
             requireComparePick ||
             Boolean(compareOverride?.enabled) ||
-            isTrueFlag((specialistResult as Record<string, unknown>).compare_pending)
+            readCompareRuntime(specialistResult as Record<string, unknown>)?.status === "pending"
           ),
       state: nextState,
     });
     // Motivational quote injection feature removed.
+    specialistResult = attachCompareRuntime(specialistResult);
     asStateRecord(nextState).last_specialist_result = specialistResult;
 
     const currentStepForContract = String(asStateRecord(nextState).current_step ?? "");

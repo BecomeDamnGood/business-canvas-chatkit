@@ -1,5 +1,6 @@
 import { appendSessionTokenLog, sessionTokenFileLoggingEnabled } from "../core/session_token_log.js";
 import type { CanvasState } from "../core/state.js";
+import { readCompareRuntime } from "./compare_runtime.js";
 import { finalizeResponseContractInternals } from "./turn_contract.js";
 
 export type StructuredLogSeverity = "info" | "warn" | "error";
@@ -158,7 +159,7 @@ function compareModeForLogs(
     return "list";
   }
   const renderModel = asLogRecord(pendingInteraction.render_model);
-  return trimmedString(renderModel.mode || specialist.compare_mode).toLowerCase();
+  return trimmedString(renderModel.mode || readCompareRuntime(specialist)?.mode).toLowerCase();
 }
 
 function compareVariantForLogs(
@@ -167,7 +168,7 @@ function compareVariantForLogs(
   dreamBuilderContract?: Record<string, unknown>
 ): string {
   const renderModel = asLogRecord(pendingInteraction.render_model);
-  const explicit = trimmedString(renderModel.variant || specialist.compare_variant).toLowerCase();
+  const explicit = trimmedString(renderModel.variant || readCompareRuntime(specialist)?.variant).toLowerCase();
   if (explicit) return explicit;
   if (dreamBuilderContractIsCompare(asLogRecord(dreamBuilderContract))) {
     return trimmedString(asLogRecord(asLogRecord(dreamBuilderContract).compare).kind).toLowerCase();
@@ -193,11 +194,12 @@ function emitUsageAnalyticsEvents(
     Object.keys(asLogRecord(state.last_specialist_result)).length > 0
       ? asLogRecord(state.last_specialist_result)
       : asLogRecord(response.specialist);
+  const compareState = readCompareRuntime(specialist);
   const decisionContext = createLogContext(response, state);
   const sessionTurnIndex = numericTurnIndex(state.__session_turn_index);
   const uiViewMode = trimmedString(uiView.mode).toLowerCase();
   const uiViewVariant = trimmedString(uiView.variant).toLowerCase();
-  const comparePending = trimmedString(specialist.compare_pending).toLowerCase() === "true";
+  const comparePending = compareState?.status === "pending";
   const compareEnabled =
     pendingInteractionIsCompare(uiPendingInteraction) ||
     dreamBuilderContractIsCompare(uiDreamBuilderContract) ||
@@ -207,14 +209,14 @@ function emitUsageAnalyticsEvents(
     specialist,
     uiDreamBuilderContract
   );
-  const comparePresentation = trimmedString(specialist.compare_presentation).toLowerCase();
+  const comparePresentation = trimmedString(compareState?.presentation).toLowerCase();
   const compareVariant = compareVariantForLogs(
     uiPendingInteraction,
     specialist,
     uiDreamBuilderContract
   );
-  const compareTargetField = trimmedString(specialist.compare_target_field).toLowerCase();
-  const compareSelected = trimmedString(specialist.compare_selected).toLowerCase();
+  const compareTargetField = trimmedString(compareState?.target_field).toLowerCase();
+  const compareSelected = trimmedString(compareState?.resolution).toLowerCase();
   const analyticsBase = {
     analytics_schema: "bsc_app_usage_v1",
     session_turn_index: sessionTurnIndex,
@@ -236,7 +238,7 @@ function emitUsageAnalyticsEvents(
   if (compareEnabled) {
     logStructuredEvent("info", "app_usage_compare_shown", decisionContext, {
       ...analyticsBase,
-      compare_mode: compareMode,
+      compare_kind: compareMode,
       compare_presentation: comparePresentation,
       compare_variant: compareVariant,
       compare_target_field: compareTargetField,
@@ -246,7 +248,7 @@ function emitUsageAnalyticsEvents(
   if (compareSelected === "user" || compareSelected === "suggestion") {
     logStructuredEvent("info", "app_usage_compare_selected", decisionContext, {
       ...analyticsBase,
-      compare_mode: compareMode,
+      compare_kind: compareMode,
       compare_presentation: comparePresentation,
       compare_variant: compareVariant,
       compare_target_field: compareTargetField,
@@ -266,9 +268,10 @@ function buildUiRenderDecisionLogDetails(
     Object.keys(asLogRecord(state.last_specialist_result)).length > 0
       ? asLogRecord(state.last_specialist_result)
       : asLogRecord(response.specialist);
+  const compareState = readCompareRuntime(specialist);
   const promptText = trimmedString(response.prompt);
   const questionText = trimmedString(ui.questionText);
-  const comparePending = trimmedString(specialist.compare_pending).toLowerCase() === "true";
+  const comparePending = compareState?.status === "pending";
   const compareEnabled =
     pendingInteractionIsCompare(uiPendingInteraction) || comparePending;
   return {
@@ -281,31 +284,31 @@ function buildUiRenderDecisionLogDetails(
     question_present: questionText ? "true" : "false",
     question_len: questionText.length,
     compare_enabled: compareEnabled ? "true" : "false",
-    compare_pending: comparePending ? "true" : "false",
-    compare_mode: compareModeForLogs(uiPendingInteraction, specialist),
-    compare_presentation: trimmedString(specialist.compare_presentation).toLowerCase(),
+    compare_status: comparePending ? "pending" : compareEnabled ? "resolved" : "inactive",
+    compare_kind: compareModeForLogs(uiPendingInteraction, specialist),
+    compare_presentation: trimmedString(compareState?.presentation).toLowerCase(),
     compare_variant: compareVariantForLogs(uiPendingInteraction, specialist),
-    compare_compare_mode: trimmedString(specialist.compare_compare_mode).toLowerCase(),
-    compare_compare_cursor: trimmedString(specialist.compare_compare_cursor),
-    compare_compare_units_count: Array.isArray(specialist.compare_compare_units)
-      ? specialist.compare_compare_units.length
+    compare_grouped_mode: trimmedString(compareState?.grouped_mode).toLowerCase(),
+    compare_grouped_cursor: trimmedString(compareState?.grouped_cursor),
+    compare_grouped_units_count: Array.isArray(compareState?.grouped_units)
+      ? compareState?.grouped_units.length
       : 0,
-    compare_compare_segments_count: Array.isArray(specialist.compare_compare_segments)
-      ? specialist.compare_compare_segments.length
+    compare_grouped_segments_count: Array.isArray(compareState?.grouped_segments)
+      ? compareState?.grouped_segments.length
       : 0,
-    compare_selected: trimmedString(specialist.compare_selected).toLowerCase(),
-    compare_user_label: trimmedString(
-      asLogRecord(uiPendingInteraction.render_model).user_label || specialist.compare_user_label
+    compare_resolution: trimmedString(compareState?.resolution).toLowerCase(),
+    compare_user_option_label: trimmedString(
+      asLogRecord(uiPendingInteraction.render_model).user_label || compareState?.user_label
     ),
-    compare_suggestion_label: trimmedString(
-      asLogRecord(uiPendingInteraction.render_model).suggestion_label || specialist.compare_suggestion_label
+    compare_suggestion_option_label: trimmedString(
+      asLogRecord(uiPendingInteraction.render_model).suggestion_label || compareState?.suggestion_label
     ),
     compare_instruction: trimmedString(asLogRecord(uiPendingInteraction.render_model).instruction),
-    compare_user_items_count: stringArrayLength(
-      asLogRecord(uiPendingInteraction.render_model).user_items || specialist.compare_user_items
+    compare_user_option_items_count: stringArrayLength(
+      asLogRecord(uiPendingInteraction.render_model).user_items || compareState?.user_items
     ),
-    compare_suggestion_items_count: stringArrayLength(
-      asLogRecord(uiPendingInteraction.render_model).suggestion_items || specialist.compare_suggestion_items
+    compare_suggestion_option_items_count: stringArrayLength(
+      asLogRecord(uiPendingInteraction.render_model).suggestion_items || compareState?.suggestion_items
     ),
   };
 }

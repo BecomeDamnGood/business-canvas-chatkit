@@ -13,6 +13,7 @@ import { createTurnResponseEngine, type TurnResponseEngine } from "./run_step_tu
 import type { UiI18nTelemetryCounters } from "./run_step_i18n_runtime.js";
 import { looksLikeExamplesFramingLine } from "./run_step_value_shape.js";
 import { isSingleValueTextPickerState } from "./run_step_compare_picker_contract.js";
+import { readCompareRuntime } from "./compare_runtime.js";
 import { hasGroupedCompareListSemantics } from "../steps/step_registry.js";
 
 export type RunStepRuntimeInputMode = "widget" | "chat";
@@ -508,7 +509,11 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
     questionTextOverride?: string;
     state?: CanvasState | null;
   }): string {
-    const { specialist } = params;
+    const specialist =
+      params.specialist && typeof params.specialist === "object"
+        ? ({ ...(params.specialist as Record<string, unknown>) })
+        : {};
+    const compareState = readCompareRuntime(specialist);
     const parts: string[] = [];
 
     const contractId = String((specialist as Record<string, unknown>)?.ui_contract_id || "").trim();
@@ -518,12 +523,12 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
       contractStepId === deps.dreamStepId &&
       String(specialist?.__dream_builder_compare_pending || "").trim().toLowerCase() === "true";
     const comparePending =
-      String(specialist?.compare_pending || "").trim().toLowerCase() === "true" ||
+      compareState?.status === "pending" ||
       dreamBuilderComparePending;
     const wordingMode = dreamBuilderComparePending
       ? "list"
-      : (String(specialist?.compare_mode || "text") === "list" ? "list" : "text");
-    const comparePresentation = String(specialist?.compare_presentation || "").trim();
+      : (compareState?.mode === "list" ? "list" : "text");
+    const comparePresentation = String(compareState?.presentation || "").trim();
     const canonicalPendingTextSuggestion =
       comparePending && wordingMode === "text" && comparePresentation === "canonical";
     const wordingSuggestion = stripMarkupPreserveLines(
@@ -535,7 +540,7 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
                 : []
             ).join("\n") || specialist?.refined_formulation || ""
           )
-        : String(specialist?.compare_agent_current || specialist?.refined_formulation || "")
+        : String(compareState?.suggestion_text || specialist?.refined_formulation || "")
     );
     const normalizeLine = (value: string): string =>
       String(value || "")
@@ -696,6 +701,7 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
       msg = filtered.join("\n\n").trim();
     }
     if (comparePending && wordingMode === "list" && msg) {
+      const compareState = readCompareRuntime(specialist);
       const userItems = dreamBuilderComparePending
         ? (
             Array.isArray(specialist?.__dream_builder_compare_current_items)
@@ -704,9 +710,7 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
           )
             .map((line) => String(line || "").trim())
             .filter(Boolean)
-        : Array.isArray(specialist?.compare_user_items)
-          ? (specialist.compare_user_items as string[]).map((line) => String(line || "").trim()).filter(Boolean)
-          : [];
+        : (compareState?.user_items || []).map((line) => String(line || "").trim()).filter(Boolean);
       const suggestionItems = dreamBuilderComparePending
         ? (
             Array.isArray(specialist?.__dream_builder_compare_suggested_items)
@@ -715,9 +719,7 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
           )
             .map((line) => String(line || "").trim())
             .filter(Boolean)
-        : Array.isArray(specialist?.compare_suggestion_items)
-          ? (specialist.compare_suggestion_items as string[]).map((line) => String(line || "").trim()).filter(Boolean)
-          : [];
+        : (compareState?.suggestion_items || []).map((line) => String(line || "").trim()).filter(Boolean);
       const knownItems = deps.mergeListItems(userItems, suggestionItems);
       const fallbackItems = knownItems.length > 0 ? knownItems : deps.splitSentenceItems(wordingSuggestion);
       msg = deps.sanitizePendingListMessage(msg, fallbackItems, params.state || null, specialist);
@@ -1377,8 +1379,9 @@ export function createRunStepRuntimeFinalizeLayer<TPayload extends Record<string
     const isDreamStep = currentStep === dreamStepId;
     const dreamBuilderComparePending =
       isDreamStep && String(lastSpecialist.__dream_builder_compare_pending || "").trim().toLowerCase() === "true";
+    const compareState = readCompareRuntime(lastSpecialist);
     const comparePending =
-      String(lastSpecialist.compare_pending || "").trim().toLowerCase() === "true" ||
+      compareState?.status === "pending" ||
       dreamBuilderComparePending;
     const isDreamExplainer = activeSpecialist === dreamExplainerSpecialist;
     const isDreamSpecialist = isDreamStep && !isDreamExplainer;

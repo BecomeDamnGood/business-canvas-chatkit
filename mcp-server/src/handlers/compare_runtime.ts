@@ -1,0 +1,297 @@
+function toRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function trimString(value: unknown): string {
+  return String(value || "").trim();
+}
+
+export function normalizeStringArray(raw: unknown): string[] {
+  return Array.isArray(raw)
+    ? raw.map((value) => String(value || "").trim()).filter(Boolean)
+    : [];
+}
+
+export function parseRetainedInstruction(rawInstruction: unknown): {
+  retainedHeading: string;
+  retainedItems: string[];
+  instructionText: string;
+} {
+  const instruction = String(rawInstruction || "").replace(/\r/g, "\n").trim();
+  if (!instruction) {
+    return { retainedHeading: "", retainedItems: [], instructionText: "" };
+  }
+  const lines = instruction
+    .split("\n")
+    .map((line) => String(line || "").trim());
+  const firstBulletIndex = lines.findIndex((line) => /^(?:[-*•·]|\d+[\).])\s+/.test(line));
+  if (firstBulletIndex < 0) {
+    return { retainedHeading: "", retainedItems: [], instructionText: instruction };
+  }
+
+  let bulletEndIndex = firstBulletIndex;
+  while (bulletEndIndex < lines.length && /^(?:[-*•·]|\d+[\).])\s+/.test(lines[bulletEndIndex])) {
+    bulletEndIndex += 1;
+  }
+
+  const retainedHeading = lines
+    .slice(0, firstBulletIndex)
+    .filter(Boolean)
+    .join("\n")
+    .trim();
+  const retainedItems = lines
+    .slice(firstBulletIndex, bulletEndIndex)
+    .map((line) => line.replace(/^\s*(?:[-*•·]|\d+[\).])\s+/, "").trim())
+    .filter(Boolean);
+  const instructionText = lines
+    .slice(bulletEndIndex)
+    .filter(Boolean)
+    .join("\n")
+    .trim();
+  if (!retainedHeading || retainedItems.length === 0) {
+    return { retainedHeading: "", retainedItems: [], instructionText: instruction };
+  }
+  return { retainedHeading, retainedItems, instructionText: instructionText || instruction };
+}
+
+export type CompareRuntimeMode = "text" | "list";
+export type CompareRuntimeKind = "text_compare" | "list_compare";
+export type CompareRuntimeStatus = "pending" | "resolved";
+export type CompareRuntimePresentation = "picker" | "canonical";
+export type CompareRuntimeListSemantics = "delta" | "full";
+export type CompareRuntimeGroupedMode = "" | "grouped_units";
+export type CompareRuntimeResolution = "" | "user" | "suggestion";
+
+export type CompareRuntimeState = {
+  kind: CompareRuntimeKind;
+  mode: CompareRuntimeMode;
+  status: CompareRuntimeStatus;
+  presentation: CompareRuntimePresentation;
+  resolution: CompareRuntimeResolution;
+  target_field: string;
+  variant: string;
+  user_text: string;
+  user_normalized_text: string;
+  user_items: string[];
+  suggestion_text: string;
+  suggestion_items: string[];
+  base_items: string[];
+  list_semantics: CompareRuntimeListSemantics;
+  user_label: string;
+  suggestion_label: string;
+  grouped_mode: CompareRuntimeGroupedMode;
+  grouped_cursor: string;
+  grouped_units: unknown[];
+  grouped_segments: unknown[];
+  user_variant_semantics: string;
+  user_variant_stepworthy: boolean;
+  feedback_reason_key: string;
+  feedback_reason_text: string;
+  pending_text_intent: string;
+  pending_text_anchor: string;
+  pending_text_seed_source: string;
+  pending_text_feedback_text: string;
+  pending_text_presentation_mode: string;
+};
+
+const DEFAULT_COMPARE_RUNTIME: CompareRuntimeState = {
+  kind: "text_compare",
+  mode: "text",
+  status: "resolved",
+  presentation: "picker",
+  resolution: "",
+  target_field: "",
+  variant: "",
+  user_text: "",
+  user_normalized_text: "",
+  user_items: [],
+  suggestion_text: "",
+  suggestion_items: [],
+  base_items: [],
+  list_semantics: "delta",
+  user_label: "",
+  suggestion_label: "",
+  grouped_mode: "",
+  grouped_cursor: "",
+  grouped_units: [],
+  grouped_segments: [],
+  user_variant_semantics: "",
+  user_variant_stepworthy: false,
+  feedback_reason_key: "",
+  feedback_reason_text: "",
+  pending_text_intent: "",
+  pending_text_anchor: "",
+  pending_text_seed_source: "",
+  pending_text_feedback_text: "",
+  pending_text_presentation_mode: "",
+};
+
+function normalizeMode(raw: unknown): CompareRuntimeMode {
+  return trimString(raw).toLowerCase() === "list" ? "list" : "text";
+}
+
+function normalizeKind(raw: unknown, fallbackMode: CompareRuntimeMode): CompareRuntimeKind {
+  const kind = trimString(raw).toLowerCase();
+  if (kind === "list_compare") return "list_compare";
+  if (kind === "text_compare") return "text_compare";
+  return fallbackMode === "list" ? "list_compare" : "text_compare";
+}
+
+function normalizeStatus(raw: unknown, fallbackPending: boolean): CompareRuntimeStatus {
+  const value = trimString(raw).toLowerCase();
+  if (value === "pending" || value === "resolved") return value;
+  return fallbackPending ? "pending" : "resolved";
+}
+
+function normalizePresentation(raw: unknown): CompareRuntimePresentation {
+  return trimString(raw).toLowerCase() === "canonical" ? "canonical" : "picker";
+}
+
+function normalizeResolution(raw: unknown): CompareRuntimeResolution {
+  const value = trimString(raw).toLowerCase();
+  if (value === "user" || value === "suggestion") return value;
+  return "";
+}
+
+function normalizeListSemantics(raw: unknown): CompareRuntimeListSemantics {
+  return trimString(raw).toLowerCase() === "full" ? "full" : "delta";
+}
+
+function normalizeGroupedMode(raw: unknown): CompareRuntimeGroupedMode {
+  return trimString(raw) === "grouped_units" ? "grouped_units" : "";
+}
+
+function normalizeStepworthy(raw: unknown): boolean {
+  return trimString(raw).toLowerCase() === "true";
+}
+
+function normalizeCompareRuntimeRecord(runtimeRaw: unknown): CompareRuntimeState | null {
+  const runtime = toRecord(runtimeRaw);
+  if (Object.keys(runtime).length === 0) return null;
+  const mode = normalizeMode(runtime.mode || runtime.kind);
+  const kind = normalizeKind(runtime.kind, mode);
+  const status = normalizeStatus(runtime.status, trimString(runtime.status) === "");
+  return {
+    kind,
+    mode,
+    status,
+    presentation: normalizePresentation(runtime.presentation),
+    resolution: normalizeResolution(runtime.resolution),
+    target_field: trimString(runtime.target_field),
+    variant: trimString(runtime.variant),
+    user_text: trimString(runtime.user_text),
+    user_normalized_text: trimString(runtime.user_normalized_text),
+    user_items: normalizeStringArray(runtime.user_items),
+    suggestion_text: trimString(runtime.suggestion_text),
+    suggestion_items: normalizeStringArray(runtime.suggestion_items),
+    base_items: normalizeStringArray(runtime.base_items),
+    list_semantics: normalizeListSemantics(runtime.list_semantics),
+    user_label: trimString(runtime.user_label),
+    suggestion_label: trimString(runtime.suggestion_label),
+    grouped_mode: normalizeGroupedMode(runtime.grouped_mode),
+    grouped_cursor: trimString(runtime.grouped_cursor),
+    grouped_units: Array.isArray(runtime.grouped_units) ? runtime.grouped_units : [],
+    grouped_segments: Array.isArray(runtime.grouped_segments) ? runtime.grouped_segments : [],
+    user_variant_semantics: trimString(runtime.user_variant_semantics),
+    user_variant_stepworthy: normalizeStepworthy(runtime.user_variant_stepworthy),
+    feedback_reason_key: trimString(runtime.feedback_reason_key),
+    feedback_reason_text: trimString(runtime.feedback_reason_text),
+    pending_text_intent: trimString(runtime.pending_text_intent),
+    pending_text_anchor: trimString(runtime.pending_text_anchor),
+    pending_text_seed_source: trimString(runtime.pending_text_seed_source),
+    pending_text_feedback_text: trimString(runtime.pending_text_feedback_text),
+    pending_text_presentation_mode: trimString(runtime.pending_text_presentation_mode),
+  };
+}
+
+export function createCompareRuntimeState(runtimeRaw: Partial<CompareRuntimeState>): CompareRuntimeState {
+  return normalizeCompareRuntimeRecord({ ...DEFAULT_COMPARE_RUNTIME, ...runtimeRaw }) || {
+    ...DEFAULT_COMPARE_RUNTIME,
+  };
+}
+
+export function readCompareRuntime(raw: unknown): CompareRuntimeState | null {
+  const record = toRecord(raw);
+  const explicit = normalizeCompareRuntimeRecord(record.compare_runtime);
+  if (explicit) return explicit;
+  return null;
+}
+
+export function patchCompareRuntime(
+  raw: unknown,
+  runtimePatch: Partial<CompareRuntimeState> | null
+): Record<string, unknown> {
+  const next = stripLegacyCompareFields(raw);
+  if (!runtimePatch) {
+    delete next.compare_runtime;
+    return next;
+  }
+  const current = readCompareRuntime(next) || DEFAULT_COMPARE_RUNTIME;
+  next.compare_runtime = createCompareRuntimeState({
+    ...current,
+    ...runtimePatch,
+  });
+  return next;
+}
+
+export function stripLegacyCompareFields(raw: unknown): Record<string, unknown> {
+  const record = toRecord(raw);
+  const next = { ...record };
+  for (const field of Object.keys(next)) {
+    if (field.startsWith("compare_") || field.startsWith("pending_suggestion_")) {
+      delete next[field];
+    }
+  }
+  delete next.feedback_reason_key;
+  return next;
+}
+
+export function attachCompareRuntime(raw: unknown): Record<string, unknown> {
+  const record = toRecord(raw);
+  const compare = readCompareRuntime(record);
+  const next = stripLegacyCompareFields(record);
+  if (!compare) {
+    delete next.compare_runtime;
+    return next;
+  }
+  next.compare_runtime = {
+    kind: compare.kind,
+    mode: compare.mode,
+    status: compare.status,
+    presentation: compare.presentation,
+    resolution: compare.resolution,
+    target_field: compare.target_field,
+    variant: compare.variant,
+    user_text: compare.user_text,
+    user_normalized_text: compare.user_normalized_text,
+    user_items: [...compare.user_items],
+    suggestion_text: compare.suggestion_text,
+    suggestion_items: [...compare.suggestion_items],
+    base_items: [...compare.base_items],
+    list_semantics: compare.list_semantics,
+    user_label: compare.user_label,
+    suggestion_label: compare.suggestion_label,
+    grouped_mode: compare.grouped_mode,
+    grouped_cursor: compare.grouped_cursor,
+    grouped_units: Array.isArray(compare.grouped_units) ? [...compare.grouped_units] : [],
+    grouped_segments: Array.isArray(compare.grouped_segments) ? [...compare.grouped_segments] : [],
+    user_variant_semantics: compare.user_variant_semantics,
+    user_variant_stepworthy: compare.user_variant_stepworthy,
+    feedback_reason_key: compare.feedback_reason_key,
+    feedback_reason_text: compare.feedback_reason_text,
+    pending_text_intent: compare.pending_text_intent,
+    pending_text_anchor: compare.pending_text_anchor,
+    pending_text_seed_source: compare.pending_text_seed_source,
+    pending_text_feedback_text: compare.pending_text_feedback_text,
+    pending_text_presentation_mode: compare.pending_text_presentation_mode,
+  };
+  return next;
+}
+
+export function clearCompareRuntime(raw: unknown): Record<string, unknown> {
+  const next = stripLegacyCompareFields(raw);
+  delete next.compare_runtime;
+  return next;
+}

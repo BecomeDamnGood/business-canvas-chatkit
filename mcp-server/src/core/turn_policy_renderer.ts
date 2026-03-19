@@ -37,6 +37,11 @@ import {
 import { isStageableDreamCandidate } from "../steps/dream_runtime_policy.js";
 import { isStructuredPresentationRecap } from "../handlers/run_step_presentation_recap.js";
 import {
+  attachCompareRuntime,
+  patchCompareRuntime,
+  readCompareRuntime,
+} from "../handlers/compare_runtime.js";
+import {
   formatStepSectionTitle,
   getChooseForMeRegistryEntryForMenu,
   hasGroupedCompareListSemantics,
@@ -273,20 +278,21 @@ function shouldClearStaleDreamSelfCompare(params: {
   const { stepId, state, specialist } = params;
   if (stepId !== "dream") return false;
   if (!shouldEnforceSingleValueConfirmVisibility({ stepId, state, specialist })) return false;
-  if (String((specialist as any).compare_pending || "").trim().toLowerCase() !== "true") return false;
-  const targetField = String((specialist as any).compare_target_field || "").trim();
+  const compare = readCompareRuntime(specialist);
+  if (compare?.status !== "pending") return false;
+  const targetField = String(compare.target_field || "").trim();
   if (targetField && targetField !== stepId) return true;
-  const presentation = String((specialist as any).compare_presentation || "").trim().toLowerCase();
-  const mode = String((specialist as any).compare_mode || "text").trim().toLowerCase() === "list" ? "list" : "text";
+  const presentation = compare.presentation;
+  const mode = compare.mode;
   const suggestionText = String(
-    (specialist as any).compare_agent_current || (specialist as any).refined_formulation || ""
+    compare.suggestion_text || (specialist as any).refined_formulation || ""
   ).trim();
   if (presentation === "canonical") {
     return !isRenderableAcceptedValue(stepId, suggestionText);
   }
   if (mode === "list") return true;
   const userVariant = String(
-    (specialist as any).compare_user_normalized || (specialist as any).compare_user_raw || ""
+    compare.user_normalized_text || compare.user_text || ""
   ).trim();
   return !(Boolean(userVariant) && isRenderableAcceptedValue(stepId, suggestionText));
 }
@@ -740,30 +746,6 @@ function buildStructuredSuggestionsUiContent(params: {
   });
   if (!content || content.items.length === 0) return undefined;
   return content;
-}
-
-function buildSingleValueCanonicalFeedbackContract(params: {
-  stepId: string;
-  state: CanvasState;
-  message: string;
-  canonicalValue: string;
-  feedbackReasonText?: string;
-  rawFeedbackReasonText?: string;
-  headingOverride?: string;
-}): Record<string, unknown> | undefined {
-  const canonicalText = String(params.canonicalValue || "").trim();
-  if (!canonicalText) return undefined;
-  const heading = String(params.headingOverride || "").trim() || autoSuggestHeading(params.stepId, params.state);
-  const rationale = String(params.feedbackReasonText || "").trim();
-  if (!heading && !canonicalText && !rationale) return undefined;
-  return {
-    version: "2026-03-16.feedback_contract.v1",
-    kind: "single_value_canonical_suggestion",
-    mode: "text",
-    ...(heading ? { heading } : {}),
-    suggested_value: canonicalText,
-    ...(rationale ? { rationale } : {}),
-  };
 }
 
 function singleValueSuggestedCandidateForDisplay(
@@ -1429,7 +1411,8 @@ function computeStatus(
 
   if (stepId === "rulesofthegame") {
     const comparePending =
-      String((specialist as any).compare_pending || (prev as any).compare_pending || "").trim() === "true";
+      readCompareRuntime(specialist)?.status === "pending" ||
+      readCompareRuntime(prev)?.status === "pending";
     const rulesGate = evaluateRulesRuntimeGate({
       acceptedOutput,
       acceptedValue,
@@ -1775,25 +1758,13 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     effectiveConfirmEligible = false;
   }
 
-  const specialistForDisplay: Record<string, unknown> = { ...specialist };
+  let specialistForDisplay: Record<string, unknown> = attachCompareRuntime(specialist);
   if (shouldClearStaleDreamSelfCompare({ stepId, state, specialist: specialistForDisplay })) {
-    Object.assign(specialistForDisplay, {
-      compare_pending: "false",
-      compare_selected: "",
-      compare_mode: "",
-      compare_target_field: "",
-      compare_agent_current: "",
-      compare_presentation: "",
-      compare_variant: "",
-      compare_compare_mode: "",
-      compare_user_raw: "",
-      compare_user_normalized: "",
-      compare_user_items: [],
-      compare_suggestion_items: [],
-    });
+    specialistForDisplay = patchCompareRuntime(specialistForDisplay, null);
   }
   const recapRequested = isRecapRequestedSpecialist(specialistForDisplay);
-  const comparePending = String((specialistForDisplay as any).compare_pending || "").trim() === "true";
+  const compareState = readCompareRuntime(specialistForDisplay);
+  const comparePending = compareState?.status === "pending";
   if (isOfftopic && stepId !== "step_0") {
     const field = stepId === "rulesofthegame" ? "rulesofthegame" : stepId;
     const finalField = getFinalFieldForStepId(stepId);
@@ -2001,10 +1972,7 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
 
   const specialistForMenu = specialistForDisplay;
   const prevForMenu = prev;
-  const rawComparePresentation =
-    String((specialistForDisplay as any).compare_presentation || "").trim() === "canonical"
-      ? "canonical"
-      : "picker";
+  const rawComparePresentation = compareState?.presentation === "canonical" ? "canonical" : "picker";
   const rawCurrentValueRefinementPending =
     String((specialistForDisplay as any).current_value_refinement_pending || "").trim() === "true" &&
     String((specialistForDisplay as any).current_value_refinement_target_field || "").trim() === stepId;
@@ -2053,7 +2021,7 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     safeLabels = retainedIndices.map((idx) => safeLabels[idx]);
     safeLabelKeys = retainedIndices.map((idx) => safeLabelKeys[idx]);
   }
-  const compareSelected = String((specialistForDisplay as any).compare_selected || "").trim();
+  const compareSelected = String(compareState?.resolution || "").trim();
   const comparePresentation =
     dreamSelfViewVariant === "picker"
       ? "picker"
@@ -2114,7 +2082,7 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
   let textKeys = buildContractTextKeys({ stepId, status: effectiveUiStatus, menuId });
   const pendingCanonicalValue =
     normalizedComparePending && comparePresentation === "canonical"
-      ? String((specialistForDisplay as any).compare_agent_current || specialistForDisplay.refined_formulation || "")
+      ? String(compareState?.suggestion_text || specialistForDisplay.refined_formulation || "")
         .trim()
       : "";
   const explicitFeedbackReasonForDisplay =
@@ -2125,7 +2093,7 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     resolveString: (key, fallback = "") => uiStringFromState(state, key, uiDefaultString(key, fallback)),
   });
   const isUserPickedCompare =
-    String((specialistForDisplay as any).compare_selected || "").trim() === "user";
+    String(compareState?.resolution || "").trim() === "user";
   const rawFeedbackReasonForDisplay = sanitizedExplicitFeedbackReasonForDisplay;
   const feedbackReasonForDisplay =
     isUserPickedCompare
@@ -2249,7 +2217,7 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
   if (shouldPublishCanonicalSuggestionFeedbackContract) {
     messageForDisplay = "";
   }
-  const singleValueUiContent = shouldPublishCanonicalSuggestionFeedbackContract ? undefined : buildSingleValueUiContent({
+  const singleValueUiContent = buildSingleValueUiContent({
     stepId,
     state,
     specialist: specialistForDisplay,
@@ -2258,18 +2226,7 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     feedbackReasonText: effectiveFeedbackReasonForDisplay,
     rawFeedbackReasonText: effectiveRawFeedbackReasonForDisplay,
   });
-  const singleValueUiFeedbackContract = shouldPublishCanonicalSuggestionFeedbackContract
-    ? buildSingleValueCanonicalFeedbackContract({
-        stepId,
-        state,
-        message: rawMessageForSemanticContracts,
-        canonicalValue: singleValueUiCanonicalValue,
-        feedbackReasonText: effectiveFeedbackReasonForDisplay,
-        rawFeedbackReasonText: effectiveRawFeedbackReasonForDisplay,
-      })
-    : undefined;
-  const hasRenderableSingleValueContract =
-    Boolean(singleValueUiContent) || Boolean(singleValueUiFeedbackContract);
+  const hasRenderableSingleValueContract = Boolean(singleValueUiContent);
   if (
     stepId === "dream" &&
     shouldEnforceConfirmVisibility &&
@@ -2324,7 +2281,6 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
 
   const {
     ui_content: _staleUiContent,
-    ui_feedback_contract: _staleUiFeedbackContract,
     ...specialistForDisplayWithoutUiContracts
   } = specialistForDisplay as Record<string, unknown>;
 
@@ -2339,7 +2295,6 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
       : singleValueUiContent
         ? { ui_content: singleValueUiContent }
         : {}),
-    ...(singleValueUiFeedbackContract ? { ui_feedback_contract: singleValueUiFeedbackContract } : {}),
     ...((useSingleValueConfirmSsot || recapRequested) ? { __suppress_refined_append: "true" } : {}),
     ui_contract_id: contractId,
     ui_contract_version: UI_CONTRACT_VERSION,
@@ -2349,7 +2304,7 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
   return {
     status: effectiveUiStatus,
     confirmEligible: effectiveConfirmEligible,
-    specialist: nextSpecialist,
+    specialist: attachCompareRuntime(nextSpecialist),
     uiActionCodes: safeActionCodes,
     uiActions: buildRenderedActions(menuId, safeActionCodes, safeLabels, safeLabelKeys),
     contractId,

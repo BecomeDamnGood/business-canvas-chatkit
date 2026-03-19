@@ -3,7 +3,12 @@ import assert from "node:assert/strict";
 
 import { getDefaultState } from "../core/state.js";
 import { applyStateUpdate } from "./run_step_state_update_defaults.js";
+import { createCompareRuntimeState } from "./compare_runtime.js";
 import { finalizeResponseContractInternals, validateUiPayloadContractParity } from "./turn_contract.js";
+
+function compareRuntime(overrides: Record<string, unknown>) {
+  return createCompareRuntimeState(overrides as any);
+}
 
 test("offtopic contract: applyStateUpdate does not mutate canonical finals", () => {
   const prev = getDefaultState();
@@ -538,14 +543,17 @@ test("pending interaction derives text_compare from compare text", () => {
       text: "",
       prompt: "",
       specialist: {
-        compare_pending: "true",
-        compare_mode: "text",
-        compare_presentation: "picker",
-        feedback_reason_text: "Je huidige formulering blijft te beschrijvend en nog niet richtinggevend genoeg.",
-        compare_user_label: "Your input",
-        compare_suggestion_label: "My suggestion",
-        compare_user_normalized: "Wij zijn er om mooie merken te bouwen.",
-        compare_agent_current: "Wij bestaan om merken te bouwen die zichtbaar het leven van mensen verbeteren.",
+        compare_runtime: compareRuntime({
+          kind: "text_compare",
+          mode: "text",
+          status: "pending",
+          presentation: "picker",
+          feedback_reason_text: "Je huidige formulering blijft te beschrijvend en nog niet richtinggevend genoeg.",
+          user_label: "Your input",
+          suggestion_label: "My suggestion",
+          user_normalized_text: "Wij zijn er om mooie merken te bouwen.",
+          suggestion_text: "Wij bestaan om merken te bouwen die zichtbaar het leven van mensen verbeteren.",
+        }),
         compare_instruction: "Choose the version that fits best.",
       },
       state: {
@@ -598,16 +606,19 @@ test("final response pending interaction backfills user_text from specialist com
       text: "",
       prompt: "",
       specialist: {
-        compare_pending: "true",
-        compare_mode: "text",
-        compare_presentation: "picker",
-        feedback_reason_text:
-          "Je input benoemt het probleem van verkeerde voorlichting, maar een Droom vraagt om een positief toekomstbeeld met duidelijk menselijk effect.",
-        compare_user_label: "Dit is jouw input",
-        compare_suggestion_label: "Dit zou mijn suggestie zijn",
+        compare_runtime: compareRuntime({
+          kind: "text_compare",
+          mode: "text",
+          status: "pending",
+          presentation: "picker",
+          feedback_reason_text:
+            "Je input benoemt het probleem van verkeerde voorlichting, maar een Droom vraagt om een positief toekomstbeeld met duidelijk menselijk effect.",
+          user_label: "Dit is jouw input",
+          suggestion_label: "Dit zou mijn suggestie zijn",
+          user_normalized_text: userInput,
+          suggestion_text: canonical,
+        }),
         compare_instruction: "Klik alsjeblieft wat het beste bij je past.",
-        compare_user_normalized: userInput,
-        compare_agent_current: canonical,
       },
       state: {
         started: "true",
@@ -649,16 +660,19 @@ test("final response derives compare pending interaction directly from specialis
       text: "",
       prompt: "",
       specialist: {
-        compare_pending: "true",
-        compare_mode: "text",
-        compare_presentation: "picker",
-        feedback_reason_text:
-          "Je input benoemt het probleem van verkeerde voorlichting, maar een Droom vraagt om een positief toekomstbeeld met duidelijk menselijk effect.",
-        compare_user_label: "Dit is jouw input",
-        compare_suggestion_label: "Dit zou mijn suggestie zijn",
+        compare_runtime: compareRuntime({
+          kind: "text_compare",
+          mode: "text",
+          status: "pending",
+          presentation: "picker",
+          feedback_reason_text:
+            "Je input benoemt het probleem van verkeerde voorlichting, maar een Droom vraagt om een positief toekomstbeeld met duidelijk menselijk effect.",
+          user_label: "Dit is jouw input",
+          suggestion_label: "Dit zou mijn suggestie zijn",
+          user_normalized_text: userInput,
+          suggestion_text: canonical,
+        }),
         compare_instruction: "Klik alsjeblieft wat het beste bij je past.",
-        compare_user_normalized: userInput,
-        compare_agent_current: canonical,
       },
       state: {
         started: "true",
@@ -698,14 +712,17 @@ test("pending interaction derives list_compare from compare list feedback", () =
       text: "",
       prompt: "",
       specialist: {
-        compare_pending: "true",
-        compare_mode: "list",
-        compare_presentation: "picker",
-        feedback_reason_text: "Ik heb de servicebenaming specifieker gemaakt.",
-        compare_user_label: "Your input",
-        compare_suggestion_label: "My suggestion",
-        compare_user_items: ["AI flows", "Production support"],
-        compare_suggestion_items: ["AI-driven flows", "Production guidance"],
+        compare_runtime: compareRuntime({
+          kind: "list_compare",
+          mode: "list",
+          status: "pending",
+          presentation: "picker",
+          feedback_reason_text: "Ik heb de servicebenaming specifieker gemaakt.",
+          user_label: "Your input",
+          suggestion_label: "My suggestion",
+          user_items: ["AI flows", "Production support"],
+          suggestion_items: ["AI-driven flows", "Production guidance"],
+        }),
         compare_instruction: "Choose the version that fits best for the remaining difference.",
       },
       state: {
@@ -751,20 +768,23 @@ test("pending interaction derives grouped list compare into list_compare render 
       text: "",
       prompt: "",
       specialist: {
-        compare_pending: "true",
-        compare_mode: "list",
-        compare_presentation: "picker",
-        compare_variant: "grouped_list_units",
-        feedback_reason_text: "Je hebt al iets soortgelijks gezegd, dus een samengevoegde regel houdt je lijst scherper.",
-        compare_user_label: "Keep both statements",
-        compare_suggestion_label: "Merge into one statement",
-        compare_user_items: [
-          "Meer mensen zoeken werk dat impact heeft.",
-          "Werk moet zichtbaar iets goeds doen voor anderen.",
-        ],
-        compare_suggestion_items: [
-          "Meer mensen zoeken werk dat zichtbaar impact heeft op het leven van anderen.",
-        ],
+        compare_runtime: compareRuntime({
+          kind: "list_compare",
+          mode: "list",
+          status: "pending",
+          presentation: "picker",
+          variant: "grouped_list_units",
+          feedback_reason_text: "Je hebt al iets soortgelijks gezegd, dus een samengevoegde regel houdt je lijst scherper.",
+          user_label: "Keep both statements",
+          suggestion_label: "Merge into one statement",
+          user_items: [
+            "Meer mensen zoeken werk dat impact heeft.",
+            "Werk moet zichtbaar iets goeds doen voor anderen.",
+          ],
+          suggestion_items: [
+            "Meer mensen zoeken werk dat zichtbaar impact heeft op het leven van anderen.",
+          ],
+        }),
         compare_instruction: [
           "These points already stay in the final list:",
           "",
@@ -831,12 +851,15 @@ test("compare contracts self-heal when pending interaction actions are missing",
       text: "",
       prompt: "",
       specialist: {
-        compare_pending: "true",
-        compare_mode: "text",
-        compare_presentation: "picker",
-        feedback_reason_text: "We exist to make complex choices understandable.",
-        compare_user_normalized: "We want to do something good.",
-        compare_agent_current: "We exist to make complex choices understandable.",
+        compare_runtime: compareRuntime({
+          kind: "text_compare",
+          mode: "text",
+          status: "pending",
+          presentation: "picker",
+          feedback_reason_text: "We exist to make complex choices understandable.",
+          user_normalized_text: "We want to do something good.",
+          suggestion_text: "We exist to make complex choices understandable.",
+        }),
         compare_instruction: "Choose the wording that fits best.",
       },
       state: {
@@ -874,12 +897,15 @@ test("dream compare contracts fail closed when generic card content is still pre
       text: "",
       prompt: "",
       specialist: {
-        compare_pending: "true",
-        compare_mode: "text",
-        compare_presentation: "picker",
-        feedback_reason_text: "Deze droomformulering maakt het toekomstbeeld scherper.",
-        compare_user_normalized: "Wij willen bedrijven helpen groeien.",
-        compare_agent_current: "Mindd droomt van een wereld waarin mensen zich verbonden voelen.",
+        compare_runtime: compareRuntime({
+          kind: "text_compare",
+          mode: "text",
+          status: "pending",
+          presentation: "picker",
+          feedback_reason_text: "Deze droomformulering maakt het toekomstbeeld scherper.",
+          user_normalized_text: "Wij willen bedrijven helpen groeien.",
+          suggestion_text: "Mindd droomt van een wereld waarin mensen zich verbonden voelen.",
+        }),
         compare_instruction: "Choose the wording that fits best.",
       },
       state: {
@@ -925,16 +951,19 @@ test("final response publishes a single server-owned pending interaction for com
       prompt: "",
       specialist: {
         action: "ASK",
-        compare_pending: "true",
-        compare_mode: "text",
-        compare_presentation: "picker",
-        compare_target_field: "dream",
-        feedback_reason_text: "Deze suggestie maakt de formulering scherper.",
-        compare_user_label: "Dit is jouw input:",
-        compare_suggestion_label: "Dit zou mijn suggestie zijn:",
+        compare_runtime: compareRuntime({
+          kind: "text_compare",
+          mode: "text",
+          status: "pending",
+          presentation: "picker",
+          target_field: "dream",
+          feedback_reason_text: "Deze suggestie maakt de formulering scherper.",
+          user_label: "Dit is jouw input:",
+          suggestion_label: "Dit zou mijn suggestie zijn:",
+          user_normalized_text: "Mijn versie",
+          suggestion_text: "De suggestie",
+        }),
         compare_instruction: "Klik alsjeblieft wat het beste bij je past.",
-        compare_user_normalized: "Mijn versie",
-        compare_agent_current: "De suggestie",
       },
       state: {
         started: "true",
@@ -944,16 +973,19 @@ test("final response publishes a single server-owned pending interaction for com
         ui_action_compare_pick_suggestion: "ACTION_COMPARE_PICK_SUGGESTION",
         last_specialist_result: {
           action: "ASK",
-          compare_pending: "true",
-          compare_mode: "text",
-          compare_presentation: "picker",
-          compare_target_field: "dream",
-          feedback_reason_text: "Deze suggestie maakt de formulering scherper.",
-          compare_user_label: "Dit is jouw input:",
-          compare_suggestion_label: "Dit zou mijn suggestie zijn:",
+          compare_runtime: compareRuntime({
+            kind: "text_compare",
+            mode: "text",
+            status: "pending",
+            presentation: "picker",
+            target_field: "dream",
+            feedback_reason_text: "Deze suggestie maakt de formulering scherper.",
+            user_label: "Dit is jouw input:",
+            suggestion_label: "Dit zou mijn suggestie zijn:",
+            user_normalized_text: "Mijn versie",
+            suggestion_text: "De suggestie",
+          }),
           compare_instruction: "Klik alsjeblieft wat het beste bij je past.",
-          compare_user_normalized: "Mijn versie",
-          compare_agent_current: "De suggestie",
         },
       } as any,
       ui: {
@@ -997,12 +1029,15 @@ test("specialist compare state keeps compare pick actions and default labels eve
       text: "",
       prompt: "",
       specialist: {
-        compare_pending: "true",
-        compare_mode: "text",
-        compare_presentation: "picker",
-        feedback_reason_text: "De suggestie maakt de droom concreter.",
-        compare_user_normalized: "Wij willen betere bedrijven bouwen.",
-        compare_agent_current: "Mindd droomt van bedrijven die vanuit betekenis echte verandering brengen.",
+        compare_runtime: compareRuntime({
+          kind: "text_compare",
+          mode: "text",
+          status: "pending",
+          presentation: "picker",
+          feedback_reason_text: "De suggestie maakt de droom concreter.",
+          user_normalized_text: "Wij willen betere bedrijven bouwen.",
+          suggestion_text: "Mindd droomt van bedrijven die vanuit betekenis echte verandering brengen.",
+        }),
         compare_instruction: "Choose the version that fits best.",
       },
       state: {

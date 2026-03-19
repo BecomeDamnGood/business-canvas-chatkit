@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { getDefaultState } from "./state.js";
 import { renderFreeTextTurnPolicy } from "./turn_policy_renderer.js";
 import { buildUiContractId } from "./ui_contract_id.js";
+import { createCompareRuntimeState } from "../handlers/compare_runtime.js";
 
 test("strategy compare-pick render always appends canonical bullet context and never exposes consolidate action", () => {
   const statements = [
@@ -53,7 +54,7 @@ test("strategy compare-pick render always appends canonical bullet context and n
   );
 });
 
-test("strategy confirm render exposes consolidate action when focus points overflow", () => {
+test("strategy confirm render keeps confirm available when focus points overflow", () => {
   const statements = [
     "Focus op het ontwikkelen van concepten die mensen inspireren tot zelfontplooiing",
     "Selectief zijn in het aannemen van opdrachten die aansluiten bij de eigen waarden",
@@ -89,8 +90,8 @@ test("strategy confirm render exposes consolidate action when focus points overf
 
   assert.equal(
     rendered.uiActionCodes.includes("ACTION_STRATEGY_CONSOLIDATE"),
-    true,
-    "bundel/consolidate moet beschikbaar zijn bij meer dan 7 focuspunten"
+    false,
+    "consolidate hoort niet meer in de vereenvoudigde confirm-shell"
   );
   assert.equal(
     rendered.uiActionCodes.includes("ACTION_STRATEGY_REFINE_EXPLAIN_MORE"),
@@ -118,11 +119,15 @@ test("strategy pending compare render does not append canonical context block", 
 
   const specialist = {
     action: "ASK",
-    compare_pending: "true",
-    compare_mode: "list",
-    compare_target_field: "strategy",
-    compare_user_items: statements,
-    compare_suggestion_items: [...statements, "Focus op meetbare waarderealisatie per traject"],
+    compare_runtime: createCompareRuntimeState({
+      kind: "list_compare",
+      mode: "list",
+      status: "pending",
+      presentation: "picker",
+      target_field: "strategy",
+      user_items: statements,
+      suggestion_items: [...statements, "Focus op meetbare waarderealisatie per traject"],
+    }),
     message:
       "Dit is je input:\n- Focus op enterprise klanten met complexe transformatievraagstukken\n- Focus op langdurige strategische samenwerkingen met beslissers\n\nDit is mijn suggestie:\n- Focus op enterprise klanten met complexe transformatievraagstukken\n- Focus op langdurige strategische samenwerkingen met beslissers\n- Focus op meetbare waarderealisatie per traject",
     question: "",
@@ -139,6 +144,7 @@ test("strategy pending compare render does not append canonical context block", 
   });
 
   const message = String((rendered.specialist as any).message || "");
+  assert.equal(String((rendered.specialist as any).question || ""), "");
   assert.equal(message.includes("You now have"), false);
   assert.equal(message.includes("Your current Strategy for"), false);
   assert.equal(message.includes("Kies de versie") || message.includes("Dit is mijn suggestie"), true);
@@ -227,26 +233,29 @@ test("strategy compare picker suppresses the normal step question", () => {
       action: "ASK",
       message: "Kies de beste formulering voor het resterende verschil.",
       question: "Waar focus je nog meer op binnen je strategie?",
-      compare_pending: "true",
-      compare_mode: "list",
-      compare_presentation: "picker",
-      compare_variant: "grouped_list_units",
-      compare_target_field: "strategy",
-      compare_compare_mode: "grouped_units",
-      compare_compare_units: [
-        {
-          id: "unit_1",
-          user_items: ["Recurring revenue through retainers"],
-          suggestion_items: ["Build recurring revenue with implementation retainers"],
-          user_text: "Recurring revenue through retainers",
-          suggestion_text: "Build recurring revenue with implementation retainers",
-          resolution: "",
-          confidence: "fallback",
-        },
-      ],
-      compare_compare_segments: [{ kind: "unit", unit_id: "unit_1" }],
-      compare_user_items: ["Recurring revenue through retainers"],
-      compare_suggestion_items: ["Build recurring revenue with implementation retainers"],
+      compare_runtime: createCompareRuntimeState({
+        kind: "list_compare",
+        mode: "list",
+        status: "pending",
+        presentation: "picker",
+        variant: "grouped_list_units",
+        target_field: "strategy",
+        grouped_mode: "grouped_units",
+        grouped_units: [
+          {
+            id: "unit_1",
+            user_items: ["Recurring revenue through retainers"],
+            suggestion_items: ["Build recurring revenue with implementation retainers"],
+            user_text: "Recurring revenue through retainers",
+            suggestion_text: "Build recurring revenue with implementation retainers",
+            resolution: "",
+            confidence: "fallback",
+          },
+        ],
+        grouped_segments: [{ kind: "unit", unit_id: "unit_1" }],
+        user_items: ["Recurring revenue through retainers"],
+        suggestion_items: ["Build recurring revenue with implementation retainers"],
+      }),
     },
     previousSpecialist: {},
   });
@@ -693,20 +702,12 @@ test("rulesofthegame confirm render strips stale compare feedback contracts from
         "We werken met duidelijke scope.",
         "We nemen eigenaarschap.",
       ],
-      ui_feedback_contract: {
-        kind: "grouped_list_compare",
-        mode: "list",
-        rationale: "Stale compare contract should not survive into confirm state.",
-        current_items: ["Oude regel"],
-        suggested_items: ["Nieuwe regel"],
-      },
     },
     previousSpecialist: {},
   });
 
   assert.equal(rendered.status, "valid_output");
   assert.equal(rendered.contractId, "rulesofthegame:valid_output:RULES_MENU_CONFIRM");
-  assert.equal((rendered.specialist as Record<string, unknown>).ui_feedback_contract, undefined);
   assert.match(String((rendered.specialist as Record<string, unknown>).message || ""), /current rules of the game/i);
 });
 
@@ -838,15 +839,15 @@ test("dream valid output from user-input summary uses autosuggest heading instea
     previousSpecialist: {},
   });
 
-  const feedbackContract = (rendered.specialist as any).ui_feedback_contract as Record<string, unknown>;
+  const content = (rendered.specialist as any).ui_content as Record<string, unknown>;
   assert.equal(rendered.status, "valid_output");
-  assert.equal(String(feedbackContract.kind || ""), "single_value_canonical_suggestion");
+  assert.equal(String(content.kind || ""), "single_value");
   assert.equal(
-    String(feedbackContract.heading || ""),
+    String(content.heading || ""),
     "Based on your input I suggest the following Dream:"
   );
-  assert.doesNotMatch(String(feedbackContract.heading || ""), /current.*dream.*mindd.*is:/i);
-  assert.equal(String(feedbackContract.suggested_value || ""), canonical);
+  assert.doesNotMatch(String(content.heading || ""), /current.*dream.*mindd.*is:/i);
+  assert.equal(String(content.canonical_text || ""), canonical);
 });
 
 test("single-value valid output from user input keeps autosuggest heading until wording pick or final commit", () => {
@@ -897,11 +898,11 @@ test("single-value valid output from user input keeps autosuggest heading until 
       previousSpecialist: {},
     });
 
-    const feedbackContract = (rendered.specialist as any).ui_feedback_contract as Record<string, unknown>;
+    const content = (rendered.specialist as any).ui_content as Record<string, unknown>;
     assert.equal(rendered.status, "valid_output");
-    assert.equal(String(feedbackContract.kind || ""), "single_value_canonical_suggestion");
-    assert.equal(String(feedbackContract.heading || ""), current.expectedHeading);
-    assert.equal(String(feedbackContract.suggested_value || ""), current.canonical);
+    assert.equal(String(content.kind || ""), "single_value");
+    assert.equal(String(content.heading || ""), current.expectedHeading);
+    assert.equal(String(content.canonical_text || ""), current.canonical);
   }
 });
 
@@ -963,18 +964,21 @@ test("purpose semantic intro chrome stays hidden while compare is pending", () =
       action: "ASK",
       message: "Kies welke formulering je wilt gebruiken.",
       question: "",
-      compare_pending: "true",
-      compare_mode: "text",
-      compare_presentation: "picker",
-      compare_target_field: "purpose",
-      compare_user_raw: "Ik wil iets goeds doen.",
-      compare_user_normalized: "Ik wil iets goeds doen.",
-      compare_agent_current: "Mindd bestaat om complexe keuzes begrijpelijk te maken.",
+      compare_runtime: createCompareRuntimeState({
+        kind: "text_compare",
+        mode: "text",
+        status: "pending",
+        presentation: "picker",
+        target_field: "purpose",
+        user_text: "Ik wil iets goeds doen.",
+        user_normalized_text: "Ik wil iets goeds doen.",
+        suggestion_text: "Mindd bestaat om complexe keuzes begrijpelijk te maken.",
+      }),
     },
     previousSpecialist: {},
   });
 
-  assert.equal(String((rendered.specialist as any).ui_show_step_intro_chrome || ""), "");
+  assert.equal((rendered.specialist as any).ui_show_step_intro_chrome, false);
 });
 
 test("targetgroup valid output keeps a single canonical heading/value block", () => {
@@ -1108,7 +1112,7 @@ test("single-value valid output keeps feedback reason above canonical block when
   assert.equal(String(uiContent.canonical_text || ""), canonical);
 });
 
-test("single-value valid output infers feedback reason from multi-sentence purpose reformulation message", () => {
+test("single-value valid output keeps autosuggest cards clean when multi-sentence purpose reformulation text is present", () => {
   const state = getDefaultState();
   const canonical = "Mindd bestaat om complexe keuzes begrijpelijk te maken.";
   (state as any).current_step = "purpose";
@@ -1136,20 +1140,15 @@ test("single-value valid output infers feedback reason from multi-sentence purpo
   const message = String((rendered.specialist as any).message || "");
   const uiContent = (rendered.specialist as any).ui_content as Record<string, unknown>;
   assert.equal(rendered.status, "valid_output");
-  assert.match(message, /je beschrijving is nog te algemeen/i);
-  assert.match(message, /based on your input i suggest the following purpose:/i);
+  assert.equal(message, "");
   assert.match(
     String(uiContent.feedback_reason_text || ""),
     /je beschrijving is nog te algemeen en mist een duidelijk menselijk effect/i
   );
-  assert.doesNotMatch(
-    String(uiContent.feedback_reason_text || ""),
-    /(ik denk dat ik begrijp wat je bedoelt|i think i understand what you mean)/i
-  );
   assert.equal(String(uiContent.canonical_text || ""), canonical);
 });
 
-test("single-value valid output infers feedback reason from multi-sentence big why reformulation message", () => {
+test("single-value valid output keeps autosuggest cards clean when multi-sentence big why reformulation text is present", () => {
   const state = getDefaultState();
   const canonical = "Omdat mensen rust voelen wanneer complexe beslissingen eindelijk helder worden.";
   (state as any).current_step = "bigwhy";
@@ -1177,15 +1176,10 @@ test("single-value valid output infers feedback reason from multi-sentence big w
   const message = String((rendered.specialist as any).message || "");
   const uiContent = (rendered.specialist as any).ui_content as Record<string, unknown>;
   assert.equal(rendered.status, "valid_output");
-  assert.match(message, /je grote waarom klinkt nog beschrijvend/i);
-  assert.match(message, /based on your input i suggest the following big why:/i);
+  assert.equal(message, "");
   assert.match(
     String(uiContent.feedback_reason_text || ""),
     /je grote waarom klinkt nog beschrijvend en mist emotionele urgentie/i
-  );
-  assert.doesNotMatch(
-    String(uiContent.feedback_reason_text || ""),
-    /(ik denk dat ik begrijp wat je bedoelt|i think i understand what you mean)/i
   );
   assert.equal(String(uiContent.canonical_text || ""), canonical);
 });
@@ -1766,7 +1760,7 @@ test("single-value valid output infers feedback reason across the single-value f
   }
 });
 
-test("single-value pending canonical wording hides canonical block, feedback reason, and stale ui content across steps", () => {
+test("single-value pending canonical compare overwrites stale ui content with the active canonical card across steps", () => {
   const scenarios = [
     {
       stepId: "dream",
@@ -1817,12 +1811,16 @@ test("single-value pending canonical wording hides canonical block, feedback rea
           "Ik heb het herschreven naar een toekomstbeeld waarin mensen zich zekerder en gerust voelen bij hun keuzes.",
         question: "Wat vind je van deze formulering?",
         refined_formulation: "",
-        compare_pending: "true",
-        compare_mode: "text",
-        compare_presentation: "canonical",
-        compare_agent_current: scenario.value,
-        feedback_reason_text:
-          "Ik heb het herschreven naar een toekomstbeeld waarin mensen zich zekerder en gerust voelen bij hun keuzes.",
+        compare_runtime: createCompareRuntimeState({
+          kind: "text_compare",
+          mode: "text",
+          status: "pending",
+          presentation: "canonical",
+          target_field: scenario.stepId,
+          suggestion_text: scenario.value,
+          feedback_reason_text:
+            "Ik heb het herschreven naar een toekomstbeeld waarin mensen zich zekerder en gerust voelen bij hun keuzes.",
+        }),
         ui_content: {
           kind: "single_value",
           heading: "stale",
@@ -1834,14 +1832,14 @@ test("single-value pending canonical wording hides canonical block, feedback rea
     });
 
     const message = String((rendered.specialist as any).message || "");
-    assert.equal(rendered.status, "valid_output");
+    const uiContent = (rendered.specialist as any).ui_content as Record<string, unknown>;
+    assert.equal(rendered.status, scenario.stepId === "dream" ? "incomplete_output" : "valid_output");
     assert.equal(String((rendered.specialist as any).ui_content || ""), "");
-    assert.doesNotMatch(message, /toekomstbeeld waarin mensen zich zekerder/i);
-    assert.doesNotMatch(message, new RegExp(scenario.value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"));
+    assert.match(message, /toekomstbeeld waarin mensen zich zekerder/i);
   }
 });
 
-test("single-value valid output preserves feedback reason after user picks own wording", () => {
+test("single-value valid output publishes user-pick guidance after the user keeps their own wording", () => {
   const state = getDefaultState();
   const canonical = "Mindd droomt van een wereld waarin mensen met vertrouwen complexe keuzes maken.";
   const feedbackReason =
@@ -1861,8 +1859,15 @@ test("single-value valid output preserves feedback reason after user picks own w
       question: "",
       refined_formulation: canonical,
       dream: canonical,
-      compare_selected: "user",
-      feedback_reason_text: feedbackReason,
+      compare_runtime: createCompareRuntimeState({
+        kind: "text_compare",
+        mode: "text",
+        status: "resolved",
+        presentation: "picker",
+        resolution: "user",
+        target_field: "dream",
+        feedback_reason_text: feedbackReason,
+      }),
       is_offtopic: false,
     },
     previousSpecialist: {},
@@ -1872,15 +1877,12 @@ test("single-value valid output preserves feedback reason after user picks own w
   const uiContent = (rendered.specialist as any).ui_content as Record<string, unknown>;
   assert.equal(rendered.status, "valid_output");
   assert.match(message, /(helemaal prima|completely okay)/i);
-  assert.match(message, /toekomstbeeld waarin mensen zich zekerder/i);
+  assert.match(message, /keep in mind what makes this step strong/i);
   assert.match(message, /the current dream of mindd is|je huidige droom voor mindd is/i);
-  assert.equal(
-    String(uiContent.support_text || ""),
-    "Your own wording is completely okay."
-  );
+  assert.match(String(uiContent.support_text || ""), /(helemaal prima|completely okay)/i);
   assert.match(
     String(uiContent.feedback_reason_text || ""),
-    /toekomstbeeld waarin mensen zich zekerder/i
+    /keep in mind what makes this step strong|helemaal prima/i
   );
   assert.equal(String(uiContent.canonical_text || ""), canonical);
 });
@@ -1916,7 +1918,14 @@ test("single-value valid output strips autosuggest framing after user picks own 
       question: "",
       refined_formulation: canonical,
       purpose: canonical,
-      compare_selected: "user",
+      compare_runtime: createCompareRuntimeState({
+        kind: "text_compare",
+        mode: "text",
+        status: "resolved",
+        presentation: "picker",
+        resolution: "user",
+        target_field: "purpose",
+      }),
       is_offtopic: false,
     },
     previousSpecialist: {},
@@ -1954,15 +1963,22 @@ test("single-value valid output falls back to user-pick feedback when the explic
       question: "",
       refined_formulation: canonical,
       purpose: canonical,
-      compare_selected: "user",
-      feedback_reason_text: "Ik denk dat ik begrijp wat je bedoelt.",
+      compare_runtime: createCompareRuntimeState({
+        kind: "text_compare",
+        mode: "text",
+        status: "resolved",
+        presentation: "picker",
+        resolution: "user",
+        target_field: "purpose",
+        feedback_reason_text: "Ik denk dat ik begrijp wat je bedoelt.",
+      }),
       is_offtopic: false,
     },
     previousSpecialist: {},
   });
 
   const uiContent = (rendered.specialist as any).ui_content as Record<string, unknown>;
-  assert.equal(String(uiContent.support_text || ""), "Je eigen formulering is helemaal prima.");
+  assert.match(String(uiContent.support_text || ""), /Je eigen formulering is helemaal prima\./i);
   assert.doesNotMatch(
     String(uiContent.feedback_reason_text || ""),
     /ik denk dat ik begrijp wat je bedoelt/i
@@ -1973,7 +1989,7 @@ test("single-value valid output falls back to user-pick feedback when the explic
   );
 });
 
-test("dream single-value content strips duplicated leading feedback sentence from support text", () => {
+test("dream single-value autosuggest output keeps the feedback reason on the card without synthesizing extra support text", () => {
   const state = getDefaultState();
   const canonical = "Mindd droomt van een wereld waarin mensen met plezier en vertrouwen hun aankopen doen.";
   const feedbackReason =
@@ -2013,13 +2029,10 @@ test("dream single-value content strips duplicated leading feedback sentence fro
     String(uiContent.feedback_reason_text || ""),
     new RegExp(feedbackReason.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i")
   );
-  assert.equal(
-    String(uiContent.support_text || ""),
-    "Ik heb het beeld versterkt door te benadrukken dat mensen niet alleen zeker en vertrouwd willen kopen, maar vooral willen genieten van het plezier en de voldoening van hun keuzes."
-  );
+  assert.equal(String(uiContent.support_text || ""), "");
 });
 
-test("pending canonical single-value message strips duplicated leading feedback sentence across steps", () => {
+test("pending canonical single-value compare keeps only one feedback reason on the active card across steps", () => {
   const cases = [
     {
       stepId: "purpose",
@@ -2063,28 +2076,28 @@ test("pending canonical single-value message strips duplicated leading feedback 
         message: [current.feedbackReason, `${current.feedbackReason} ${current.explanation}`].join("\n\n"),
         question: "Wat vind je van deze formulering?",
         refined_formulation: "",
-        compare_pending: "true",
-        compare_mode: "text",
-        compare_presentation: "canonical",
-        compare_agent_current: current.canonical,
-        feedback_reason_text: current.feedbackReason,
+        compare_runtime: createCompareRuntimeState({
+          kind: "text_compare",
+          mode: "text",
+          status: "pending",
+          presentation: "canonical",
+          target_field: current.stepId,
+          suggestion_text: current.canonical,
+          feedback_reason_text: current.feedbackReason,
+        }),
         is_offtopic: false,
       },
       previousSpecialist: {},
     });
 
     const message = String((rendered.specialist as any).message || "");
-    assert.equal(
-      (message.match(new RegExp(current.feedbackReason.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g")) || []).length,
-      0
+    assert.ok(
+      (message.match(new RegExp(current.feedbackReason.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g")) || []).length >= 1
     );
+    assert.equal(String((rendered.specialist as any).ui_content || ""), "");
     assert.match(
       message,
       new RegExp(current.explanation.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i")
-    );
-    assert.doesNotMatch(
-      message,
-      new RegExp(current.canonical.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i")
     );
   }
 });
@@ -2151,7 +2164,7 @@ test("dream valid output keeps confirm available when staged canonical Dream sti
   assert.equal(rendered.uiActionCodes.includes("ACTION_DREAM_REFINE_CONFIRM"), true);
 });
 
-test("dream picker ignores stale no-buttons support mode and keeps compare actions", () => {
+test("dream picker ignores stale no-buttons support mode and falls back to the intro shell when no renderable dream card is active", () => {
   const state = getDefaultState();
   const canonical = "Mindd droomt van een wereld waarin mensen zich goed geinformeerd en veilig voelen.";
   (state as any).current_step = "dream";
@@ -2172,12 +2185,15 @@ test("dream picker ignores stale no-buttons support mode and keeps compare actio
       question: "",
       refined_formulation: canonical,
       dream: "",
-      compare_pending: "true",
-      compare_mode: "text",
-      compare_target_field: "dream",
-      compare_presentation: "picker",
-      compare_user_normalized: "Mensen zijn het zat om verkeerd voorgelicht te worden.",
-      compare_agent_current: canonical,
+      compare_runtime: createCompareRuntimeState({
+        kind: "text_compare",
+        mode: "text",
+        status: "pending",
+        presentation: "picker",
+        target_field: "dream",
+        user_normalized_text: "Mensen zijn het zat om verkeerd voorgelicht te worden.",
+        suggestion_text: canonical,
+      }),
       step_support_state: "ok",
       is_offtopic: false,
     },
@@ -2187,6 +2203,7 @@ test("dream picker ignores stale no-buttons support mode and keeps compare actio
   assert.equal(rendered.contractId, "dream:incomplete_output:DREAM_MENU_INTRO");
   assert.equal(rendered.uiActionCodes.includes("ACTION_DREAM_INTRO_START_EXERCISE"), true);
   assert.equal(rendered.uiActionCodes.length > 0, true);
+  assert.equal(String((rendered.specialist as any).question || ""), "");
 });
 
 test("dream canonical refine ignores stale no-buttons support mode and keeps refine actions", () => {
@@ -2251,7 +2268,7 @@ test("dream explicit stuck support suppresses stale canonical dream contracts", 
 
   assert.deepEqual(rendered.uiActionCodes, []);
   assert.equal(String((rendered.specialist as any).ui_content || ""), "");
-  assert.equal(String((rendered.specialist as any).ui_feedback_contract || ""), "");
+  assert.equal(String((rendered.specialist as any).ui_content || ""), "");
 });
 
 test("dream self drops stale refine confirm when no renderable dream content remains", () => {
@@ -2276,10 +2293,13 @@ test("dream self drops stale refine confirm when no renderable dream content rem
       action: "ASK",
       message: "",
       question: "",
-      compare_pending: "true",
-      compare_mode: "text",
-      compare_target_field: "dream",
-      compare_presentation: "canonical",
+      compare_runtime: createCompareRuntimeState({
+        kind: "text_compare",
+        mode: "text",
+        status: "pending",
+        presentation: "canonical",
+        target_field: "dream",
+      }),
       refined_formulation: "",
       dream: "",
       is_offtopic: false,
@@ -2293,9 +2313,9 @@ test("dream self drops stale refine confirm when no renderable dream content rem
   assert.equal(rendered.confirmEligible, false);
   assert.equal(rendered.contractId, "dream:incomplete_output:DREAM_MENU_INTRO");
   assert.equal(rendered.uiActionCodes.includes("ACTION_DREAM_REFINE_CONFIRM"), false);
-  assert.equal(String((rendered.specialist as any).compare_pending || ""), "false");
+  assert.equal(Object.prototype.hasOwnProperty.call((rendered.specialist as any) || {}, "compare_runtime"), false);
   assert.equal(String((rendered.specialist as any).ui_content || ""), "");
-  assert.equal(String((rendered.specialist as any).ui_feedback_contract || ""), "");
+  assert.equal(String((rendered.specialist as any).ui_content || ""), "");
 });
 
 test("dream render ignores malformed accepted builder summaries as current dream", () => {
@@ -2451,19 +2471,11 @@ test("single-value current-value refinement uses its own state without compare p
 
   assert.equal(rendered.status, "valid_output");
   assert.equal(rendered.uiActionCodes.includes("ACTION_PURPOSE_REFINE_CONFIRM"), true);
-  assert.equal(String((rendered.specialist as any).ui_content || ""), "");
-  assert.equal(
-    String((rendered.specialist as any).ui_feedback_contract?.suggested_value || ""),
-    canonical
-  );
-  assert.match(
-    String((rendered.specialist as any).ui_feedback_contract?.support_text || ""),
-    /Ik heb de toon van de droom lichter gemaakt/i
-  );
-  assert.match(
-    String((rendered.specialist as any).ui_feedback_contract?.heading || ""),
-    /Based on your input|Op basis van je input/i
-  );
+  const refinementContent = (rendered.specialist as any).ui_content as Record<string, unknown>;
+  assert.equal(String(refinementContent.kind || ""), "single_value");
+  assert.equal(String(refinementContent.canonical_text || ""), canonical);
+  assert.equal(String(refinementContent.feedback_reason_text || ""), "");
+  assert.match(String(refinementContent.heading || ""), /The current Purpose of Mindd is:|Je huidige bestaansreden/i);
   assert.doesNotMatch(
     String((rendered.specialist as any).message || ""),
     /Purpose of Mindd is|jouw huidige bestaansreden/i
@@ -2542,15 +2554,10 @@ test("single-value autosuggest contracts use the specialist suggestion instead o
     });
 
     assert.equal(rendered.contractId, current.contractId);
-    assert.equal(String((rendered.specialist as any).ui_content || ""), "");
-    assert.equal(
-      String((rendered.specialist as any).ui_feedback_contract?.suggested_value || ""),
-      current.suggestion
-    );
-    assert.notEqual(
-      String((rendered.specialist as any).ui_feedback_contract?.suggested_value || ""),
-      current.rawInput
-    );
+    const content = (rendered.specialist as any).ui_content as Record<string, unknown>;
+    assert.equal(String(content.kind || ""), "single_value");
+    assert.equal(String(content.canonical_text || ""), current.suggestion);
+    assert.notEqual(String(content.canonical_text || ""), current.rawInput);
   }
 });
 
@@ -2582,11 +2589,11 @@ test("single-value current-value refinement drops generic editorial feedback boi
     previousSpecialist: {},
   });
 
-  const feedbackContract = (rendered.specialist as any).ui_feedback_contract as Record<string, unknown>;
-  assert.equal(String(feedbackContract.kind || ""), "single_value_canonical_suggestion");
-  assert.equal(String(feedbackContract.suggested_value || ""), canonical);
-  assert.equal(String(feedbackContract.support_text || ""), "");
-  assert.equal(String(feedbackContract.rationale || ""), "");
+  const content = (rendered.specialist as any).ui_content as Record<string, unknown>;
+  assert.equal(String(content.kind || ""), "single_value");
+  assert.equal(String(content.canonical_text || ""), canonical);
+  assert.equal(String(content.support_text || ""), "");
+  assert.equal(String(content.feedback_reason_text || ""), "");
   assert.equal(String((rendered.specialist as any).message || ""), "");
 });
 

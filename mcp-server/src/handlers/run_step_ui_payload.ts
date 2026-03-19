@@ -4,9 +4,6 @@ import { MENU_LABEL_DEFAULTS, labelKeyForMenuAction } from "../core/menu_contrac
 import { NEXT_MENU_BY_ACTIONCODE, UI_CONTRACT_VERSION } from "../core/ui_contract_matrix.js";
 import { parseUiContractMenuForStep, parseUiContractStatusForStep } from "../core/ui_contract_id.js";
 import { currentTurnSupportMode } from "../core/stuck_support.js";
-import {
-  normalizeUiFeedbackContractSource,
-} from "../core/ui_feedback_contract.js";
 import { DREAM_STEP_ID } from "../steps/dream.js";
 import type { RenderedAction, UiContentPayload } from "../contracts/ui_actions.js";
 import type { TurnOutputStatus } from "../core/turn_policy_renderer.js";
@@ -240,31 +237,6 @@ function normalizeUiContentPayload(raw: unknown): UiContentPayload | undefined {
     };
   }
   return undefined;
-}
-
-function normalizeUiFeedbackContract(
-  raw: unknown,
-  specialistRaw?: unknown
-): Record<string, unknown> | undefined {
-  return normalizeUiFeedbackContractSource(raw, specialistRaw);
-}
-
-function normalizeLegacyCanonicalSuggestionContent(raw: unknown): UiContentPayload | undefined {
-  const feedback = normalizeUiFeedbackContract(raw);
-  if (!feedback) return undefined;
-  if (String(feedback.kind || "").trim() !== "single_value_canonical_suggestion") return undefined;
-  const heading = String(feedback.heading || "").trim();
-  const canonicalText = String(feedback.suggested_value || "").trim();
-  const supportText = String(feedback.support_text || "").trim();
-  const feedbackReasonText = String(feedback.rationale || "").trim();
-  if (!heading && !canonicalText && !supportText && !feedbackReasonText) return undefined;
-  return {
-    kind: "single_value",
-    ...(heading ? { heading } : {}),
-    ...(canonicalText ? { canonical_text: canonicalText } : {}),
-    ...(supportText ? { support_text: supportText } : {}),
-    ...(feedbackReasonText ? { feedback_reason_text: feedbackReasonText } : {}),
-  };
 }
 
 function normalizeDreamBuilderCompareContractFromSpecialist(
@@ -726,10 +698,6 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
       effectiveStepId === DREAM_STEP_ID &&
       dreamBuilderFlowActive &&
       String((specialist as Record<string, unknown>).__dream_builder_compare_pending || "").trim() === "true";
-    const explicitFeedbackContractPayload = normalizeUiFeedbackContract(
-      (specialist as Record<string, unknown>)?.ui_feedback_contract,
-      specialist as Record<string, unknown>
-    );
     let viewVariant: UiViewVariant = "default";
     if (
       effectiveStepId === DREAM_STEP_ID &&
@@ -746,9 +714,6 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
     }
     const questionTextPayload = questionText ? { questionText } : {};
     const rawContentPayload = normalizeUiContentPayload((specialist as Record<string, unknown>)?.ui_content);
-    const legacyCanonicalSuggestionContent = normalizeLegacyCanonicalSuggestionContent(
-      explicitFeedbackContractPayload
-    );
     const shouldSuppressSingleValueContent =
       Boolean(rawContentPayload) &&
       isSingleValueTextPickerState({
@@ -757,7 +722,7 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
       });
     const contentPayload = shouldSuppressSingleValueContent
       ? undefined
-      : (rawContentPayload || legacyCanonicalSuggestionContent);
+      : rawContentPayload;
     const view = deps.deriveUiViewPayload(viewVariant);
     const dreamBuilderStatementsVisible =
       dreamBuilderFlowActive &&

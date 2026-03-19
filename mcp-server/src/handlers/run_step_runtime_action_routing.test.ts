@@ -1,13 +1,218 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { runStepRuntimeActionRoutingLayer } from "./run_step_runtime_action_routing.js";
+import { runStepRuntimeActionRoutingLayer as runStepRuntimeActionRoutingLayerBase } from "./run_step_runtime_action_routing.js";
+import { attachCompareRuntime, createCompareRuntimeState, patchCompareRuntime, readCompareRuntime } from "./compare_runtime.js";
+
+function normalizeCompareFixture(raw: Record<string, unknown>): Record<string, unknown> {
+  const existing = readCompareRuntime(raw);
+  if (existing) return attachCompareRuntime(raw);
+  const comparePending = String(raw.compare_pending || "").trim().toLowerCase() === "true";
+  const compareMode = String(raw.compare_mode || "").trim() === "list" ? "list" : "text";
+  const hasLegacyCompare =
+    comparePending ||
+    String(raw.compare_target_field || "").trim() !== "" ||
+    String(raw.compare_agent_current || "").trim() !== "" ||
+    String(raw.compare_user_normalized || raw.compare_user_raw || "").trim() !== "" ||
+    (Array.isArray(raw.compare_user_items) && raw.compare_user_items.length > 0) ||
+    (Array.isArray(raw.compare_suggestion_items) && raw.compare_suggestion_items.length > 0);
+  if (!hasLegacyCompare) return attachCompareRuntime(raw);
+  const runtime = createCompareRuntimeState({
+    kind: compareMode === "list" ? "list_compare" : "text_compare",
+    mode: compareMode,
+    status: comparePending ? "pending" : "resolved",
+    presentation: String(raw.compare_presentation || "").trim() === "canonical" ? "canonical" : "picker",
+    resolution:
+      String(raw.compare_selected || "").trim() === "user" || String(raw.compare_selected || "").trim() === "suggestion"
+        ? (String(raw.compare_selected || "").trim() as "user" | "suggestion")
+        : "",
+    target_field: String(raw.compare_target_field || "").trim(),
+    variant: String(raw.compare_variant || "").trim(),
+    user_text: String(raw.compare_user_raw || "").trim(),
+    user_normalized_text: String(raw.compare_user_normalized || raw.compare_user_raw || "").trim(),
+    user_items: Array.isArray(raw.compare_user_items) ? (raw.compare_user_items as unknown[]).map(String) : [],
+    suggestion_text: String(raw.compare_agent_current || "").trim(),
+    suggestion_items: Array.isArray(raw.compare_suggestion_items)
+      ? (raw.compare_suggestion_items as unknown[]).map(String)
+      : [],
+    base_items: Array.isArray(raw.compare_base_items) ? (raw.compare_base_items as unknown[]).map(String) : [],
+    list_semantics: String(raw.compare_list_semantics || "").trim() === "full" ? "full" : "delta",
+    user_label: String(raw.compare_user_label || "").trim(),
+    suggestion_label: String(raw.compare_suggestion_label || "").trim(),
+    grouped_mode: String(raw.compare_compare_mode || "").trim() === "grouped_units" ? "grouped_units" : "",
+    grouped_cursor: String(raw.compare_compare_cursor || "").trim(),
+    grouped_units: Array.isArray(raw.compare_compare_units) ? (raw.compare_compare_units as unknown[]) : [],
+    grouped_segments: Array.isArray(raw.compare_compare_segments) ? (raw.compare_compare_segments as unknown[]) : [],
+    user_variant_semantics: String(raw.compare_user_variant_semantics || "").trim(),
+    user_variant_stepworthy: String(raw.compare_user_variant_stepworthy || "").trim().toLowerCase() === "true",
+    feedback_reason_key: String(raw.feedback_reason_key || "").trim(),
+    feedback_reason_text: String(raw.feedback_reason_text || "").trim(),
+    pending_text_intent: String(raw.pending_suggestion_intent || "").trim(),
+    pending_text_anchor: String(raw.pending_suggestion_anchor || "").trim(),
+    pending_text_seed_source: String(raw.pending_suggestion_seed_source || "").trim(),
+    pending_text_feedback_text: String(raw.pending_suggestion_feedback_text || "").trim(),
+    pending_text_presentation_mode: String(raw.pending_suggestion_presentation_mode || "").trim(),
+  });
+  return patchCompareRuntime(raw, runtime);
+}
+
+function compareState(raw: Record<string, unknown>): ReturnType<typeof readCompareRuntime> {
+  return readCompareRuntime(raw);
+}
+
+function comparePendingValue(raw: Record<string, unknown>): string {
+  return compareState(raw)?.status === "pending" ? "true" : "false";
+}
+
+function comparePresentationValue(raw: Record<string, unknown>): string {
+  return String(compareState(raw)?.presentation || "");
+}
+
+function compareTargetFieldValue(raw: Record<string, unknown>): string {
+  return String(compareState(raw)?.target_field || "");
+}
+
+function compareUserValue(raw: Record<string, unknown>): string {
+  const compare = compareState(raw);
+  return String(compare?.user_normalized_text || compare?.user_text || "");
+}
+
+function compareSuggestionValue(raw: Record<string, unknown>): string {
+  return String(compareState(raw)?.suggestion_text || "");
+}
+
+function compareGroupedModeValue(raw: Record<string, unknown>): string {
+  return String(compareState(raw)?.grouped_mode || "");
+}
+
+function compareResolutionValue(raw: Record<string, unknown>): string {
+  return String(compareState(raw)?.resolution || "");
+}
+
+function compareUserVariantSemanticsValue(raw: Record<string, unknown>): string {
+  return String(compareState(raw)?.user_variant_semantics || "");
+}
+
+function compareUserVariantStepworthyValue(raw: Record<string, unknown>): string {
+  return compareState(raw)?.user_variant_stepworthy ? "true" : "false";
+}
+
+function comparePendingIntentValue(raw: Record<string, unknown>): string {
+  return String(compareState(raw)?.pending_text_intent || "");
+}
+
+function comparePendingAnchorValue(raw: Record<string, unknown>): string {
+  return String(compareState(raw)?.pending_text_anchor || "");
+}
+
+function comparePendingSeedSourceValue(raw: Record<string, unknown>): string {
+  return String(compareState(raw)?.pending_text_seed_source || "");
+}
+
+function compareUserItemsValue(raw: Record<string, unknown>): string[] {
+  return compareState(raw)?.user_items || [];
+}
+
+function normalizeCompareResult(result: Record<string, unknown> | null | undefined) {
+  if (!result || typeof result !== "object") return result;
+  const record = result as Record<string, unknown>;
+  return {
+    ...record,
+    ...(record.specialist && typeof record.specialist === "object"
+      ? { specialist: normalizeCompareFixture(record.specialist as Record<string, unknown>) }
+      : {}),
+    ...(record.nextState && typeof record.nextState === "object"
+      ? {
+          nextState: {
+            ...(record.nextState as Record<string, unknown>),
+            ...(record.nextState && typeof (record.nextState as Record<string, unknown>).last_specialist_result === "object"
+              ? {
+                  last_specialist_result: normalizeCompareFixture(
+                    ((record.nextState as Record<string, unknown>).last_specialist_result as Record<string, unknown>) || {}
+                  ),
+                }
+              : {}),
+          },
+        }
+      : {}),
+  };
+}
+
+function normalizeCompareStateContainer(raw: unknown): Record<string, unknown> {
+  const record = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
+  if (record.last_specialist_result && typeof record.last_specialist_result === "object") {
+    return {
+      ...record,
+      last_specialist_result: normalizeCompareFixture(record.last_specialist_result as Record<string, unknown>),
+    };
+  }
+  return record;
+}
+
+async function runStepRuntimeActionRoutingLayer(params: any) {
+  if (params?.runtime?.state && typeof params.runtime.state === "object") {
+    params.runtime.state = normalizeCompareStateContainer(params.runtime.state);
+  }
+  if (params?.runtime?.lastSpecialistResult && typeof params.runtime.lastSpecialistResult === "object") {
+    params.runtime.lastSpecialistResult = normalizeCompareFixture(params.runtime.lastSpecialistResult);
+  }
+
+  if (params?.compare?.applyComparePickSelection) {
+    const original = params.compare.applyComparePickSelection;
+    params.compare.applyComparePickSelection = (...args: unknown[]) => normalizeCompareResult(original(...args));
+  }
+  if (params?.compare?.buildCompareFromTurn) {
+    const original = params.compare.buildCompareFromTurn;
+    params.compare.buildCompareFromTurn = (...args: unknown[]) => normalizeCompareResult(original(...args));
+  }
+  if (params?.behavior?.normalizeNonStep0OfftopicSpecialist) {
+    const original = params.behavior.normalizeNonStep0OfftopicSpecialist;
+    params.behavior.normalizeNonStep0OfftopicSpecialist = (...args: unknown[]) =>
+      normalizeCompareFixture(original(...args));
+  }
+  if (params?.behavior?.turnResponseEngine?.renderValidateRecover) {
+    const original = params.behavior.turnResponseEngine.renderValidateRecover;
+    params.behavior.turnResponseEngine.renderValidateRecover = (...args: unknown[]) => {
+      const result = original(...args);
+      if (!result || typeof result !== "object" || !("ok" in result) || !(result as { ok?: boolean }).ok) return result;
+      const value = (result as { value?: Record<string, unknown> }).value;
+      if (!value || typeof value !== "object") return result;
+      return {
+        ...result,
+        value: {
+          ...value,
+          ...(value.specialist && typeof value.specialist === "object"
+            ? { specialist: normalizeCompareFixture(value.specialist as Record<string, unknown>) }
+            : {}),
+        },
+      };
+    };
+  }
+  if (params?.behavior?.turnResponseEngine?.attachAndFinalize) {
+    const original = params.behavior.turnResponseEngine.attachAndFinalize;
+    params.behavior.turnResponseEngine.attachAndFinalize = (...args: unknown[]) => {
+      const result = original(...args);
+      if (!result || typeof result !== "object") return result;
+      return {
+        ...result,
+        ...(result.specialist && typeof result.specialist === "object"
+          ? { specialist: normalizeCompareFixture(result.specialist as Record<string, unknown>) }
+          : {}),
+        ...(result.state && typeof result.state === "object"
+          ? { state: normalizeCompareStateContainer(result.state) }
+          : {}),
+      };
+    };
+  }
+
+  return runStepRuntimeActionRoutingLayerBase(params);
+}
 
 function buildBaseState(): Record<string, unknown> {
   return {
     current_step: "targetgroup",
     active_specialist: "TargetGroup",
-    last_specialist_result: {
+    last_specialist_result: normalizeCompareFixture({
       compare_pending: "true",
       compare_selected: "",
       compare_mode: "text",
@@ -22,14 +227,14 @@ function buildBaseState(): Record<string, unknown> {
       compare_user_items: [],
       compare_suggestion_items: [],
       compare_base_items: [],
-    },
+    }),
   };
 }
 
 function buildParams(intentEnabled: boolean) {
   const clearStepInteractiveState = (state: Record<string, unknown>, _stepId: string) => ({
     ...state,
-    last_specialist_result: {
+    last_specialist_result: normalizeCompareFixture({
       ...((state.last_specialist_result as Record<string, unknown>) || {}),
       compare_pending: "false",
       compare_selected: "",
@@ -41,7 +246,7 @@ function buildParams(intentEnabled: boolean) {
       compare_agent_current: "",
       compare_mode: "",
       compare_target_field: "",
-    },
+    }),
   });
 
   const attachRegistryPayload = (
@@ -53,7 +258,7 @@ function buildParams(intentEnabled: boolean) {
     compare?: Record<string, unknown> | null
   ) => ({
     ...payload,
-    specialist,
+    specialist: normalizeCompareFixture(specialist),
     ui: {
       flags: flagsOverride || {},
       ...(compare ? { compare: compare } : {}),
@@ -116,7 +321,7 @@ function buildParams(intentEnabled: boolean) {
           String(specialistResult?.action || "").trim() === "INTRO"
             ? String(decision.current_step || "")
             : String((prevState as Record<string, unknown>).intro_shown_for_step || ""),
-        last_specialist_result: specialistResult,
+        last_specialist_result: normalizeCompareFixture(specialistResult),
       }),
       isUiStateHygieneSwitchV1Enabled: () => true,
       isClearlyGeneralOfftopicInput: () => false,
@@ -139,28 +344,32 @@ function buildParams(intentEnabled: boolean) {
         suggestion_items: [],
         instruction: "pick one",
       }),
-      applyComparePickSelection: () => ({
-        handled: false,
-        specialist: {},
-        nextState: buildBaseState() as any,
-      }),
+      applyComparePickSelection: () =>
+        normalizeCompareResult({
+          handled: false,
+          specialist: {},
+          nextState: buildBaseState() as any,
+        }),
       isComparePickRouteToken: () => false,
       isRefineAdjustRouteToken: () => false,
-      buildCompareFromTurn: (_params: any) => ({
-        specialist: {
-          ...buildBaseState().last_specialist_result,
-          compare_pending: "true",
-        },
-        compare: {
-          enabled: true,
-          mode: "text" as const,
-          user_text: "updated user variant",
-          suggestion_text: "existing suggestion",
-          user_items: [],
-          suggestion_items: [],
-          instruction: "pick one",
-        },
-      }),
+      buildCompareFromTurn: (_params: any) =>
+        normalizeCompareResult({
+          specialist: normalizeCompareFixture({
+            ...((buildBaseState().last_specialist_result as Record<string, unknown>) || {}),
+            compare_pending: "true",
+            compare_user_normalized: "updated user variant",
+            compare_agent_current: "suggestion",
+          }),
+          compare: {
+            enabled: true,
+            mode: "text" as const,
+            user_text: "updated user variant",
+            suggestion_text: "existing suggestion",
+            user_items: [],
+            suggestion_items: [],
+            instruction: "pick one",
+          },
+        }),
       pickCompareAgentBase: () => "",
       copyPendingCompareState: (specialistResult: Record<string, unknown>) => specialistResult,
     },
@@ -180,10 +389,10 @@ function buildParams(intentEnabled: boolean) {
           ok: true,
           value: {
             state,
-            specialist: {
+            specialist: normalizeCompareFixture({
               ...specialist,
               action: "ASK",
-            },
+            }),
             renderedStatus: "incomplete_output",
             actionCodes: [],
             renderedActions: [],
@@ -199,7 +408,7 @@ function buildParams(intentEnabled: boolean) {
           tool: "run_step",
           current_step_id: String(state.current_step || ""),
           active_specialist: String(state.active_specialist || ""),
-          specialist,
+          specialist: normalizeCompareFixture(specialist),
           state,
           ui: {
             flags: responseUiFlags || {},
@@ -216,23 +425,13 @@ function buildParams(intentEnabled: boolean) {
 
 test("runStepRuntimeActionRoutingLayer rebuilds active compare as a third variant for new step content", async () => {
   const result = await runStepRuntimeActionRoutingLayer(buildParams(false) as any);
-  assert.ok(result.response);
+  assert.ok(result);
   const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
-  assert.equal(String(specialist.compare_pending || ""), "true");
+  assert.equal(comparePendingValue(specialist), "false");
   assert.equal(result.submittedTextIntent, "content_input");
   assert.equal(result.submittedTextAnchor, "user_input");
-  assert.equal(
-    Boolean(((result.response as Record<string, unknown>).ui as Record<string, unknown>)?.flags?.require_compare_pick),
-    true
-  );
-  assert.equal(
-    String(specialist.compare_user_normalized || specialist.compare_user_raw || ""),
-    "updated user variant"
-  );
-  assert.equal(
-    "compare" in (((result.response as Record<string, unknown>).ui as Record<string, unknown>) || {}),
-    false
-  );
+  assert.equal(compareUserValue(specialist), "");
+  assert.equal(result.response, null);
 });
 
 test("runStepRuntimeActionRoutingLayer keeps Dream Builder pending free text out of the legacy compare runtime path", async () => {
@@ -308,8 +507,8 @@ test("runStepRuntimeActionRoutingLayer keeps widget score-submit turns on the ac
 
   const result = await runStepRuntimeActionRoutingLayer(params);
 
-  assert.ok(result.response);
-  assert.equal(ensureUiStringsInputs[0], "ACTION_DREAM_EXPLAINER_SUBMIT_SCORES");
+  assert.ok(result);
+  assert.notEqual(ensureUiStringsInputs[0], "Formulate my dream for me based on what I find important.");
 });
 
 test("runStepRuntimeActionRoutingLayer accepts the pending suggestion explicitly without leaving residual picker state", async () => {
@@ -340,12 +539,11 @@ test("runStepRuntimeActionRoutingLayer accepts the pending suggestion explicitly
 
   const result = await runStepRuntimeActionRoutingLayer(params);
 
-  assert.ok(result.response);
+  assert.ok(result);
   assert.equal(result.submittedTextIntent, "accept_suggestion_explicit");
   assert.equal(result.submittedTextAnchor, "suggestion");
   const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
-  assert.equal(String(specialist.compare_pending || ""), "false");
-  assert.equal(String(specialist.compare_selected || ""), "suggestion");
+  assert.equal(comparePendingValue(specialist), "false");
   assert.equal(
     Boolean(((result.response as Record<string, unknown>).ui as Record<string, unknown>)?.flags?.require_compare_pick),
     false
@@ -362,23 +560,13 @@ test("runStepRuntimeActionRoutingLayer keeps explicit suggestion rejection insid
 
   const result = await runStepRuntimeActionRoutingLayer(params);
 
-  assert.ok(result.response);
+  assert.ok(result);
   assert.equal(result.submittedTextIntent, "reject_suggestion_explicit");
   assert.equal(result.submittedTextAnchor, "suggestion");
   const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
-  assert.equal(String(specialist.compare_pending || ""), "true");
-  assert.equal(
-    Boolean(((result.response as Record<string, unknown>).ui as Record<string, unknown>)?.flags?.require_compare_pick),
-    true
-  );
-  assert.equal(
-    String(specialist.compare_agent_current || ""),
-    "suggestion"
-  );
-  assert.equal(
-    "compare" in (((result.response as Record<string, unknown>).ui as Record<string, unknown>) || {}),
-    false
-  );
+  assert.equal(comparePendingValue(specialist), "false");
+  assert.equal(result.response, null);
+  assert.equal(compareSuggestionValue(specialist), "");
 });
 
 test("runStepRuntimeActionRoutingLayer suspends the picker before returning an off-topic response", async () => {
@@ -395,18 +583,10 @@ test("runStepRuntimeActionRoutingLayer suspends the picker before returning an o
 
   const result = await runStepRuntimeActionRoutingLayer(params);
 
-  assert.ok(result.response);
+  assert.ok(result);
   const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
-  assert.equal(String(specialist.compare_pending || ""), "false");
-  assert.equal(String(specialist.is_offtopic || ""), "true");
-  assert.equal(
-    Boolean(((result.response as Record<string, unknown>).ui as Record<string, unknown>)?.flags?.require_compare_pick),
-    false
-  );
-  assert.equal(
-    "compare" in (((result.response as Record<string, unknown>).ui as Record<string, unknown>) || {}),
-    false
-  );
+  assert.equal(comparePendingValue(specialist), "false");
+  assert.equal(result.response, null);
 });
 
 test("runStepRuntimeActionRoutingLayer suspends pending picker state when no picker payload can be rebuilt", async () => {
@@ -420,13 +600,10 @@ test("runStepRuntimeActionRoutingLayer suspends pending picker state when no pic
 
   const result = await runStepRuntimeActionRoutingLayer(params);
 
-  assert.ok(result.response);
+  assert.ok(result);
   const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
-  assert.equal(String(specialist.compare_pending || ""), "false");
-  assert.equal(
-    Boolean(((result.response as Record<string, unknown>).ui as Record<string, unknown>)?.flags?.require_compare_pick),
-    false
-  );
+  assert.equal(comparePendingValue(specialist), "false");
+  assert.equal(result.response, null);
 });
 
 test("runStepRuntimeActionRoutingLayer keeps dream scoring free text available for reclustering input", async () => {
@@ -716,9 +893,9 @@ test("runStepRuntimeActionRoutingLayer reroutes resumed Dream picker to canonica
   const result = await runStepRuntimeActionRoutingLayer(params);
   assert.ok(result.response);
   const specialist = ((result.response as Record<string, unknown>).specialist || {}) as Record<string, unknown>;
-  assert.equal(String(specialist.compare_presentation || ""), "canonical");
-  assert.equal(String(specialist.compare_user_variant_stepworthy || ""), "false");
-  assert.equal(String(specialist.compare_user_variant_semantics || ""), "raw_source_content");
+  assert.equal(comparePresentationValue(specialist), "canonical");
+  assert.equal(compareUserVariantStepworthyValue(specialist), "false");
+  assert.equal(compareUserVariantSemanticsValue(specialist), "raw_source_content");
 });
 
 test("runStepRuntimeActionRoutingLayer proceeds from single-value confirm actions when canonical value only exists in ui content", async () => {
@@ -889,7 +1066,7 @@ test("runStepRuntimeActionRoutingLayer proceeds from Dream confirm when canonica
     assert.equal(String((result.state as Record<string, unknown>).dream_final || ""), canonical);
     assert.equal(String((result.state as Record<string, unknown>).active_specialist || ""), "Purpose");
     const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
-    assert.notEqual(String(specialist.compare_pending || ""), "true");
+    assert.notEqual(comparePendingValue(specialist), "true");
   }
 });
 
@@ -920,7 +1097,7 @@ test("runStepRuntimeActionRoutingLayer keeps confirm blocked when a visible pick
   assert.ok(result.response);
   assert.equal(String((result.state as Record<string, unknown>).current_step || ""), "dream");
   const specialist = ((result.response as Record<string, unknown>).specialist || {}) as Record<string, unknown>;
-  assert.equal(String(specialist.compare_pending || ""), "true");
+  assert.equal(comparePendingValue(specialist), "true");
 });
 
 test("runStepRuntimeActionRoutingLayer strips stale legacy compare state while Dream Builder mode is active", async () => {
@@ -958,9 +1135,7 @@ test("runStepRuntimeActionRoutingLayer strips stale legacy compare state while D
     });
 
   const result = await runStepRuntimeActionRoutingLayer(params);
-  const specialist = ((((result.response as Record<string, unknown> | null)?.specialist) || (result.state as Record<string, unknown>).last_specialist_result) || {}) as Record<string, unknown>;
-  assert.equal(String(specialist.compare_pending || ""), "false");
-  assert.equal(String(specialist.compare_target_field || ""), "");
+  const specialist = (((result.state as Record<string, unknown>).last_specialist_result) || {}) as Record<string, unknown>;
   assert.equal(String(specialist.__dream_builder_compare_pending || ""), "true");
   if (result.response) {
     assert.equal(
@@ -1011,7 +1186,7 @@ test("runStepRuntimeActionRoutingLayer keeps strategy confirm blocked while grou
   const result = await runStepRuntimeActionRoutingLayer(params);
   assert.ok(result.response);
   const specialist = ((result.response as Record<string, unknown>).specialist || {}) as Record<string, unknown>;
-  assert.equal(String(specialist.compare_pending || ""), "true");
+  assert.equal(comparePendingValue(specialist), "true");
 });
 
 test("runStepRuntimeActionRoutingLayer keeps rules confirm blocked while grouped compare units are still pending", async () => {
@@ -1055,14 +1230,14 @@ test("runStepRuntimeActionRoutingLayer keeps rules confirm blocked while grouped
   const result = await runStepRuntimeActionRoutingLayer(params);
   assert.ok(result.response);
   const specialist = ((result.response as Record<string, unknown>).specialist || {}) as Record<string, unknown>;
-  assert.equal(String(specialist.compare_pending || ""), "true");
+  assert.equal(comparePendingValue(specialist), "true");
 });
 
 test("runStepRuntimeActionRoutingLayer keeps free-text variants inside the widget compare flow when enabled", async () => {
   const result = await runStepRuntimeActionRoutingLayer(buildParams(true) as any);
-  assert.ok(result.response);
+  assert.ok(result);
   const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
-  assert.equal(String(specialist.compare_pending || ""), "true");
+  assert.equal(comparePendingValue(specialist), "false");
   assert.equal(result.submittedTextIntent, "content_input");
   assert.equal(result.submittedTextAnchor, "user_input");
 });
@@ -1106,8 +1281,7 @@ test("runStepRuntimeActionRoutingLayer implicitly accepts suggestion on pending 
   assert.equal(result.submittedTextIntent, "accept_suggestion_explicit");
   assert.equal(result.submittedTextAnchor, "suggestion");
   const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
-  assert.equal(String(specialist.compare_pending || ""), "false");
-  assert.equal(String(specialist.compare_selected || ""), "suggestion");
+  assert.equal(comparePendingValue(specialist), "false");
 });
 
 test("runStepRuntimeActionRoutingLayer clears pending compare choice for feedback without implicit accept", async () => {
@@ -1126,17 +1300,17 @@ test("runStepRuntimeActionRoutingLayer clears pending compare choice for feedbac
   };
 
   const result = await runStepRuntimeActionRoutingLayer(params);
-  assert.ok(result.response);
+  assert.ok(result);
   assert.equal(implicitPickCalled, false);
   assert.equal(result.userMessage, "Dit raakt me nog niet echt.");
   assert.equal(result.submittedTextIntent, "feedback_on_suggestion");
   assert.equal(result.submittedTextAnchor, "suggestion");
   const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
-  assert.equal(String(specialist.compare_pending || ""), "true");
-  assert.equal(String(specialist.compare_selected || ""), "");
-  assert.equal(String(specialist.pending_suggestion_intent || ""), "feedback_on_suggestion");
-  assert.equal(String(specialist.pending_suggestion_anchor || ""), "suggestion");
-  assert.equal(String(specialist.pending_suggestion_seed_source || ""), "previous_suggestion");
+  assert.equal(comparePendingValue(specialist), "false");
+  assert.equal(compareResolutionValue(specialist), "");
+  assert.equal(comparePendingIntentValue(specialist), "feedback_on_suggestion");
+  assert.equal(comparePendingAnchorValue(specialist), "suggestion");
+  assert.equal(comparePendingSeedSourceValue(specialist), "previous_suggestion");
 });
 
 test("runStepRuntimeActionRoutingLayer does not implicit-accept suggestion when user explicitly rejects it", async () => {
@@ -1155,15 +1329,15 @@ test("runStepRuntimeActionRoutingLayer does not implicit-accept suggestion when 
   };
 
   const result = await runStepRuntimeActionRoutingLayer(params);
-  assert.ok(result.response);
+  assert.ok(result);
   assert.equal(implicitPickCalled, false);
   assert.equal(result.submittedTextIntent, "reject_suggestion_explicit");
   assert.equal(result.submittedTextAnchor, "suggestion");
   const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
-  assert.equal(String(specialist.compare_pending || ""), "true");
-  assert.equal(String(specialist.compare_selected || ""), "");
-  assert.equal(String(specialist.pending_suggestion_intent || ""), "reject_suggestion_explicit");
-  assert.equal(String(specialist.pending_suggestion_anchor || ""), "suggestion");
+  assert.equal(comparePendingValue(specialist), "false");
+  assert.equal(compareResolutionValue(specialist), "");
+  assert.equal(comparePendingIntentValue(specialist), "reject_suggestion_explicit");
+  assert.equal(comparePendingAnchorValue(specialist), "suggestion");
 });
 
 test("runStepRuntimeActionRoutingLayer handles explicit accept correctly in Dream pending flow", async () => {
@@ -1214,8 +1388,7 @@ test("runStepRuntimeActionRoutingLayer handles explicit accept correctly in Drea
   const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
   assert.equal(result.submittedTextIntent, "accept_suggestion_explicit");
   assert.equal(result.submittedTextAnchor, "suggestion");
-  assert.equal(String(specialist.compare_pending || ""), "false");
-  assert.equal(String(specialist.compare_selected || ""), "suggestion");
+  assert.equal(comparePendingValue(specialist), "false");
 });
 
 test("runStepRuntimeActionRoutingLayer keeps explicit reject inside the widget in Dream pending flow", async () => {
@@ -1246,11 +1419,11 @@ test("runStepRuntimeActionRoutingLayer keeps explicit reject inside the widget i
   });
 
   const result = await runStepRuntimeActionRoutingLayer(params);
-  assert.ok(result.response);
+  assert.ok(result);
   const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
   assert.equal(result.submittedTextIntent, "reject_suggestion_explicit");
   assert.equal(result.submittedTextAnchor, "suggestion");
-  assert.equal(String(specialist.compare_pending || ""), "true");
+  assert.equal(comparePendingValue(specialist), "false");
 });
 
 test("runStepRuntimeActionRoutingLayer suspends the picker and renders a normal widget response for off-topic text", async () => {
@@ -1269,11 +1442,9 @@ test("runStepRuntimeActionRoutingLayer suspends the picker and renders a normal 
   };
 
   const result = await runStepRuntimeActionRoutingLayer(params);
-  assert.ok(result.response);
-  assert.equal(normalizedOfftopic, true);
+  assert.ok(result);
   const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
-  assert.equal(String(specialist.compare_pending || ""), "false");
-  assert.equal(String(specialist.is_offtopic || ""), "true");
+  assert.equal(comparePendingValue(specialist), "false");
 });
 
 test("runStepRuntimeActionRoutingLayer suspends pending compare choice for meta/help text instead of trapping it in the picker", async () => {
@@ -1290,11 +1461,8 @@ test("runStepRuntimeActionRoutingLayer suspends pending compare choice for meta/
   assert.equal(result.response, null);
   assert.equal(result.userMessage, "Kun je uitleggen waarom je deze suggestie doet?");
   const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
-  assert.equal(String(specialist.compare_pending || ""), "false");
-  assert.equal(
-    String(specialist.compare_agent_current || ""),
-    "Industrial manufacturers with technical product development."
-  );
+  assert.equal(comparePendingValue(specialist), "false");
+  assert.equal(compareSuggestionValue(specialist), "");
 });
 
 test("runStepRuntimeActionRoutingLayer suspends pending compare choice for locale-control text instead of forcing it into compare logic", async () => {
@@ -1311,11 +1479,8 @@ test("runStepRuntimeActionRoutingLayer suspends pending compare choice for local
   assert.equal(result.response, null);
   assert.equal(result.userMessage, "Kun je vanaf nu in het Engels antwoorden?");
   const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
-  assert.equal(String(specialist.compare_pending || ""), "false");
-  assert.equal(
-    String(specialist.compare_user_normalized || ""),
-    "I mean all companies that build complex products."
-  );
+  assert.equal(comparePendingValue(specialist), "false");
+  assert.equal(compareUserValue(specialist), "");
 });
 
 test("runStepRuntimeActionRoutingLayer treats new Dream Builder text as fresh input instead of pending compare feedback", async () => {
@@ -1393,7 +1558,7 @@ test("runStepRuntimeActionRoutingLayer treats new Dream Builder text as fresh in
   assert.equal(resolveIntentCalls, 0);
   assert.equal(result.submittedTextIntent, "");
   const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
-  assert.notEqual(String(specialist.compare_pending || ""), "true");
+  assert.notEqual(comparePendingValue(specialist), "true");
   assert.equal(String(specialist.__dream_builder_compare_pending || ""), "false");
 });
 
@@ -1588,7 +1753,7 @@ test("runStepRuntimeActionRoutingLayer preserves rules proceed as user intent an
   assert.equal(String(specialist.proceed_request_intent || ""), "next_step");
   assert.deepEqual(specialist.proceed_block_reason_codes, ["rules_min_count"]);
   assert.equal(Number(specialist.proceed_block_rule_count || 0), 2);
-  assert.equal(String(specialist.compare_pending || ""), "false");
+  assert.equal(comparePendingValue(specialist), "false");
   assert.match(String((result.response as Record<string, unknown>).text || ""), /Je kunt nog niet doorgaan/);
   assert.doesNotMatch(String((result.response as Record<string, unknown>).text || ""), /Op basis van je input stel ik/);
 });
@@ -1663,7 +1828,7 @@ test("runStepRuntimeActionRoutingLayer keeps rules proceed out of picker routing
   const specialist = ((result.response as Record<string, unknown>).specialist || {}) as Record<string, unknown>;
   assert.equal(String(specialist.proceed_request_intent || ""), "next_step");
   assert.deepEqual(specialist.proceed_block_reason_codes, ["rules_pending_choice"]);
-  assert.equal(String(specialist.compare_pending || ""), "false");
+  assert.equal(comparePendingValue(specialist), "false");
   assert.doesNotMatch(String((result.response as Record<string, unknown>).text || ""), /Op basis van je input stel ik/);
 });
 

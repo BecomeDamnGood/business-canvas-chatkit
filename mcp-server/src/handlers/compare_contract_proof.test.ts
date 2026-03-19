@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { finalizeResponseContractInternals } from "./turn_contract.js";
+import { createCompareRuntimeState } from "./compare_runtime.js";
 import {
   readCompareContractFailureReason,
   shouldSuppressMainCardForCompare,
@@ -13,6 +14,10 @@ type Fixture = {
   response: Record<string, unknown>;
   expected: Record<string, unknown>;
 };
+
+function compareRuntime(overrides: Record<string, unknown>) {
+  return createCompareRuntimeState(overrides as any);
+}
 
 function finalizeFixture(response: Record<string, unknown>): Record<string, unknown> {
   return finalizeResponseContractInternals(JSON.parse(JSON.stringify(response)) as any, {
@@ -116,12 +121,15 @@ const fixtures: Fixture[] = [
       text: "",
       prompt: "",
       specialist: {
-        compare_pending: "true",
-        compare_mode: "text",
-        compare_presentation: "picker",
-        feedback_reason_text: "Je huidige droom is nog te algemeen en mist concreet menselijk effect.",
-        compare_user_normalized: "Wij willen bedrijven helpen groeien.",
-        compare_agent_current: "Mindd droomt van bedrijven die vanuit betekenis echte verandering brengen.",
+        compare_runtime: compareRuntime({
+          kind: "text_compare",
+          mode: "text",
+          status: "pending",
+          presentation: "picker",
+          feedback_reason_text: "Je huidige droom is nog te algemeen en mist concreet menselijk effect.",
+          user_normalized_text: "Wij willen bedrijven helpen groeien.",
+          suggestion_text: "Mindd droomt van bedrijven die vanuit betekenis echte verandering brengen.",
+        }),
         compare_instruction: "Choose the version that fits best.",
       },
       state: {
@@ -153,17 +161,20 @@ const fixtures: Fixture[] = [
       text: "",
       prompt: "",
       specialist: {
-        compare_pending: "true",
-        compare_mode: "text",
-        compare_presentation: "picker",
-        feedback_reason_text:
-          "Je input benoemt het probleem van verkeerde voorlichting, maar een Droom vraagt om een positief toekomstbeeld met duidelijk menselijk effect.",
-        compare_user_label: "Dit is jouw input:",
-        compare_suggestion_label: "Dit zou mijn suggestie zijn:",
+        compare_runtime: compareRuntime({
+          kind: "text_compare",
+          mode: "text",
+          status: "pending",
+          presentation: "picker",
+          feedback_reason_text:
+            "Je input benoemt het probleem van verkeerde voorlichting, maar een Droom vraagt om een positief toekomstbeeld met duidelijk menselijk effect.",
+          user_label: "Dit is jouw input:",
+          suggestion_label: "Dit zou mijn suggestie zijn:",
+          user_normalized_text: "Dit gaat over dat mensen het beu zijn om verkeerd voorgelicht te worden.",
+          suggestion_text:
+            "Mindd droomt van een wereld waarin mensen zich zeker voelen omdat ze eerlijk geinformeerd worden.",
+        }),
         compare_instruction: "Klik alsjeblieft wat het beste bij je past.",
-        compare_user_normalized: "Dit gaat over dat mensen het beu zijn om verkeerd voorgelicht te worden.",
-        compare_agent_current:
-          "Mindd droomt van een wereld waarin mensen zich zeker voelen omdat ze eerlijk geinformeerd worden.",
       },
       state: {
         started: "true",
@@ -232,14 +243,17 @@ const fixtures: Fixture[] = [
       text: "",
       prompt: "",
       specialist: {
-        compare_pending: "true",
-        compare_mode: "list",
-        compare_presentation: "picker",
-        feedback_reason_text: "Ik heb de resterende strategische keuze scherper gemaakt.",
-        compare_user_label: "Jouw compacte formulering",
-        compare_suggestion_label: "Mijn suggestie",
-        compare_user_items: ["Operational simplicity"],
-        compare_suggestion_items: ["Operational focus"],
+        compare_runtime: compareRuntime({
+          kind: "list_compare",
+          mode: "list",
+          status: "pending",
+          presentation: "picker",
+          feedback_reason_text: "Ik heb de resterende strategische keuze scherper gemaakt.",
+          user_label: "Jouw compacte formulering",
+          suggestion_label: "Mijn suggestie",
+          user_items: ["Operational simplicity"],
+          suggestion_items: ["Operational focus"],
+        }),
         compare_instruction: "Choose the version that fits best for the remaining difference.",
       },
       state: {
@@ -268,14 +282,17 @@ const fixtures: Fixture[] = [
       text: "",
       prompt: "",
       specialist: {
-        compare_pending: "true",
-        compare_mode: "text",
-        compare_presentation: "picker",
-        feedback_reason_text: "Je huidige formulering blijft te breed en laat de bijdrage nog niet duidelijk zien.",
-        compare_user_label: "Your input",
-        compare_suggestion_label: "My suggestion",
-        compare_user_normalized: "We want to do something good.",
-        compare_agent_current: "We exist to make complex choices understandable.",
+        compare_runtime: compareRuntime({
+          kind: "text_compare",
+          mode: "text",
+          status: "pending",
+          presentation: "picker",
+          feedback_reason_text: "Je huidige formulering blijft te breed en laat de bijdrage nog niet duidelijk zien.",
+          user_label: "Your input",
+          suggestion_label: "My suggestion",
+          user_normalized_text: "We want to do something good.",
+          suggestion_text: "We exist to make complex choices understandable.",
+        }),
         compare_instruction: "Choose the wording that fits best.",
       },
       state: {
@@ -364,12 +381,15 @@ const fixtures: Fixture[] = [
       text: "",
       prompt: "",
       specialist: {
-        compare_pending: "true",
-        compare_mode: "text",
-        compare_presentation: "picker",
-        feedback_reason_text: "Deze suggestie maakt de droom scherper.",
-        compare_user_normalized: "Wij willen bedrijven helpen groeien.",
-        compare_agent_current: "Mindd droomt van bedrijven die vanuit betekenis echte verandering brengen.",
+        compare_runtime: compareRuntime({
+          kind: "text_compare",
+          mode: "text",
+          status: "pending",
+          presentation: "picker",
+          feedback_reason_text: "Deze suggestie maakt de droom scherper.",
+          user_normalized_text: "Wij willen bedrijven helpen groeien.",
+          suggestion_text: "Mindd droomt van bedrijven die vanuit betekenis echte verandering brengen.",
+        }),
         compare_instruction: "Choose the version that fits best.",
       },
       state: {

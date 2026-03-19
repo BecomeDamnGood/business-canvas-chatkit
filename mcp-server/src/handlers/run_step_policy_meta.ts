@@ -14,6 +14,7 @@ import { PRODUCTSSERVICES_STEP_ID } from "../steps/productsservices.js";
 import { RULESOFTHEGAME_STEP_ID } from "../steps/rulesofthegame.js";
 import { PRESENTATION_STEP_ID } from "../steps/presentation.js";
 import { SPECIALIST_META_TOPICS, type SpecialistMetaTopic } from "../steps/user_intent.js";
+import { attachCompareRuntime, clearCompareRuntime } from "./compare_runtime.js";
 import { isTrueFlag } from "./run_step_type_guards.js";
 
 export const LANGUAGE_LOCK_INSTRUCTION = `LANGUAGE OVERRIDE (HARD)
@@ -655,14 +656,6 @@ export function createRunStepPolicyMetaHelpers(deps: RunStepPolicyMetaDeps) {
         ...base,
         __suppress_refined_append: "true",
         refined_formulation: "",
-        compare_agent_current: "",
-        compare_pending: "false",
-        compare_selected: "",
-        compare_list_semantics: "delta",
-        compare_compare_mode: "",
-        compare_compare_cursor: "",
-        compare_compare_units: [],
-        compare_compare_segments: [],
         ...(stepField ? { [stepField]: "" } : {}),
         message: buildBenProfileMessage(params.state),
       };
@@ -804,19 +797,12 @@ export function createRunStepPolicyMetaHelpers(deps: RunStepPolicyMetaDeps) {
     const metaTopic = resolveSpecialistMetaTopic(specialist);
     if (metaTopic === "BEN_PROFILE") {
       return {
-        ...specialist,
+        ...clearCompareRuntime(specialist),
         action: "ASK",
         is_offtopic: true,
         message: buildBenProfileMessage(params.state),
         __suppress_refined_append: "true",
         __offtopic_meta_passthrough: "true",
-        compare_pending: "false",
-        compare_selected: "",
-        compare_list_semantics: "delta",
-        compare_compare_mode: "",
-        compare_compare_cursor: "",
-        compare_compare_units: [],
-        compare_compare_segments: [],
         feedback_reason_key: "",
         feedback_reason_text: "",
       };
@@ -839,21 +825,14 @@ export function createRunStepPolicyMetaHelpers(deps: RunStepPolicyMetaDeps) {
       ? `${specialistMessage} ${redirectSentence}`.trim()
       : redirectSentence;
 
-    const next = {
-      ...specialist,
+    const next = attachCompareRuntime({
+      ...clearCompareRuntime(specialist),
       action: "ASK",
       message,
       __offtopic_meta_passthrough: "false",
-      compare_pending: "false",
-      compare_selected: "",
-      compare_list_semantics: "delta",
-      compare_compare_mode: "",
-      compare_compare_cursor: "",
-      compare_compare_units: [],
-      compare_compare_segments: [],
       feedback_reason_key: "",
       feedback_reason_text: "",
-    } as Record<string, unknown>;
+    } as Record<string, unknown>);
 
     if (stepId === DREAM_STEP_ID && String(params.activeSpecialist || "").trim() === DREAM_EXPLAINER_SPECIALIST) {
       next.suggest_dreambuilder = "true";

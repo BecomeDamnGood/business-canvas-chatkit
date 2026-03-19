@@ -1,4 +1,8 @@
 import { isSingleValueCompareStep } from "../steps/step_registry.js";
+import {
+  attachCompareRuntime,
+  readCompareRuntime,
+} from "./compare_runtime.js";
 
 function normalizedMode(modeRaw: unknown): "text" | "list" {
   return String(modeRaw || "").trim() === "list" ? "list" : "text";
@@ -8,7 +12,8 @@ export function resolvePendingCompareStepId(
   specialist: Record<string, unknown> | null | undefined,
   stepIdHint = ""
 ): string {
-  return String(stepIdHint || specialist?.compare_target_field || "").trim();
+  const compare = readCompareRuntime(specialist);
+  return String(stepIdHint || compare?.target_field || "").trim();
 }
 
 export function isPickerPresentation(presentationRaw: unknown): boolean {
@@ -23,11 +28,11 @@ export function isSingleValueTextPickerState(params: {
   specialist: Record<string, unknown> | null | undefined;
   stepIdHint?: string;
 }): boolean {
-  const specialist = params.specialist || {};
-  if (String(specialist.compare_pending || "").trim() !== "true") return false;
-  if (!isPickerPresentation(specialist.compare_presentation)) return false;
-  const stepId = resolvePendingCompareStepId(specialist, params.stepIdHint || "");
-  return isSingleValueTextPickerStep(stepId, specialist.compare_mode);
+  const compare = readCompareRuntime(params.specialist);
+  if (compare?.status !== "pending") return false;
+  if (!isPickerPresentation(compare.presentation)) return false;
+  const stepId = String(params.stepIdHint || compare.target_field || "").trim();
+  return isSingleValueTextPickerStep(stepId, compare.mode);
 }
 
 export function normalizePendingPickerSpecialistContract(params: {
@@ -35,23 +40,24 @@ export function normalizePendingPickerSpecialistContract(params: {
   stepIdHint?: string;
 }): Record<string, unknown> {
   const specialist = params.specialist && typeof params.specialist === "object"
-    ? { ...params.specialist }
+    ? ({ ...(params.specialist as Record<string, unknown>) })
     : {};
+  const compare = readCompareRuntime(specialist);
   if (
-    String(specialist.compare_pending || "").trim() !== "true" ||
-    !isPickerPresentation(specialist.compare_presentation)
+    compare?.status !== "pending" ||
+    !isPickerPresentation(compare.presentation)
   ) {
-    return specialist;
+    return attachCompareRuntime(specialist);
   }
 
   const { ui_content: _ignoredUiContent, ...normalized } = specialist;
   if (!isSingleValueTextPickerState({ specialist: normalized, stepIdHint: params.stepIdHint || "" })) {
-    return normalized;
+    return attachCompareRuntime(normalized);
   }
 
-  return {
+  return attachCompareRuntime({
     ...normalized,
     message: "",
     refined_formulation: "",
-  };
+  });
 }

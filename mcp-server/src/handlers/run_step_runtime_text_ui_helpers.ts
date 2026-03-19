@@ -1,6 +1,7 @@
 import type { RenderedAction } from "../contracts/ui_actions.js";
 import type { StepIntent } from "../contracts/intents.js";
 import type { CanvasState } from "../core/state.js";
+import { readCompareRuntime } from "./compare_runtime.js";
 
 type ActioncodeRegistryEntry = {
   route?: string;
@@ -266,7 +267,10 @@ export function createRunStepRuntimeTextUiHelpers(deps: CreateRunStepRuntimeText
     if (!deps.isUiSemanticInvariantsV1Enabled()) return context.specialist;
     const stepId = String(context.stepId || "").trim();
     const status = context.status;
-    const specialist = context.specialist || {};
+    const specialist =
+      context.specialist && typeof context.specialist === "object"
+        ? ({ ...(context.specialist as Record<string, unknown>) })
+        : {};
     const action = String((specialist as Record<string, unknown>).action || "").trim().toUpperCase();
     if (action !== "ASK") return specialist;
     const interactiveAsk = status === "no_output" || status === "incomplete_output";
@@ -274,7 +278,7 @@ export function createRunStepRuntimeTextUiHelpers(deps: CreateRunStepRuntimeText
 
     const currentQuestion = String((specialist as Record<string, unknown>).question || "").trim();
     const currentMessage = String((specialist as Record<string, unknown>).message || "").trim();
-    const comparePending = String((specialist as Record<string, unknown>).compare_pending || "").trim() === "true";
+    const comparePending = readCompareRuntime(specialist)?.status === "pending";
     const next = { ...specialist };
     if (!currentQuestion) {
       (next as Record<string, unknown>).question = promptFallbackForInteractiveAsk(context.state, stepId);
