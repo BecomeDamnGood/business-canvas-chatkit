@@ -1808,18 +1808,53 @@ export function render(overrideToolOutput?: unknown): void {
     body = bodyRaw || "";
   }
   const cardDescEl = document.getElementById("cardDesc");
+  const promptFailureEl = document.getElementById("prompt");
+  const uiSubtitleFailureEl = document.getElementById("uiSubtitle");
 
-  const hasSemanticCardContent = Boolean(singleValueContent);
+  const hasSemanticCardContent = Boolean(singleValueContent) || Boolean(structuredSuggestionsContent);
   const hasBodyContent = stripInlineText(String(body || "")).trim().length > 0;
   const hasPromptContent = stripInlineText(String(promptSource || "")).trim().length > 0;
-  const hasRenderableInteractiveContent = hasSemanticCardContent || hasBodyContent || hasPromptContent || hasStructuredActions;
+  const hasOwnerBackedInteractiveContent =
+    compareActive ||
+    Boolean(dreamBuilderContract) ||
+    hasSemanticCardContent;
+  const hasRenderableInteractiveContent =
+    hasOwnerBackedInteractiveContent ||
+    hasBodyContent ||
+    hasPromptContent ||
+    hasStructuredActions;
   if (!hasRenderableInteractiveContent) {
     console.warn("[ui_contract_interactive_content_absent]", {
       current_step: current,
       view_mode: viewMode || "",
       payload_source: resolved.source,
       reason_code: "interactive_content_absent",
+      has_owner_backed_content: hasOwnerBackedInteractiveContent,
     });
+    inputWrap.style.display = "none";
+    const choiceWrap = document.getElementById("choiceWrap");
+    if (choiceWrap) choiceWrap.style.display = "none";
+    const compareWrap = document.getElementById("compareWrap");
+    if (compareWrap) compareWrap.style.display = "none";
+    if (promptFailureEl) promptFailureEl.textContent = "";
+    if (uiSubtitleFailureEl) {
+      uiSubtitleFailureEl.textContent = "";
+      (uiSubtitleFailureEl as HTMLElement).style.display = "none";
+    }
+    startHint.textContent = "";
+    (startHint as HTMLElement).style.display = "none";
+    (btnStart as HTMLElement).style.display = "none";
+    if (primaryActionWrap) (primaryActionWrap as HTMLElement).style.display = "none";
+    if (auxiliaryActionWrap) (auxiliaryActionWrap as HTMLElement).style.display = "none";
+    if (cardDescEl) {
+      const blockedEl = cardDescEl as HTMLElement;
+      blockedEl.classList.remove("has-grid");
+      blockedEl.classList.remove("is-step0-ask-layout");
+      renderContractFailureState(blockedEl, lang, "ui_interactive_content_absent", "");
+    }
+    setInlineNotice(uiText(lang, "error.contract.body", ""));
+    if (isLoading) setLoading(false);
+    return;
   }
 
   if (cardDescEl) {
