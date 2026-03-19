@@ -101,7 +101,6 @@ type NormalizedPendingInteraction = {
   }>;
   renderModel: {
     mode: "text" | "list";
-    variant: "default" | "clarify_dual" | "grouped_list_units";
     instruction: string;
     feedbackReasonText: string;
     userLabel: string;
@@ -110,6 +109,11 @@ type NormalizedPendingInteraction = {
     suggestionText: string;
     userItems: string[];
     suggestionItems: string[];
+    units: Array<{
+      userItems: string[];
+      suggestionItems: string[];
+      feedbackReasonText: string;
+    }>;
     retainedHeading: string;
     retainedItems: string[];
   };
@@ -278,45 +282,31 @@ export function decorateStructuredSuggestionItemsForStep(params: {
 }
 
 export function shouldSuppressMainCardForCompare(
-  uiPayloadRaw: Record<string, unknown> | null | undefined,
-  uiViewVariantRaw: string | null | undefined
+  uiPayloadRaw: Record<string, unknown> | null | undefined
 ): boolean {
   const uiPayload = uiPayloadRaw && typeof uiPayloadRaw === "object" ? uiPayloadRaw : {};
-  void uiViewVariantRaw;
   return Boolean(readPendingInteraction(uiPayload));
 }
 
 export function shouldSuppressPromptForCompare(params: {
-  uiViewVariant?: string | null;
   compareActive?: boolean;
-  requireComparePick?: boolean;
 }): boolean {
-  return (
-    String(params.uiViewVariant || "").trim() === "text_compare" ||
-    params.compareActive === true ||
-    params.requireComparePick === true
-  );
+  return params.compareActive === true;
 }
 
 export function shouldShowTextInputForCompare(params: {
   textSubmitAvailable?: boolean;
-  uiViewVariant?: string | null;
   compareActive?: boolean;
-  requireComparePick?: boolean;
 }): boolean {
   if (params.textSubmitAvailable !== true) return false;
-  if (params.requireComparePick === true) return true;
+  if (params.compareActive === true) return true;
   return !shouldSuppressPromptForCompare({
-    uiViewVariant: params.uiViewVariant,
     compareActive: params.compareActive,
-    requireComparePick: params.requireComparePick,
   });
 }
 
-export function shouldDisableTextInputForCompare(params: {
-  requireComparePick?: boolean;
-}): boolean {
-  return params.requireComparePick === true;
+export function shouldDisableTextInputForCompare(): boolean {
+  return false;
 }
 
 export function shouldRenderPurposeStepIntroVideo(params: {
@@ -391,11 +381,6 @@ function readPendingInteraction(
   if ((kind === "list_compare" && mode !== "list") || (kind === "text_compare" && mode !== "text")) {
     return null;
   }
-  const variantRaw = String(renderModelRaw.variant || "").trim();
-  const variant =
-    variantRaw === "clarify_dual" || variantRaw === "grouped_list_units"
-      ? variantRaw
-      : "default";
   const allowedActions = Array.isArray(pending.allowed_actions)
     ? (pending.allowed_actions as unknown[])
       .map((entry) => {
@@ -442,7 +427,6 @@ function readPendingInteraction(
     allowedActions,
     renderModel: {
       mode,
-      variant,
       instruction: String(renderModelRaw.instruction || "").trim(),
       feedbackReasonText: String(renderModelRaw.feedback_reason_text || "").trim(),
       userLabel,
@@ -451,6 +435,22 @@ function readPendingInteraction(
       suggestionText,
       userItems,
       suggestionItems,
+      units: Array.isArray(renderModelRaw.units)
+        ? (renderModelRaw.units as unknown[])
+          .map((entry) => {
+            const unit = toRecord(entry);
+            const normalizedUserItems = normalizeStringArray(unit.user_items);
+            const normalizedSuggestionItems = normalizeStringArray(unit.suggestion_items);
+            const feedbackReasonText = String(unit.feedback_reason_text || "").trim();
+            if (normalizedUserItems.length === 0 && normalizedSuggestionItems.length === 0) return null;
+            return {
+              userItems: normalizedUserItems,
+              suggestionItems: normalizedSuggestionItems,
+              feedbackReasonText,
+            };
+          })
+          .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry))
+        : [],
       retainedHeading: String(renderModelRaw.retained_heading || "").trim(),
       retainedItems: normalizeStringArray(renderModelRaw.retained_items),
     },
@@ -463,12 +463,8 @@ export function readCompareContractFailureReason(
   const uiPayload = toRecord(uiPayloadRaw);
   const dreamBuilderContract = readDreamBuilderContract(uiPayload);
   if (dreamBuilderContract?.phase === "compare" && Boolean(dreamBuilderContract.compare)) return null;
-  const uiViewVariant = String(toRecord(uiPayload.view).variant || "").trim().toLowerCase();
-  if (uiViewVariant !== "text_compare") return null;
   const pendingInteractionRaw = toRecord(uiPayload.pending_interaction);
-  if (Object.keys(pendingInteractionRaw).length === 0) {
-    return "ui_pending_interaction_missing_for_compare";
-  }
+  if (Object.keys(pendingInteractionRaw).length === 0) return null;
   return readPendingInteraction(uiPayload) ? null : "ui_pending_interaction_malformed_for_compare";
 }
 
@@ -1340,7 +1336,6 @@ function renderComparePanel(resultData: Record<string, unknown>, lang: string): 
     return false;
   }
   const mode = pendingInteraction.renderModel.mode;
-  const variant = pendingInteraction.renderModel.variant;
   const feedbackReasonText = pendingInteraction.renderModel.feedbackReasonText;
   const userText = pendingInteraction.renderModel.userText;
   const suggestionText = pendingInteraction.renderModel.suggestionText;
@@ -1361,14 +1356,10 @@ function renderComparePanel(resultData: Record<string, unknown>, lang: string): 
   };
   const userLabel = userLabelFromPayload
     ? ensureLabelColon(userLabelFromPayload)
-    : variant === "clarify_dual"
-      ? ensureLabelColon(t(lang, "compareHeading"))
-      : ensureLabelColon(t(lang, "compareHeading"));
+    : ensureLabelColon(t(lang, "compareHeading"));
   const suggestionLabel = suggestionLabelFromPayload
     ? ensureLabelColon(suggestionLabelFromPayload)
-    : variant === "clarify_dual"
-      ? ensureLabelColon(t(lang, "compareSuggestionLabel"))
-      : ensureLabelColon(t(lang, "compareSuggestionLabel"));
+    : ensureLabelColon(t(lang, "compareSuggestionLabel"));
   const normalizeListItem = (value: unknown): string =>
     String(value || "")
       .replace(/^\s*(?:[-*•·]\s+|\d+[\.\)]\s+)/, "")
@@ -1767,7 +1758,6 @@ export function render(overrideToolOutput?: unknown): void {
   const uiViewVariant = String((uiView.variant || "")).trim();
   const dreamBuilderContract = readDreamBuilderContract(uiPayload);
   const dreamBuilderPhase = dreamBuilderContract?.phase || "";
-  const isViewModeCompare = uiViewVariant === "text_compare";
   const isViewModeDreamBuilderCollect =
     uiViewVariant === "dream_builder_collect" || dreamBuilderPhase === "collect";
   const isViewModeDreamBuilderRefine =
@@ -1776,7 +1766,8 @@ export function render(overrideToolOutput?: unknown): void {
     uiViewVariant === "dream_builder_scoring" || dreamBuilderPhase === "scoring";
   const dreamBuilderViewContract = readDreamBuilderViewContract(uiView);
   const uiQuestionText = String(uiPayload.questionText || "").trim();
-  const compareActive = shouldSuppressMainCardForCompare(uiPayload, uiViewVariant);
+  const compareActive = shouldSuppressMainCardForCompare(uiPayload);
+  const isViewModeCompare = compareActive;
   const singleValueContent = compareActive ? null : readSingleValueCardContent(uiPayload);
   const structuredSuggestionsContent = compareActive
     ? null
@@ -2243,10 +2234,10 @@ export function render(overrideToolOutput?: unknown): void {
     if (statementsPanelEl) statementsPanelEl.style.display = "none";
   }
 
-  let requireComparePick = false;
+  let comparePanelVisible = false;
   const suppressCompare = isViewModeDreamBuilderScoring;
   if (!suppressCompare) {
-    requireComparePick = renderComparePanel(result, lang);
+    comparePanelVisible = renderComparePanel(result, lang);
   } else {
     const compareWrap = document.getElementById("compareWrap");
     if (compareWrap) compareWrap.style.display = "none";
@@ -2264,9 +2255,7 @@ export function render(overrideToolOutput?: unknown): void {
     promptText = isDreamDirectionView ? "" : promptSource;
   }
   if (shouldSuppressPromptForCompare({
-    uiViewVariant,
     compareActive,
-    requireComparePick,
   })) {
     promptText = "";
   }
@@ -2277,10 +2266,10 @@ export function render(overrideToolOutput?: unknown): void {
     const hasBodyText = stripInlineText(String(body || "")).trim().length > 0;
     const showPromptDivider = hasPromptText && hasBodyText;
     promptEl.classList.toggle("with-divider", showPromptDivider);
-    promptEl.classList.toggle("choice-pending", requireComparePick);
+    promptEl.classList.toggle("choice-pending", comparePanelVisible);
     renderInlineText(promptEl, promptText || "");
   }
-  if (requireComparePick) {
+  if (comparePanelVisible) {
     const choiceWrap = document.getElementById("choiceWrap");
     if (choiceWrap) {
       choiceWrap.innerHTML = "";
@@ -2296,19 +2285,15 @@ export function render(overrideToolOutput?: unknown): void {
     return choiceWrap.childNodes.length > 0;
   })();
   const choiceMode =
-    !requireComparePick && (renderedChoiceButtons || hasStructuredActions);
+    !comparePanelVisible && (renderedChoiceButtons || hasStructuredActions);
 
   const textSubmitActionCode = actionCodeForRole(result, "text_submit");
   const textSubmitAvailable = textSubmitActionCode.length > 0;
   const showTextSubmit = shouldShowTextInputForCompare({
     textSubmitAvailable,
-    uiViewVariant,
     compareActive,
-    requireComparePick,
   });
-  const disableTextSubmit = shouldDisableTextInputForCompare({
-    requireComparePick,
-  });
+  const disableTextSubmit = shouldDisableTextInputForCompare();
   inputWrap.style.display = showTextSubmit ? "flex" : "none";
   const inputEl = document.getElementById("input") as HTMLTextAreaElement | null;
   if (inputEl) {
@@ -2326,12 +2311,12 @@ export function render(overrideToolOutput?: unknown): void {
     const choiceWrap = document.getElementById("choiceWrap");
     if (choiceWrap) choiceWrap.style.display = "none";
   }
-  const primaryActions = requireComparePick
+  const primaryActions = comparePanelVisible
     ? []
     : surfaceActionsForResult(result, "primary", lang).filter(
         (action) => action.role !== "start" && action.role !== "score_submit"
       );
-  const auxiliaryActions = requireComparePick
+  const auxiliaryActions = comparePanelVisible
     ? []
     : surfaceActionsForResult(result, "auxiliary", lang);
   renderActionSurfaceButtons({

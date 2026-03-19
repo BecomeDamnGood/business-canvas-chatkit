@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { createRunStepRuntimeSpecialistHelpers } from "./run_step_runtime_specialist_helpers.js";
+import { createCompareRuntimeState, readCompareRuntime } from "./compare_runtime.js";
 
 function buildHelpers() {
   return createRunStepRuntimeSpecialistHelpers({
@@ -38,14 +39,18 @@ test("normalizeLocalizedConceptTerms replaces 'my future company' with parsed bu
   const specialist: Record<string, unknown> = {
     message: "my future company droomt van een wereld waarin mensen zich gezien voelen.",
     refined_formulation: "my future company droomt van een wereld waarin mensen zich gezien voelen.",
-    compare_agent_current:
-      "my future company droomt van een wereld waarin mensen zich gezien voelen.",
+    compare_runtime: createCompareRuntimeState({
+      kind: "text_compare",
+      mode: "text",
+      status: "pending",
+      suggestion_text: "my future company droomt van een wereld waarin mensen zich gezien voelen.",
+    }),
   };
 
   const next = helpers.normalizeLocalizedConceptTerms(specialist, state) as Record<string, unknown>;
   const message = String(next.message || "");
   const refined = String(next.refined_formulation || "");
-  const suggestion = String(next.compare_agent_current || "");
+  const suggestion = String(readCompareRuntime(next)?.suggestion_text || "");
 
   assert.match(message, /\bMindd\b/);
   assert.match(refined, /\bMindd\b/);

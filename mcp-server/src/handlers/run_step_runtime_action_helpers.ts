@@ -22,7 +22,6 @@ type CreateRunStepRuntimeActionHelpersDeps = {
 };
 
 export type CompareMode = "text" | "list";
-export type CompareVariant = "default" | "clarify_dual" | "grouped_list_units";
 
 export type CompareCompareFeedbackUiPayload = {
   text: string;
@@ -31,8 +30,8 @@ export type CompareCompareFeedbackUiPayload = {
 export type CompareUiPayload = {
   enabled: boolean;
   mode: CompareMode;
-  variant?: CompareVariant;
   compare_feedback?: CompareCompareFeedbackUiPayload;
+  feedback_reason_text?: string;
   user_text: string;
   suggestion_text: string;
   user_label?: string;
@@ -44,7 +43,6 @@ export type CompareUiPayload = {
 
 type UiViewVariant =
   | "default"
-  | "text_compare"
   | "dream_builder_collect"
   | "dream_builder_scoring"
   | "dream_builder_refine";

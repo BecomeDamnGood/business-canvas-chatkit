@@ -96,8 +96,8 @@ Als een wijziging nieuw controle-oppervlak toevoegt: afkeuren.
 | `menuLabel.DREAM_EXPLAINER_MENU_SWITCH_SELF.ACTION_DREAM_SWITCH_TO_SELF` | `-` | `-` | `button` | `interactive` | `ontbreekt` | `ONBEWEZEN` |
 | `menuLabel.DREAM_MENU_INTRO.ACTION_DREAM_INTRO_EXPLAIN_MORE` | `-` | `-` | `button` | `interactive` | `ontbreekt` | `ONBEWEZEN` |
 | `menuLabel.DREAM_MENU_INTRO.ACTION_DREAM_INTRO_START_EXERCISE` | `-` | `-` | `button` | `interactive` | `ontbreekt` | `ONBEWEZEN` |
-| `menuLabel.DREAM_MENU_REFINE.ACTION_DREAM_REFINE_CONFIRM` | `-` | `-` | `button` | `interactive` | `ontbreekt` | `ONBEWEZEN` |
-| `menuLabel.DREAM_MENU_REFINE.ACTION_DREAM_REFINE_START_EXERCISE` | `-` | `-` | `button` | `interactive` | `ontbreekt` | `ONBEWEZEN` |
+| `menuLabel.DREAM_MENU_CONFIRM_SINGLE.ACTION_DREAM_REFINE_CONFIRM` | `-` | `-` | `button` | `interactive` | `ontbreekt` | `ONBEWEZEN` |
+| `menuLabel.DREAM_MENU_CONFIRM_SINGLE.ACTION_DREAM_REFINE_START_EXERCISE` | `-` | `-` | `button` | `interactive` | `ontbreekt` | `ONBEWEZEN` |
 | `menuLabel.DREAM_MENU_SUGGESTIONS.ACTION_DREAM_SUGGESTIONS_PICK_ONE` | `-` | `-` | `button` | `interactive` | `ontbreekt` | `ONBEWEZEN` |
 | `menuLabel.DREAM_MENU_SUGGESTIONS.ACTION_DREAM_SUGGESTIONS_START_EXERCISE` | `-` | `-` | `button` | `interactive` | `ontbreekt` | `ONBEWEZEN` |
 | `menuLabel.DREAM_MENU_WHY.ACTION_DREAM_WHY_GIVE_SUGGESTIONS` | `-` | `-` | `button` | `interactive` | `ontbreekt` | `ONBEWEZEN` |
@@ -381,8 +381,8 @@ Als een wijziging nieuw controle-oppervlak toevoegt: afkeuren.
 | `menuLabel.DREAM_EXPLAINER_MENU_SWITCH_SELF.ACTION_DREAM_SWITCH_TO_SELF` | `ACTION_DREAM_SWITCH_TO_SELF` | `mcp-server/docs/compare/old_v2_2026-02-14/ui/step-card.bundled.html:2118,2200` | `mcp-server/ui/step-card.bundled.html:1228,1290,1370 (+ label-fallback 1385)` | `ja` | `hoog` | `BEWEZEN` |
 | `menuLabel.DREAM_MENU_INTRO.ACTION_DREAM_INTRO_EXPLAIN_MORE` | `ACTION_DREAM_INTRO_EXPLAIN_MORE` | `mcp-server/docs/compare/old_v2_2026-02-14/ui/step-card.bundled.html:2118,2200` | `mcp-server/ui/step-card.bundled.html:1228,1290,1370 (+ label-fallback 1385)` | `ja` | `hoog` | `BEWEZEN` |
 | `menuLabel.DREAM_MENU_INTRO.ACTION_DREAM_INTRO_START_EXERCISE` | `ACTION_DREAM_INTRO_START_EXERCISE` | `mcp-server/docs/compare/old_v2_2026-02-14/ui/step-card.bundled.html:2118,2200` | `mcp-server/ui/step-card.bundled.html:1228,1290,1370 (+ label-fallback 1385)` | `ja` | `hoog` | `BEWEZEN` |
-| `menuLabel.DREAM_MENU_REFINE.ACTION_DREAM_REFINE_CONFIRM` | `ACTION_DREAM_REFINE_CONFIRM` | `mcp-server/docs/compare/old_v2_2026-02-14/ui/step-card.bundled.html:2118,2200` | `mcp-server/ui/step-card.bundled.html:1228,1290,1370 (+ label-fallback 1385)` | `ja` | `hoog` | `BEWEZEN` |
-| `menuLabel.DREAM_MENU_REFINE.ACTION_DREAM_REFINE_START_EXERCISE` | `ACTION_DREAM_REFINE_START_EXERCISE` | `mcp-server/docs/compare/old_v2_2026-02-14/ui/step-card.bundled.html:2118,2200` | `mcp-server/ui/step-card.bundled.html:1228,1290,1370 (+ label-fallback 1385)` | `ja` | `hoog` | `BEWEZEN` |
+| `menuLabel.DREAM_MENU_CONFIRM_SINGLE.ACTION_DREAM_REFINE_CONFIRM` | `ACTION_DREAM_REFINE_CONFIRM` | `mcp-server/docs/compare/old_v2_2026-02-14/ui/step-card.bundled.html:2118,2200` | `mcp-server/ui/step-card.bundled.html:1228,1290,1370 (+ label-fallback 1385)` | `ja` | `hoog` | `BEWEZEN` |
+| `menuLabel.DREAM_MENU_CONFIRM_SINGLE.ACTION_DREAM_REFINE_START_EXERCISE` | `ACTION_DREAM_REFINE_START_EXERCISE` | `mcp-server/docs/compare/old_v2_2026-02-14/ui/step-card.bundled.html:2118,2200` | `mcp-server/ui/step-card.bundled.html:1228,1290,1370 (+ label-fallback 1385)` | `ja` | `hoog` | `BEWEZEN` |
 | `menuLabel.DREAM_MENU_SUGGESTIONS.ACTION_DREAM_SUGGESTIONS_PICK_ONE` | `ACTION_DREAM_SUGGESTIONS_PICK_ONE` | `mcp-server/docs/compare/old_v2_2026-02-14/ui/step-card.bundled.html:2118,2200` | `mcp-server/ui/step-card.bundled.html:1228,1290,1370 (+ label-fallback 1385)` | `ja` | `hoog` | `BEWEZEN` |
 | `menuLabel.DREAM_MENU_SUGGESTIONS.ACTION_DREAM_SUGGESTIONS_START_EXERCISE` | `ACTION_DREAM_SUGGESTIONS_START_EXERCISE` | `mcp-server/docs/compare/old_v2_2026-02-14/ui/step-card.bundled.html:2118,2200` | `mcp-server/ui/step-card.bundled.html:1228,1290,1370 (+ label-fallback 1385)` | `ja` | `hoog` | `BEWEZEN` |
 | `menuLabel.DREAM_MENU_WHY.ACTION_DREAM_WHY_GIVE_SUGGESTIONS` | `ACTION_DREAM_WHY_GIVE_SUGGESTIONS` | `mcp-server/docs/compare/old_v2_2026-02-14/ui/step-card.bundled.html:2118,2200` | `mcp-server/ui/step-card.bundled.html:1228,1290,1370 (+ label-fallback 1385)` | `ja` | `hoog` | `BEWEZEN` |
@@ -480,8 +480,8 @@ Als een wijziging nieuw controle-oppervlak toevoegt: afkeuren.
 - `menuLabel.DREAM_EXPLAINER_MENU_SWITCH_SELF.ACTION_DREAM_SWITCH_TO_SELF`
 - `menuLabel.DREAM_MENU_INTRO.ACTION_DREAM_INTRO_EXPLAIN_MORE`
 - `menuLabel.DREAM_MENU_INTRO.ACTION_DREAM_INTRO_START_EXERCISE`
-- `menuLabel.DREAM_MENU_REFINE.ACTION_DREAM_REFINE_CONFIRM`
-- `menuLabel.DREAM_MENU_REFINE.ACTION_DREAM_REFINE_START_EXERCISE`
+- `menuLabel.DREAM_MENU_CONFIRM_SINGLE.ACTION_DREAM_REFINE_CONFIRM`
+- `menuLabel.DREAM_MENU_CONFIRM_SINGLE.ACTION_DREAM_REFINE_START_EXERCISE`
 - `menuLabel.DREAM_MENU_SUGGESTIONS.ACTION_DREAM_SUGGESTIONS_PICK_ONE`
 - `menuLabel.DREAM_MENU_SUGGESTIONS.ACTION_DREAM_SUGGESTIONS_START_EXERCISE`
 - `menuLabel.DREAM_MENU_WHY.ACTION_DREAM_WHY_GIVE_SUGGESTIONS`

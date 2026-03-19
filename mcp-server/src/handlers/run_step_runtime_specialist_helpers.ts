@@ -2,6 +2,7 @@ import type { CanvasState } from "../core/state.js";
 import { isTrueFlag } from "./run_step_type_guards.js";
 import {
   attachCompareRuntime,
+  hasRenderablePendingCompareState,
   patchCompareRuntime,
   readCompareRuntime,
 } from "./compare_runtime.js";
@@ -186,7 +187,7 @@ export function createRunStepRuntimeSpecialistHelpers(deps: CreateRunStepRuntime
       params.canonicalStatementCount > 0 ||
       specialistStatementsCount > 0 ||
       params.comparePending ||
-      readCompareRuntime(specialist)?.status === "pending";
+      hasRenderablePendingCompareState(readCompareRuntime(specialist));
     const stage = String((params.state as Record<string, unknown>).__dream_builder_prompt_stage || "").trim();
 
     const baseQuestion = deps.uiStringFromStateMap(

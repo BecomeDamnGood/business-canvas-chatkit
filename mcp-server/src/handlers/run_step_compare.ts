@@ -14,9 +14,13 @@ import {
   patchCompareRuntime,
   readCompareRuntime,
 } from "./compare_runtime.js";
+import {
+  clearDreamBuilderCompareRuntime,
+  patchDreamBuilderCompareRuntime,
+  readDreamBuilderCompareRuntime,
+} from "./dream_builder_compare_runtime.js";
 
 type CompareMode = "text" | "list";
-type CompareVariant = "default" | "clarify_dual" | "grouped_list_units";
 type CompareListSemantics = "delta" | "full";
 type ComparePresentation = "picker" | "canonical";
 type FeedbackMode = "none" | "affirm_input" | "compare_suggestion" | "refine_current";
@@ -455,16 +459,17 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
     stepId: string;
     mode: CompareMode;
     state: CanvasState | null | undefined;
-    variant: CompareVariant;
+    grouped?: boolean;
+    clarify?: boolean;
   }): { userLabel?: string; suggestionLabel?: string } {
-    const { stepId, mode, state, variant } = params;
-    if (variant === "clarify_dual") {
+    const { stepId, mode, state, grouped, clarify } = params;
+    if (clarify) {
       return {
         userLabel: clarifyUserLabelForState(state),
         suggestionLabel: clarifySuggestionLabelForState(state),
       };
     }
-    if (variant === "grouped_list_units") {
+    if (grouped) {
       return {
         userLabel: groupedListUserLabelForState(state),
         suggestionLabel: groupedListSuggestionLabelForState(state),
@@ -632,24 +637,8 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
     submittedTextIntent?: string;
     submittedTextAnchor?: string;
   }): ComparePresentation {
-    const { stepId, mode, previousSpecialist, forcePending } = params;
+    const { stepId, mode } = params;
     if (!isSingleValueTextChoiceStep(stepId, mode)) return "picker";
-    const previousCompare = readCompareRuntime(previousSpecialist);
-    const preservedPresentation =
-      forcePending && previousCompare?.status === "pending"
-        ? String(previousCompare.presentation || "").trim()
-        : "";
-    if (preservedPresentation === "canonical" || preservedPresentation === "picker") {
-      return preservedPresentation;
-    }
-    const submittedIntent = normalizePendingSuggestionIntent(params.submittedTextIntent);
-    const submittedAnchor = normalizePendingSuggestionAnchor(params.submittedTextAnchor);
-    if (
-      submittedAnchor === "suggestion" &&
-      (submittedIntent === "feedback_on_suggestion" || submittedIntent === "reject_suggestion_explicit")
-    ) {
-      return "canonical";
-    }
     return "picker";
   }
 
@@ -692,10 +681,6 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
       feedback_reason_key: "",
       feedback_reason_text: "",
       feedback_mode: "none",
-      current_value_refinement_pending: "false",
-      current_value_refinement_target_field: "",
-      current_value_refinement_feedback_text: "",
-      current_value_refinement_anchor_value: "",
     };
   }
 
@@ -1508,21 +1493,6 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
     };
   }
 
-  function clearedDreamBuilderCompareFields(): Record<string, unknown> {
-    return {
-      __dream_builder_compare_pending: "false",
-      __dream_builder_compare_kind: "",
-      __dream_builder_compare_current_items: [],
-      __dream_builder_compare_suggested_items: [],
-      __dream_builder_compare_segments: [],
-      __dream_builder_compare_rationale: "",
-      __dream_builder_compare_current_label: "",
-      __dream_builder_compare_suggested_label: "",
-      __dream_builder_compare_retained_heading: "",
-      __dream_builder_compare_instruction: "",
-    };
-  }
-
   function buildDreamBuilderPendingCompareSpecialist(params: {
     specialistResult: Record<string, unknown>;
     comparePlan: BusinessListComparePlan;
@@ -1551,27 +1521,31 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
       committedText,
       baseItems,
     } = params;
-    return attachCompareRuntime({
-      ...clearCompareRuntime(specialistResult),
-      ...clearedResolvedCompareTransientFields(),
-      ...clearedDreamBuilderCompareFields(),
-      message,
-      feedback_reason_key: "",
-      feedback_reason_text: rationale,
-      __dream_builder_compare_pending: "true",
-      __dream_builder_compare_kind: compareKind,
-      __dream_builder_compare_current_items: comparePlan.initialUnit.user_items,
-      __dream_builder_compare_suggested_items: comparePlan.initialUnit.suggestion_items,
-      __dream_builder_compare_segments: comparePlan.segments,
-      __dream_builder_compare_rationale: rationale,
-      __dream_builder_compare_current_label: currentLabel,
-      __dream_builder_compare_suggested_label: suggestedLabel,
-      __dream_builder_compare_retained_heading: retainedHeading,
-      __dream_builder_compare_instruction: instruction,
-      ...(targetField ? { [targetField]: committedText } : {}),
-      statements: baseItems,
-      refined_formulation: committedText,
-    });
+    return attachCompareRuntime(
+      patchDreamBuilderCompareRuntime(
+        {
+          ...clearDreamBuilderCompareRuntime(clearCompareRuntime(specialistResult)),
+          ...clearedResolvedCompareTransientFields(),
+          message,
+          feedback_reason_key: "",
+          feedback_reason_text: rationale,
+          ...(targetField ? { [targetField]: committedText } : {}),
+          statements: baseItems,
+          refined_formulation: committedText,
+        },
+        {
+          kind: compareKind,
+          current_items: comparePlan.initialUnit.user_items,
+          suggested_items: comparePlan.initialUnit.suggestion_items,
+          segments: comparePlan.segments,
+          rationale,
+          current_label: currentLabel,
+          suggested_label: suggestedLabel,
+          retained_heading: retainedHeading,
+          instruction,
+        }
+      )
+    );
   }
 
   function buildDreamBuilderPendingSimpleCompareSpecialist(params: {
@@ -1611,31 +1585,35 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
       segments.push({ kind: "retained", items: retainedItems });
     }
     segments.push({ kind: "unit", unit_id: "unit_1" });
-    return attachCompareRuntime({
-      ...clearCompareRuntime(specialistResult),
-      ...clearedResolvedCompareTransientFields(),
-      ...clearedDreamBuilderCompareFields(),
-      message,
-      feedback_reason_key: "",
-      feedback_reason_text: rationale,
-      __dream_builder_compare_pending: "true",
-      __dream_builder_compare_kind: compareKind,
-      __dream_builder_compare_current_items: currentItems,
-      __dream_builder_compare_suggested_items: suggestedItems,
-      __dream_builder_compare_segments: segments,
-      __dream_builder_compare_rationale: rationale,
-      __dream_builder_compare_current_label: currentLabel,
-      __dream_builder_compare_suggested_label: suggestedLabel,
-      __dream_builder_compare_retained_heading: retainedHeading,
-      __dream_builder_compare_instruction: instruction,
-      ...(targetField ? { [targetField]: committedText } : {}),
-      statements: baseItems,
-      refined_formulation: committedText,
-    });
+    return attachCompareRuntime(
+      patchDreamBuilderCompareRuntime(
+        {
+          ...clearDreamBuilderCompareRuntime(clearCompareRuntime(specialistResult)),
+          ...clearedResolvedCompareTransientFields(),
+          message,
+          feedback_reason_key: "",
+          feedback_reason_text: rationale,
+          ...(targetField ? { [targetField]: committedText } : {}),
+          statements: baseItems,
+          refined_formulation: committedText,
+        },
+        {
+          kind: compareKind,
+          current_items: currentItems,
+          suggested_items: suggestedItems,
+          segments,
+          rationale,
+          current_label: currentLabel,
+          suggested_label: suggestedLabel,
+          retained_heading: retainedHeading,
+          instruction,
+        }
+      )
+    );
   }
 
   function hasDreamBuilderPendingCompare(specialist: Record<string, unknown>): boolean {
-    return String(specialist.__dream_builder_compare_pending || "").trim() === "true";
+    return Boolean(readDreamBuilderCompareRuntime(specialist));
   }
 
   function composeDreamBuilderCompareSelection(params: {
@@ -1965,7 +1943,7 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
           stepId: params.stepId,
           mode: "list",
           state: params.state,
-          variant: "grouped_list_units",
+          grouped: true,
         });
     const feedbackReasonText = String(currentUnit.feedback_reason_text || "").trim();
     if (!feedbackReasonText) return null;
@@ -1974,7 +1952,6 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
     return {
       enabled: true,
       mode: "list",
-      variant: "grouped_list_units",
       ...(feedbackReasonText
         ? {
             feedback_reason_text: formatCompareFeedbackForDisplay({
@@ -2195,12 +2172,7 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
       !dreamBuilderContext &&
       !forcePending &&
       !existingTargetValue;
-    const shouldSuppressUserVariantPicker =
-      isAcceptedOutputSingleValueTextStep(stepId, mode) &&
-      !shouldPreferInitialDreamPicker &&
-      acceptedOutputUserTurnClassification?.user_variant_is_stepworthy === false;
-    const presentation: ComparePresentation =
-      shouldSuppressUserVariantPicker ? "canonical" : basePresentation;
+    const presentation: ComparePresentation = basePresentation;
     let normalizedUser = mode === "list"
       ? deps.normalizeListUserInput(userRaw)
       : deps.normalizeUserInputAgainstSuggestion(userRaw, suggestionRaw);
@@ -2319,7 +2291,6 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
           mode,
           status: "resolved",
           resolution: "suggestion",
-          target_field: targetField,
           suggestion_text: chosen,
           base_items: mode === "list" ? chosenItems : [],
           list_semantics: "delta",
@@ -2370,13 +2341,13 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
     });
     const committedTextFromPrev = targetField ? String(previousSpecialist[targetField] || "").trim() : "";
     const committedText = mode === "list" ? baseItems.join("\n") : committedTextFromPrev;
-    let variant: CompareVariant =
+    const clarifyCompare =
       deps.isCompareIntentV1Enabled() &&
       mode === "text" &&
       !forcePending &&
       looksLikeDualClarificationPrompt(previousSpecialist)
-        ? "clarify_dual"
-        : "default";
+        ? true
+        : false;
     const rawComparePlan =
       dreamBuilderOverlapComparePlan ||
       (groupedListCompareEnabled
@@ -2408,9 +2379,6 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
     const effectiveFeedbackReason =
       String(feedbackReason || "").trim() ||
       String(comparePlan?.initialUnit.feedback_reason_text || "").trim();
-    if (comparePlan) {
-      variant = "grouped_list_units";
-    }
     const pendingSuggestionSeedSource = seedSourceForPendingSuggestion({
       intent: submittedIntent,
       anchor: submittedAnchor,
@@ -2419,7 +2387,8 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
       stepId,
       mode,
       state,
-      variant,
+      grouped: Boolean(comparePlan),
+      clarify: clarifyCompare,
     });
     const feedbackText = String(params.submittedFeedbackText || "").trim();
     const feedbackMode = normalizeFeedbackMode(specialistResult.feedback_mode);
@@ -2438,8 +2407,6 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
       status: "pending",
       presentation,
       resolution: "",
-      target_field: targetField,
-      variant: variant === "default" ? "" : variant,
       user_text: userRawSafe,
       user_normalized_text: normalizedUserSafe,
       user_items: effectiveUserItems,
@@ -2483,20 +2450,17 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
     }
     enriched.refined_formulation =
       committedText || String(previousSpecialist.refined_formulation || "").trim();
-    if (presentation === "canonical") {
-      return { specialist: enriched, compare: null };
-    }
-    if (isAcceptedOutputSingleValueTextStep(stepId, mode) && effectiveFeedbackMode !== "compare_suggestion") {
-      enriched = patchCompareRuntime(enriched, { presentation: "canonical" });
-      return { specialist: enriched, compare: null };
-    }
     if (!effectiveFeedbackReason) {
-      enriched = patchCompareRuntime(enriched, { presentation: "canonical" });
-      return { specialist: enriched, compare: null };
+      return {
+        specialist: attachCompareRuntime(clearCompareForResolvedDisplay(enriched)),
+        compare: null,
+      };
     }
     if (comparePlan && !String(comparePlan.initialUnit.feedback_reason_text || "").trim()) {
-      enriched = patchCompareRuntime(enriched, { presentation: "canonical" });
-      return { specialist: enriched, compare: null };
+      return {
+        specialist: attachCompareRuntime(clearCompareForResolvedDisplay(enriched)),
+        compare: null,
+      };
     }
     if (dreamBuilderContext && comparePlan) {
       const compareKind: DreamBuilderCompareKind = dreamBuilderOverlapComparePlan
@@ -2590,7 +2554,6 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
           }) || {
             enabled: true,
             mode,
-            ...(variant !== "default" ? { variant } : {}),
             ...(String(comparePlan.initialUnit.feedback_reason_text || "").trim()
               ? {
                   feedback_reason_text: formattedCompareFeedback(
@@ -2614,7 +2577,6 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
         : {
             enabled: true,
             mode,
-            ...(variant !== "default" ? { variant } : {}),
             ...(feedbackReason ? { feedback_reason_text: formattedCompareFeedback(stepId, state, feedbackReason) } : {}),
             ...(wordingLabels.userLabel ? { user_label: wordingLabels.userLabel } : {}),
             ...(wordingLabels.suggestionLabel ? { suggestion_label: wordingLabels.suggestionLabel } : {}),
@@ -2651,10 +2613,11 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
     };
     const prevRaw = attachCompareRuntime((state as any).last_specialist_result || {});
     if (stepId === deps.dreamStepId && hasDreamBuilderPendingCompare(prevRaw)) {
+      const dreamBuilderCompare = readDreamBuilderCompareRuntime(prevRaw);
       const pickedUser = routeToken === "__COMPARE_PICK_USER__";
-      const segments = normalizeCompareSegments(prevRaw.__dream_builder_compare_segments);
-      const currentItems = toTrimmedStringArray(prevRaw.__dream_builder_compare_current_items);
-      const suggestedItems = toTrimmedStringArray(prevRaw.__dream_builder_compare_suggested_items);
+      const segments = normalizeCompareSegments(dreamBuilderCompare?.segments);
+      const currentItems = toTrimmedStringArray(dreamBuilderCompare?.current_items);
+      const suggestedItems = toTrimmedStringArray(dreamBuilderCompare?.suggested_items);
       if (segments.length === 0 || currentItems.length === 0 || suggestedItems.length === 0) {
         return { handled: false, specialist: prevRaw, nextState: state };
       }
@@ -2676,7 +2639,7 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
         {
           ...clearCompareForResolvedDisplay(prevRaw),
           ...stripStaleUiContractFields(prevRaw),
-          ...clearedDreamBuilderCompareFields(),
+          ...clearDreamBuilderCompareRuntime(prevRaw),
           message: selectedMessage,
           refined_formulation: chosen,
           feedback_reason_text: pickedUser ? userPickFeedbackReason(state, prevRaw) : "",
@@ -2690,7 +2653,6 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
         mode: "list",
         status: "resolved",
         resolution: pickedUser ? "user" : "suggestion",
-        target_field: stepId,
         suggestion_text: chosen,
         base_items: composedItems,
         list_semantics: "delta",
@@ -2800,7 +2762,6 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
             user_items: nextUnit.user_items,
             suggestion_text: nextUnit.suggestion_text,
             suggestion_items: nextUnit.suggestion_items,
-            variant: "grouped_list_units",
             user_label: String(nextPayload.user_label || prevCompare?.user_label || ""),
             suggestion_label: String(nextPayload.suggestion_label || prevCompare?.suggestion_label || ""),
             feedback_reason_text: String(nextUnit.feedback_reason_text || "").trim(),
@@ -2835,7 +2796,6 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
         mode: "list",
         status: "resolved",
         resolution: pickedUser ? "user" : "suggestion",
-        target_field: stepId,
         suggestion_text: chosen,
         base_items: composedItems,
         list_semantics: "delta",
@@ -2930,7 +2890,6 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
       mode,
       status: "resolved",
       resolution: pickedUser ? "user" : "suggestion",
-      target_field: stepId,
       suggestion_text: chosen,
       base_items: mode === "list" ? mergedPickedItems : [],
       list_semantics: "delta",
@@ -2984,13 +2943,13 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
     specialist = attachCompareRuntime(specialist);
     previousSpecialist = attachCompareRuntime(previousSpecialist);
     const compareState = readCompareRuntime(specialist);
-    const stepId = String(stepIdHint || compareState?.target_field || "").trim();
+    const stepId = String(stepIdHint || "").trim();
     if (stepId === deps.dreamStepId && String(dreamRuntimeModeRaw || "").trim() !== "self") {
       return null;
     }
     const dreamBuilderComparePending =
       stepId === deps.dreamStepId &&
-      String(specialist?.__dream_builder_compare_pending || "").trim().toLowerCase() === "true";
+      Boolean(readDreamBuilderCompareRuntime(specialist));
     const comparePending = compareState?.status === "pending";
     if (dreamBuilderComparePending) return null;
     if (!comparePending && !dreamBuilderComparePending) return null;
@@ -3008,17 +2967,6 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
       return null;
     }
     const mode: CompareMode = compareState?.mode === "list" ? "list" : "text";
-    const presentation: ComparePresentation =
-      compareState?.presentation === "canonical"
-        ? "canonical"
-        : "picker";
-    if (presentation === "canonical") return null;
-    if (
-      isAcceptedOutputSingleValueTextStep(stepId, mode) &&
-      compareState?.user_variant_stepworthy !== true
-    ) {
-      return null;
-    }
     const compareMode: CompareCompareMode =
       String(compareState?.grouped_mode || "").trim() === "grouped_units"
         ? "grouped_units"
@@ -3048,17 +2996,11 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
       comparePayload?.suggestion_items ||
       toTrimmedStringArray(compareState?.suggestion_items)
     ).map((line) => stripMarkupPreserveLines(line));
-    const variantRaw = String(compareState?.variant || "").trim();
-    const variant = variantRaw === "clarify_dual"
-      ? "clarify_dual"
-      : variantRaw === "grouped_list_units"
-        ? "grouped_list_units"
-        : "default";
     const wordingLabels = compareLabelsForStep({
       stepId,
       mode,
       state,
-      variant,
+      grouped: compareMode === "grouped_units",
     });
     const userLabel =
       String(comparePayload?.user_label || compareState?.user_label || "").trim() || wordingLabels.userLabel || "";
@@ -3066,10 +3008,9 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
       String(comparePayload?.suggestion_label || compareState?.suggestion_label || "").trim() ||
       wordingLabels.suggestionLabel ||
       "";
-	    const feedbackMode = normalizeFeedbackMode(specialist?.feedback_mode);
-	    const feedbackReasonText =
-	      String(comparePayload?.compare_feedback?.text || "").trim() ||
-	      resolveFeedbackReasonFromSpecialist((state || {}) as CanvasState, specialist);
+    const feedbackReasonText =
+      String(comparePayload?.feedback_reason_text || "").trim() ||
+      resolveFeedbackReasonFromSpecialist((state || {}) as CanvasState, specialist);
     const fallbackUserText = stripMarkupPreserveLines(
       String(
         comparePayload?.user_text ||
@@ -3096,13 +3037,9 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
       ? pickCompareSuggestionList(specialist, fallbackSuggestionText)
       : suggestionItems;
     if (!feedbackReasonText) return null;
-    if (isAcceptedOutputSingleValueTextStep(stepId, mode) && feedbackMode !== "compare_suggestion") {
-      return null;
-    }
     return {
       enabled: true,
       mode,
-      ...(variant === "clarify_dual" ? { variant: "clarify_dual" as const } : {}),
       ...(feedbackReasonText ? { feedback_reason_text: feedbackReasonText } : {}),
       ...(userLabel ? { user_label: userLabel } : {}),
       ...(suggestionLabel ? { suggestion_label: suggestionLabel } : {}),

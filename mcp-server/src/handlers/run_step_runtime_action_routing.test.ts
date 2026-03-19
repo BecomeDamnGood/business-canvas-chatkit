@@ -2,66 +2,167 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { runStepRuntimeActionRoutingLayer as runStepRuntimeActionRoutingLayerBase } from "./run_step_runtime_action_routing.js";
-import { attachCompareRuntime, createCompareRuntimeState, patchCompareRuntime, readCompareRuntime } from "./compare_runtime.js";
+import {
+  attachCompareRuntime,
+  createCompareRuntimeState,
+  hasRenderablePendingCompareState,
+  patchCompareRuntime,
+  readCompareRuntime,
+} from "./compare_runtime.js";
+import {
+  createDreamBuilderCompareRuntimeState,
+  patchDreamBuilderCompareRuntime,
+  readDreamBuilderCompareRuntime,
+} from "./dream_builder_compare_runtime.js";
 
 function normalizeCompareFixture(raw: Record<string, unknown>): Record<string, unknown> {
-  const existing = readCompareRuntime(raw);
-  if (existing) return attachCompareRuntime(raw);
-  const comparePending = String(raw.compare_pending || "").trim().toLowerCase() === "true";
-  const compareMode = String(raw.compare_mode || "").trim() === "list" ? "list" : "text";
-  const hasLegacyCompare =
-    comparePending ||
-    String(raw.compare_target_field || "").trim() !== "" ||
-    String(raw.compare_agent_current || "").trim() !== "" ||
-    String(raw.compare_user_normalized || raw.compare_user_raw || "").trim() !== "" ||
-    (Array.isArray(raw.compare_user_items) && raw.compare_user_items.length > 0) ||
-    (Array.isArray(raw.compare_suggestion_items) && raw.compare_suggestion_items.length > 0);
-  if (!hasLegacyCompare) return attachCompareRuntime(raw);
-  const runtime = createCompareRuntimeState({
-    kind: compareMode === "list" ? "list_compare" : "text_compare",
-    mode: compareMode,
-    status: comparePending ? "pending" : "resolved",
-    presentation: String(raw.compare_presentation || "").trim() === "canonical" ? "canonical" : "picker",
-    resolution:
-      String(raw.compare_selected || "").trim() === "user" || String(raw.compare_selected || "").trim() === "suggestion"
-        ? (String(raw.compare_selected || "").trim() as "user" | "suggestion")
-        : "",
-    target_field: String(raw.compare_target_field || "").trim(),
-    variant: String(raw.compare_variant || "").trim(),
-    user_text: String(raw.compare_user_raw || "").trim(),
-    user_normalized_text: String(raw.compare_user_normalized || raw.compare_user_raw || "").trim(),
-    user_items: Array.isArray(raw.compare_user_items) ? (raw.compare_user_items as unknown[]).map(String) : [],
-    suggestion_text: String(raw.compare_agent_current || "").trim(),
-    suggestion_items: Array.isArray(raw.compare_suggestion_items)
-      ? (raw.compare_suggestion_items as unknown[]).map(String)
-      : [],
-    base_items: Array.isArray(raw.compare_base_items) ? (raw.compare_base_items as unknown[]).map(String) : [],
-    list_semantics: String(raw.compare_list_semantics || "").trim() === "full" ? "full" : "delta",
-    user_label: String(raw.compare_user_label || "").trim(),
-    suggestion_label: String(raw.compare_suggestion_label || "").trim(),
-    grouped_mode: String(raw.compare_compare_mode || "").trim() === "grouped_units" ? "grouped_units" : "",
-    grouped_cursor: String(raw.compare_compare_cursor || "").trim(),
-    grouped_units: Array.isArray(raw.compare_compare_units) ? (raw.compare_compare_units as unknown[]) : [],
-    grouped_segments: Array.isArray(raw.compare_compare_segments) ? (raw.compare_compare_segments as unknown[]) : [],
-    user_variant_semantics: String(raw.compare_user_variant_semantics || "").trim(),
-    user_variant_stepworthy: String(raw.compare_user_variant_stepworthy || "").trim().toLowerCase() === "true",
-    feedback_reason_key: String(raw.feedback_reason_key || "").trim(),
-    feedback_reason_text: String(raw.feedback_reason_text || "").trim(),
-    pending_text_intent: String(raw.pending_suggestion_intent || "").trim(),
-    pending_text_anchor: String(raw.pending_suggestion_anchor || "").trim(),
-    pending_text_seed_source: String(raw.pending_suggestion_seed_source || "").trim(),
-    pending_text_feedback_text: String(raw.pending_suggestion_feedback_text || "").trim(),
-    pending_text_presentation_mode: String(raw.pending_suggestion_presentation_mode || "").trim(),
-  });
-  return patchCompareRuntime(raw, runtime);
+  let next = { ...raw };
+  const inlineCompareKeys = [
+    "status",
+    "mode",
+    "presentation",
+    "resolution",
+    "target_field",
+    "variant",
+    "user_text",
+    "user_normalized_text",
+    "user_items",
+    "suggestion_text",
+    "suggestion_items",
+    "base_items",
+    "list_semantics",
+    "user_label",
+    "suggestion_label",
+    "grouped_mode",
+    "grouped_cursor",
+    "grouped_units",
+    "grouped_segments",
+    "user_variant_semantics",
+    "user_variant_stepworthy",
+    "feedback_reason_key",
+    "feedback_reason_text",
+    "pending_text_intent",
+    "pending_text_anchor",
+    "pending_text_seed_source",
+    "pending_text_feedback_text",
+    "pending_text_presentation_mode",
+  ];
+  const hasInlineCompare = inlineCompareKeys.some((key) => key in next);
+  if (!readCompareRuntime(next) && hasInlineCompare) {
+    const rawStatus = String(next.status || "").trim().toLowerCase();
+    next = patchCompareRuntime(next, {
+      kind: String(next.mode || "").trim() === "list" ? "list_compare" : "text_compare",
+      mode: String(next.mode || "").trim() === "list" ? "list" : "text",
+      status: rawStatus === "true" ? "pending" : rawStatus === "false" ? "resolved" : (next.status as any),
+      presentation: String(next.presentation || "").trim() === "canonical" ? "canonical" : "picker",
+      resolution:
+        String(next.resolution || "").trim() === "user" || String(next.resolution || "").trim() === "suggestion"
+          ? (String(next.resolution || "").trim() as "user" | "suggestion")
+          : "",
+      target_field: String(next.target_field || "").trim(),
+      variant: String(next.variant || "").trim(),
+      user_text: String(next.user_text || "").trim(),
+      user_normalized_text: String(next.user_normalized_text || next.user_text || "").trim(),
+      user_items: Array.isArray(next.user_items) ? (next.user_items as unknown[]).map(String) : [],
+      suggestion_text: String(next.suggestion_text || "").trim(),
+      suggestion_items: Array.isArray(next.suggestion_items) ? (next.suggestion_items as unknown[]).map(String) : [],
+      base_items: Array.isArray(next.base_items) ? (next.base_items as unknown[]).map(String) : [],
+      list_semantics: String(next.list_semantics || "").trim() === "full" ? "full" : "delta",
+      user_label: String(next.user_label || "").trim(),
+      suggestion_label: String(next.suggestion_label || "").trim(),
+      grouped_mode: String(next.grouped_mode || "").trim() === "grouped_units" ? "grouped_units" : "",
+      grouped_cursor: String(next.grouped_cursor || "").trim(),
+      grouped_units: Array.isArray(next.grouped_units) ? (next.grouped_units as unknown[]) : [],
+      grouped_segments: Array.isArray(next.grouped_segments) ? (next.grouped_segments as unknown[]) : [],
+      user_variant_semantics: String(next.user_variant_semantics || "").trim(),
+      user_variant_stepworthy: String(next.user_variant_stepworthy || "").trim().toLowerCase() === "true",
+      feedback_reason_key: String(next.feedback_reason_key || "").trim(),
+      feedback_reason_text: String(next.feedback_reason_text || "").trim(),
+      pending_text_intent: String(next.pending_text_intent || "").trim(),
+      pending_text_anchor: String(next.pending_text_anchor || "").trim(),
+      pending_text_seed_source: String(next.pending_text_seed_source || "").trim(),
+      pending_text_feedback_text: String(next.pending_text_feedback_text || "").trim(),
+      pending_text_presentation_mode: String(next.pending_text_presentation_mode || "").trim(),
+    });
+    for (const key of inlineCompareKeys) delete next[key];
+  }
+  const compare = readCompareRuntime(next);
+  if (compare) next = attachCompareRuntime(next);
+  const dreamBuilderKeys = [
+    "dream_builder_kind",
+    "dream_builder_current_items",
+    "dream_builder_suggested_items",
+    "dream_builder_segments",
+    "dream_builder_rationale",
+    "dream_builder_current_label",
+    "dream_builder_suggested_label",
+    "dream_builder_retained_heading",
+    "dream_builder_instruction",
+    "dream_builder_committed_statements",
+  ];
+  const hasInlineDreamBuilderCompare = dreamBuilderKeys.some((key) => key in next);
+  if (!readDreamBuilderCompareRuntime(next) && hasInlineDreamBuilderCompare) {
+    next = patchDreamBuilderCompareRuntime(next, {
+      kind: String(next.dream_builder_kind || "").trim() as any,
+      current_items: Array.isArray(next.dream_builder_current_items)
+        ? (next.dream_builder_current_items as unknown[]).map(String)
+        : [],
+      suggested_items: Array.isArray(next.dream_builder_suggested_items)
+        ? (next.dream_builder_suggested_items as unknown[]).map(String)
+        : [],
+      segments: Array.isArray(next.dream_builder_segments) ? (next.dream_builder_segments as Array<Record<string, unknown>>) : [],
+      rationale: String(next.dream_builder_rationale || "").trim(),
+      current_label: String(next.dream_builder_current_label || "").trim(),
+      suggested_label: String(next.dream_builder_suggested_label || "").trim(),
+      retained_heading: String(next.dream_builder_retained_heading || "").trim(),
+      instruction: String(next.dream_builder_instruction || "").trim(),
+      committed_statements: Array.isArray(next.dream_builder_committed_statements)
+        ? (next.dream_builder_committed_statements as unknown[]).map(String)
+        : [],
+    });
+    for (const key of dreamBuilderKeys) delete next[key];
+  }
+  const dreamBuilderCompare = readDreamBuilderCompareRuntime(next);
+  if (dreamBuilderCompare) {
+    next = patchDreamBuilderCompareRuntime(next, createDreamBuilderCompareRuntimeState(dreamBuilderCompare));
+  }
+  return next;
 }
 
 function compareState(raw: Record<string, unknown>): ReturnType<typeof readCompareRuntime> {
   return readCompareRuntime(raw);
 }
 
+function dreamBuilderCompareState(raw: Record<string, unknown>) {
+  return readDreamBuilderCompareRuntime(raw);
+}
+
+function dreamBuilderComparePendingValue(raw: Record<string, unknown>): string {
+  return dreamBuilderCompareState(raw) ? "true" : "false";
+}
+
+function withCompareRuntime(
+  raw: Record<string, unknown>,
+  runtime: Partial<Parameters<typeof createCompareRuntimeState>[0]>
+): Record<string, unknown> {
+  return {
+    ...raw,
+    compare_runtime: createCompareRuntimeState(runtime),
+  };
+}
+
+function withDreamBuilderCompareRuntime(
+  raw: Record<string, unknown>,
+  runtime: Parameters<typeof createDreamBuilderCompareRuntimeState>[0]
+): Record<string, unknown> {
+  return {
+    ...raw,
+    dream_builder_compare_runtime: createDreamBuilderCompareRuntimeState(runtime),
+  };
+}
+
 function comparePendingValue(raw: Record<string, unknown>): string {
-  return compareState(raw)?.status === "pending" ? "true" : "false";
+  return hasRenderablePendingCompareState(compareState(raw)) ? "true" : "false";
 }
 
 function comparePresentationValue(raw: Record<string, unknown>): string {
@@ -213,20 +314,20 @@ function buildBaseState(): Record<string, unknown> {
     current_step: "targetgroup",
     active_specialist: "TargetGroup",
     last_specialist_result: normalizeCompareFixture({
-      compare_pending: "true",
-      compare_selected: "",
-      compare_mode: "text",
-      compare_presentation: "picker",
-      compare_target_field: "targetgroup",
-      compare_user_raw: "I mean all companies that build complex products.",
-      compare_user_normalized: "I mean all companies that build complex products.",
-      compare_agent_current: "Industrial manufacturers with technical product development.",
+      status: "true",
+      resolution: "",
+      mode: "text",
+      presentation: "picker",
+      target_field: "targetgroup",
+      user_text: "I mean all companies that build complex products.",
+      user_normalized_text: "I mean all companies that build complex products.",
+      suggestion_text: "Industrial manufacturers with technical product development.",
       feedback_reason_text: "This makes the target group specific enough to guide the next step.",
-      compare_user_variant_semantics: "step_variant",
-      compare_user_variant_stepworthy: "true",
-      compare_user_items: [],
-      compare_suggestion_items: [],
-      compare_base_items: [],
+      user_variant_semantics: "step_variant",
+      user_variant_stepworthy: "true",
+      user_items: [],
+      suggestion_items: [],
+      base_items: [],
     }),
   };
 }
@@ -236,16 +337,16 @@ function buildParams(intentEnabled: boolean) {
     ...state,
     last_specialist_result: normalizeCompareFixture({
       ...((state.last_specialist_result as Record<string, unknown>) || {}),
-      compare_pending: "false",
-      compare_selected: "",
-      compare_user_raw: "",
-      compare_user_normalized: "",
-      compare_user_items: [],
-      compare_suggestion_items: [],
-      compare_base_items: [],
-      compare_agent_current: "",
-      compare_mode: "",
-      compare_target_field: "",
+      status: "false",
+      resolution: "",
+      user_text: "",
+      user_normalized_text: "",
+      user_items: [],
+      suggestion_items: [],
+      base_items: [],
+      suggestion_text: "",
+      mode: "",
+      target_field: "",
     }),
   });
 
@@ -356,9 +457,9 @@ function buildParams(intentEnabled: boolean) {
         normalizeCompareResult({
           specialist: normalizeCompareFixture({
             ...((buildBaseState().last_specialist_result as Record<string, unknown>) || {}),
-            compare_pending: "true",
-            compare_user_normalized: "updated user variant",
-            compare_agent_current: "suggestion",
+            status: "true",
+            user_normalized_text: "updated user variant",
+            suggestion_text: "suggestion",
           }),
           compare: {
             enabled: true,
@@ -427,41 +528,40 @@ test("runStepRuntimeActionRoutingLayer rebuilds active compare as a third varian
   const result = await runStepRuntimeActionRoutingLayer(buildParams(false) as any);
   assert.ok(result);
   const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
-  assert.equal(comparePendingValue(specialist), "false");
+  assert.equal(comparePendingValue(specialist), "true");
   assert.equal(result.submittedTextIntent, "content_input");
   assert.equal(result.submittedTextAnchor, "user_input");
-  assert.equal(compareUserValue(specialist), "");
-  assert.equal(result.response, null);
+  assert.notEqual(compareUserValue(specialist), "");
+  assert.ok(result.response);
 });
 
-test("runStepRuntimeActionRoutingLayer keeps Dream Builder pending free text out of the legacy compare runtime path", async () => {
+test("runStepRuntimeActionRoutingLayer keeps Dream Builder pending free text out of the ordinary compare runtime path", async () => {
   const params = buildParams(false) as any;
   params.runtime.state = {
     current_step: "dream",
     active_specialist: "DreamExplainer",
     __dream_runtime_mode: "builder_collect",
     last_specialist_result: {
-      compare_pending: "true",
-      compare_mode: "list",
-      compare_compare_mode: "grouped_units",
-      compare_variant: "grouped_list_units",
-      __dream_builder_compare_pending: "true",
-      __dream_builder_compare_kind: "overlap_merge_compare",
-      __dream_builder_compare_current_items: ["Existing statement", "User variant"],
-      __dream_builder_compare_suggested_items: ["Merged statement"],
-      __dream_builder_compare_segments: [{ kind: "retained", items: ["Another committed statement"] }],
+      status: "true",
+      mode: "list",
+      grouped_mode: "grouped_units",
+      variant: "grouped_list_units",
+      dream_builder_kind: "overlap_merge_compare",
+      dream_builder_current_items: ["Existing statement", "User variant"],
+      dream_builder_suggested_items: ["Merged statement"],
+      dream_builder_segments: [{ kind: "retained", items: ["Another committed statement"] }],
     },
   };
   params.runtime.userMessage = "Ik wil dit anders formuleren.";
   params.action.getDreamRuntimeMode = () => "builder_collect" as const;
   params.compare.buildCompareFromPendingSpecialist = () => {
-    throw new Error("legacy compare pending path should be unreachable for Dream Builder");
+    throw new Error("ordinary compare pending path should be unreachable for Dream Builder");
   };
 
   const result = await runStepRuntimeActionRoutingLayer(params);
   assert.ok(result);
   const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
-  assert.equal(String(specialist.__dream_builder_compare_pending || ""), "false");
+  assert.equal(dreamBuilderComparePendingValue(specialist), "true");
 });
 
 test("runStepRuntimeActionRoutingLayer keeps widget score-submit turns on the action code instead of the clicked label", async () => {
@@ -511,7 +611,7 @@ test("runStepRuntimeActionRoutingLayer keeps widget score-submit turns on the ac
   assert.notEqual(ensureUiStringsInputs[0], "Formulate my dream for me based on what I find important.");
 });
 
-test("runStepRuntimeActionRoutingLayer accepts the pending suggestion explicitly without leaving residual picker state", async () => {
+test("runStepRuntimeActionRoutingLayer accepts the pending compare suggestion explicitly without leaving residual picker state", async () => {
   const params = buildParams(false) as any;
   params.runtime.userMessage = "Ja, deze past goed.";
   params.state.classifyAcceptedOutputUserTurn = async () => ({
@@ -523,16 +623,16 @@ test("runStepRuntimeActionRoutingLayer accepts the pending suggestion explicitly
     specialist: {
       action: "ASK",
       message: "We gaan door met deze formulering.",
-      compare_pending: "false",
-      compare_selected: "suggestion",
+      status: "false",
+      resolution: "suggestion",
     },
     nextState: {
       ...buildBaseState(),
       last_specialist_result: {
         action: "ASK",
         message: "We gaan door met deze formulering.",
-        compare_pending: "false",
-        compare_selected: "suggestion",
+        status: "false",
+        resolution: "suggestion",
       },
     } as any,
   });
@@ -544,10 +644,6 @@ test("runStepRuntimeActionRoutingLayer accepts the pending suggestion explicitly
   assert.equal(result.submittedTextAnchor, "suggestion");
   const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
   assert.equal(comparePendingValue(specialist), "false");
-  assert.equal(
-    Boolean(((result.response as Record<string, unknown>).ui as Record<string, unknown>)?.flags?.require_compare_pick),
-    false
-  );
 });
 
 test("runStepRuntimeActionRoutingLayer keeps explicit suggestion rejection inside the compare widget flow", async () => {
@@ -564,9 +660,9 @@ test("runStepRuntimeActionRoutingLayer keeps explicit suggestion rejection insid
   assert.equal(result.submittedTextIntent, "reject_suggestion_explicit");
   assert.equal(result.submittedTextAnchor, "suggestion");
   const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
-  assert.equal(comparePendingValue(specialist), "false");
-  assert.equal(result.response, null);
-  assert.equal(compareSuggestionValue(specialist), "");
+  assert.equal(comparePendingValue(specialist), "true");
+  assert.ok(result.response);
+  assert.notEqual(compareSuggestionValue(specialist), "");
 });
 
 test("runStepRuntimeActionRoutingLayer suspends the picker before returning an off-topic response", async () => {
@@ -586,7 +682,7 @@ test("runStepRuntimeActionRoutingLayer suspends the picker before returning an o
   assert.ok(result);
   const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
   assert.equal(comparePendingValue(specialist), "false");
-  assert.equal(result.response, null);
+  assert.ok(result.response);
 });
 
 test("runStepRuntimeActionRoutingLayer suspends pending picker state when no picker payload can be rebuilt", async () => {
@@ -603,7 +699,7 @@ test("runStepRuntimeActionRoutingLayer suspends pending picker state when no pic
   assert.ok(result);
   const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
   assert.equal(comparePendingValue(specialist), "false");
-  assert.equal(result.response, null);
+  assert.ok(result.response);
 });
 
 test("runStepRuntimeActionRoutingLayer keeps dream scoring free text available for reclustering input", async () => {
@@ -653,12 +749,12 @@ test("runStepRuntimeActionRoutingLayer does not pretransition special-route-owne
     ACTION_DREAM_SUGGESTIONS_PICK_ONE: {
       step_id: "dream",
       from_menu_ids: ["DREAM_MENU_SUGGESTIONS"],
-      to_menu_id: "DREAM_MENU_REFINE",
+      to_menu_id: "DREAM_MENU_CONFIRM_SINGLE",
     },
   };
   params.action.resolveActionCodeTransition = () => ({
     targetStepId: "dream",
-    targetMenuId: "DREAM_MENU_REFINE",
+    targetMenuId: "DREAM_MENU_CONFIRM_SINGLE",
     renderMode: "menu" as const,
   });
   params.action.shouldPretransitionActionCode = (actionCode: string) =>
@@ -856,7 +952,7 @@ test("runStepRuntimeActionRoutingLayer strips stale single-value content before 
   assert.equal("ui_content" in responseSpecialist, false);
 });
 
-test("runStepRuntimeActionRoutingLayer reroutes resumed Dream picker to canonical when stored user variant is not stepworthy", async () => {
+test("runStepRuntimeActionRoutingLayer keeps resumed Dream picker visible even when stored user variant is not stepworthy", async () => {
   const params = buildParams(true) as any;
   params.runtime.actionCodeRaw = "ACTION_DREAM_REFINE_CONFIRM";
   params.runtime.userMessage = "";
@@ -864,21 +960,21 @@ test("runStepRuntimeActionRoutingLayer reroutes resumed Dream picker to canonica
     current_step: "dream",
     active_specialist: "Dream",
     last_specialist_result: {
-      compare_pending: "true",
-      compare_mode: "text",
-      compare_target_field: "dream",
-      compare_user_raw:
+      status: "true",
+      mode: "text",
+      target_field: "dream",
+      user_text:
         "Ik zou willen dat mensen gezonder zouden eten met minder bewerkt voedsel en voedsel eten waar minimale tot geen ongezonde toevoegingen in zitten.",
-      compare_user_normalized:
+      user_normalized_text:
         "Ik zou willen dat mensen gezonder zouden eten met minder bewerkt voedsel en voedsel eten waar minimale tot geen ongezonde toevoegingen in zitten.",
-      compare_agent_current:
+      suggestion_text:
         "Bart droomt van een wereld waarin mensen zich gezond en energiek voelen doordat zij genieten van puur, onbewerkt voedsel zonder ongezonde toevoegingen.",
       message: "Ik denk dat ik je begrijp.",
       refined_formulation:
         "Bart droomt van een wereld waarin mensen zich gezond en energiek voelen doordat zij genieten van puur, onbewerkt voedsel zonder ongezonde toevoegingen.",
-      compare_user_items: [],
-      compare_suggestion_items: [],
-      compare_base_items: [],
+      user_items: [],
+      suggestion_items: [],
+      base_items: [],
     },
   };
   params.state.classifyAcceptedOutputUserTurn = async () => ({
@@ -893,9 +989,8 @@ test("runStepRuntimeActionRoutingLayer reroutes resumed Dream picker to canonica
   const result = await runStepRuntimeActionRoutingLayer(params);
   assert.ok(result.response);
   const specialist = ((result.response as Record<string, unknown>).specialist || {}) as Record<string, unknown>;
-  assert.equal(comparePresentationValue(specialist), "canonical");
+  assert.equal(comparePresentationValue(specialist), "picker");
   assert.equal(compareUserVariantStepworthyValue(specialist), "false");
-  assert.equal(compareUserVariantSemanticsValue(specialist), "raw_source_content");
 });
 
 test("runStepRuntimeActionRoutingLayer proceeds from single-value confirm actions when canonical value only exists in ui content", async () => {
@@ -990,7 +1085,7 @@ test("runStepRuntimeActionRoutingLayer proceeds from single-value confirm action
         },
         refined_formulation: "",
         [current.fieldKey]: "",
-        compare_pending: "false",
+        status: "false",
       },
     };
     params.state.provisionalValueForStep = () => "";
@@ -1046,15 +1141,15 @@ test("runStepRuntimeActionRoutingLayer proceeds from Dream confirm when canonica
         },
         refined_formulation: canonical,
         dream: "",
-        compare_pending: "true",
-        compare_mode: "text",
-        compare_target_field: "dream",
-        compare_presentation: "canonical",
-        compare_agent_current: canonical,
-        compare_user_raw: "Ik wil dat mensen meer verbonden zijn met natuur.",
-        compare_user_normalized: "Ik wil dat mensen meer verbonden zijn met natuur.",
-        compare_user_variant_semantics: "raw_source_content",
-        compare_user_variant_stepworthy: "false",
+        status: "true",
+        mode: "text",
+        target_field: "dream",
+        presentation: "canonical",
+        suggestion_text: canonical,
+        user_text: "Ik wil dat mensen meer verbonden zijn met natuur.",
+        user_normalized_text: "Ik wil dat mensen meer verbonden zijn met natuur.",
+        user_variant_semantics: "raw_source_content",
+        user_variant_stepworthy: "false",
       },
     };
     params.state.provisionalValueForStep = () => "";
@@ -1078,16 +1173,17 @@ test("runStepRuntimeActionRoutingLayer keeps confirm blocked when a visible pick
     current_step: "dream",
     active_specialist: "DreamExplainer",
     last_specialist_result: {
-      compare_pending: "true",
-      compare_mode: "text",
-      compare_target_field: "dream",
-      compare_presentation: "picker",
-      compare_user_raw: "Ik wil dat mensen gezonder eten.",
-      compare_user_normalized: "Ik wil dat mensen gezonder eten.",
-      compare_agent_current:
+      status: "true",
+      mode: "text",
+      target_field: "dream",
+      presentation: "picker",
+      feedback_reason_text: "Deze versie maakt de droom concreter en bruikbaar voor de volgende stap.",
+      user_text: "Ik wil dat mensen gezonder eten.",
+      user_normalized_text: "Ik wil dat mensen gezonder eten.",
+      suggestion_text:
         "FluerOp droomt van een wereld waarin mensen zich gezond en energiek voelen door puur eten.",
-      compare_user_variant_semantics: "step_variant",
-      compare_user_variant_stepworthy: "true",
+      user_variant_semantics: "step_variant",
+      user_variant_stepworthy: "true",
       refined_formulation:
         "FluerOp droomt van een wereld waarin mensen zich gezond en energiek voelen door puur eten.",
     },
@@ -1100,7 +1196,7 @@ test("runStepRuntimeActionRoutingLayer keeps confirm blocked when a visible pick
   assert.equal(comparePendingValue(specialist), "true");
 });
 
-test("runStepRuntimeActionRoutingLayer strips stale legacy compare state while Dream Builder mode is active", async () => {
+test("runStepRuntimeActionRoutingLayer strips stale ordinary compare state while Dream Builder mode is active", async () => {
   const params = buildParams(true) as any;
   params.runtime.state = {
     current_step: "dream",
@@ -1108,35 +1204,35 @@ test("runStepRuntimeActionRoutingLayer strips stale legacy compare state while D
     __dream_runtime_mode: "builder_collect",
     dream_builder_statements: ["Statement 1", "Statement 2"],
     last_specialist_result: {
-      compare_pending: "true",
-      compare_mode: "text",
-      compare_presentation: "picker",
-      compare_target_field: "dream",
-      compare_user_raw: "I want to help people solve a problem they care about.",
-      compare_user_normalized: "I want to help people solve a problem they care about.",
-      compare_agent_current:
+      status: "true",
+      mode: "text",
+      presentation: "picker",
+      target_field: "dream",
+      user_text: "I want to help people solve a problem they care about.",
+      user_normalized_text: "I want to help people solve a problem they care about.",
+      suggestion_text:
         "Over 5 tot 10 jaar zoeken mensen steeds meer naar oplossingen die voor hen echt betekenisvol zijn.",
       feedback_reason_text: "Dream Builder zoekt hier naar bredere maatschappelijke verschuivingen.",
-      __dream_builder_compare_pending: "true",
-      __dream_builder_compare_kind: "batch_rewrite_compare",
-      __dream_builder_compare_current_items: ["I want to help people solve a problem they care about."],
-      __dream_builder_compare_suggested_items: [
+      dream_builder_kind: "batch_rewrite_compare",
+      dream_builder_current_items: ["I want to help people solve a problem they care about."],
+      dream_builder_suggested_items: [
         "Over 5 tot 10 jaar zoeken mensen steeds meer naar oplossingen die voor hen echt betekenisvol zijn.",
       ],
     },
   };
+  params.action.getDreamRuntimeMode = () => "builder_collect";
   params.runtime.userMessage = "";
   params.runtime.inputMode = "widget";
   params.runtime.compareEnabled = true;
   params.behavior.buildTextForWidget = ({ specialist }: { specialist: Record<string, unknown> }) =>
     JSON.stringify({
-      compare_pending: specialist.compare_pending,
-      dream_builder_compare_pending: specialist.__dream_builder_compare_pending,
+      pending_interaction_status: comparePendingValue(specialist),
+      dream_builder_compare_visible: dreamBuilderComparePendingValue(specialist),
     });
 
   const result = await runStepRuntimeActionRoutingLayer(params);
   const specialist = (((result.state as Record<string, unknown>).last_specialist_result) || {}) as Record<string, unknown>;
-  assert.equal(String(specialist.__dream_builder_compare_pending || ""), "true");
+  assert.equal(dreamBuilderComparePendingValue(specialist), "true");
   if (result.response) {
     assert.equal(
       "compare" in ((((result.response as Record<string, unknown>).ui || {}) as Record<string, unknown>)),
@@ -1153,31 +1249,33 @@ test("runStepRuntimeActionRoutingLayer keeps strategy confirm blocked while grou
     current_step: "strategy",
     active_specialist: "Strategy",
     last_specialist_result: {
-      compare_pending: "true",
-      compare_mode: "list",
-      compare_target_field: "strategy",
-      compare_presentation: "picker",
-      compare_compare_mode: "grouped_units",
-      compare_compare_cursor: "0",
-      compare_compare_segments: [
+      status: "true",
+      mode: "list",
+      target_field: "strategy",
+      presentation: "picker",
+      feedback_reason_text: "Kies welke formulering het beste past als volgende strategische richting.",
+      grouped_mode: "grouped_units",
+      grouped_cursor: "0",
+      grouped_segments: [
         { kind: "retained", items: ["Recurring revenue", "Expert-led delivery"] },
         { kind: "unit", unit_id: "unit_1" },
       ],
-      compare_compare_units: [
+      grouped_units: [
         {
           id: "unit_1",
           user_items: ["Operational simplicity"],
           suggestion_items: ["Operational focus"],
           user_text: "Operational simplicity",
           suggestion_text: "Operational focus",
+          feedback_reason_text: "Deze keuze bepaalt hoe de strategie scherp wordt geformuleerd.",
           resolution: "",
           confidence: "anchored",
         },
       ],
-      compare_user_items: ["Operational simplicity"],
-      compare_suggestion_items: ["Operational focus"],
-      compare_user_normalized: "Operational simplicity",
-      compare_agent_current: "Operational focus",
+      user_items: ["Operational simplicity"],
+      suggestion_items: ["Operational focus"],
+      user_normalized_text: "Operational simplicity",
+      suggestion_text: "Operational focus",
       statements: ["Recurring revenue", "Expert-led delivery"],
       strategy: ["Recurring revenue", "Expert-led delivery"].join("\n"),
     },
@@ -1197,31 +1295,33 @@ test("runStepRuntimeActionRoutingLayer keeps rules confirm blocked while grouped
     current_step: "rulesofthegame",
     active_specialist: "RulesOfTheGame",
     last_specialist_result: {
-      compare_pending: "true",
-      compare_mode: "list",
-      compare_target_field: "rulesofthegame",
-      compare_presentation: "picker",
-      compare_compare_mode: "grouped_units",
-      compare_compare_cursor: "0",
-      compare_compare_segments: [
+      status: "true",
+      mode: "list",
+      target_field: "rulesofthegame",
+      presentation: "picker",
+      feedback_reason_text: "Kies welke formulering het beste past als spelregel.",
+      grouped_mode: "grouped_units",
+      grouped_cursor: "0",
+      grouped_segments: [
         { kind: "retained", items: ["We communicate proactively.", "We keep commitments."] },
         { kind: "unit", unit_id: "unit_1" },
       ],
-      compare_compare_units: [
+      grouped_units: [
         {
           id: "unit_1",
           user_items: ["We resolve blockers quickly."],
           suggestion_items: ["We escalate blockers early and visibly."],
           user_text: "We resolve blockers quickly.",
           suggestion_text: "We escalate blockers early and visibly.",
+          feedback_reason_text: "Deze keuze bepaalt hoe de spelregel concreet wordt vastgelegd.",
           resolution: "",
           confidence: "anchored",
         },
       ],
-      compare_user_items: ["We resolve blockers quickly."],
-      compare_suggestion_items: ["We escalate blockers early and visibly."],
-      compare_user_normalized: "We resolve blockers quickly.",
-      compare_agent_current: "We escalate blockers early and visibly.",
+      user_items: ["We resolve blockers quickly."],
+      suggestion_items: ["We escalate blockers early and visibly."],
+      user_normalized_text: "We resolve blockers quickly.",
+      suggestion_text: "We escalate blockers early and visibly.",
       statements: ["We communicate proactively.", "We keep commitments."],
       rulesofthegame: ["We communicate proactively.", "We keep commitments."].join("\n"),
     },
@@ -1237,7 +1337,7 @@ test("runStepRuntimeActionRoutingLayer keeps free-text variants inside the widge
   const result = await runStepRuntimeActionRoutingLayer(buildParams(true) as any);
   assert.ok(result);
   const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
-  assert.equal(comparePendingValue(specialist), "false");
+  assert.equal(comparePendingValue(specialist), "true");
   assert.equal(result.submittedTextIntent, "content_input");
   assert.equal(result.submittedTextAnchor, "user_input");
 });
@@ -1255,15 +1355,15 @@ test("runStepRuntimeActionRoutingLayer implicitly accepts suggestion on pending 
     }
     const selectedSpecialist = {
       ...((state.last_specialist_result as Record<string, unknown>) || {}),
-      compare_pending: "false",
-      compare_selected: "suggestion",
-      compare_mode: "",
-      compare_target_field: "",
-      compare_user_raw: "",
-      compare_user_normalized: "",
-      compare_user_items: [],
-      compare_suggestion_items: [],
-      compare_base_items: [],
+      status: "false",
+      resolution: "suggestion",
+      mode: "",
+      target_field: "",
+      user_text: "",
+      user_normalized_text: "",
+      user_items: [],
+      suggestion_items: [],
+      base_items: [],
     };
     return {
       handled: true,
@@ -1306,7 +1406,7 @@ test("runStepRuntimeActionRoutingLayer clears pending compare choice for feedbac
   assert.equal(result.submittedTextIntent, "feedback_on_suggestion");
   assert.equal(result.submittedTextAnchor, "suggestion");
   const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
-  assert.equal(comparePendingValue(specialist), "false");
+  assert.equal(comparePendingValue(specialist), "true");
   assert.equal(compareResolutionValue(specialist), "");
   assert.equal(comparePendingIntentValue(specialist), "feedback_on_suggestion");
   assert.equal(comparePendingAnchorValue(specialist), "suggestion");
@@ -1334,7 +1434,7 @@ test("runStepRuntimeActionRoutingLayer does not implicit-accept suggestion when 
   assert.equal(result.submittedTextIntent, "reject_suggestion_explicit");
   assert.equal(result.submittedTextAnchor, "suggestion");
   const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
-  assert.equal(comparePendingValue(specialist), "false");
+  assert.equal(comparePendingValue(specialist), "true");
   assert.equal(compareResolutionValue(specialist), "");
   assert.equal(comparePendingIntentValue(specialist), "reject_suggestion_explicit");
   assert.equal(comparePendingAnchorValue(specialist), "suggestion");
@@ -1346,19 +1446,19 @@ test("runStepRuntimeActionRoutingLayer handles explicit accept correctly in Drea
     current_step: "dream",
     active_specialist: "Dream",
     last_specialist_result: {
-      compare_pending: "true",
-      compare_mode: "text",
-      compare_presentation: "picker",
-      compare_target_field: "dream",
-      compare_user_raw: "Wij willen bedrijven helpen groeien.",
-      compare_user_normalized: "Wij willen bedrijven helpen groeien.",
-      compare_agent_current: "Mindd droomt van een wereld waarin ondernemers rust ervaren in hun keuzes.",
+      status: "true",
+      mode: "text",
+      presentation: "picker",
+      target_field: "dream",
+      user_text: "Wij willen bedrijven helpen groeien.",
+      user_normalized_text: "Wij willen bedrijven helpen groeien.",
+      suggestion_text: "Mindd droomt van een wereld waarin ondernemers rust ervaren in hun keuzes.",
       feedback_reason_text: "This version turns the dream into a clearer world-level change.",
-      compare_user_variant_semantics: "step_variant",
-      compare_user_variant_stepworthy: "true",
-      compare_user_items: [],
-      compare_suggestion_items: [],
-      compare_base_items: [],
+      user_variant_semantics: "step_variant",
+      user_variant_stepworthy: "true",
+      user_items: [],
+      suggestion_items: [],
+      base_items: [],
     },
   };
   params.runtime.userMessage = "Ja, dit klopt.";
@@ -1370,15 +1470,15 @@ test("runStepRuntimeActionRoutingLayer handles explicit accept correctly in Drea
     handled: routeToken === "__COMPARE_PICK_SUGGESTION__",
     specialist: {
       ...((state.last_specialist_result as Record<string, unknown>) || {}),
-      compare_pending: "false",
-      compare_selected: "suggestion",
+      status: "false",
+      resolution: "suggestion",
     },
     nextState: {
       ...state,
       last_specialist_result: {
         ...state.last_specialist_result,
-        compare_pending: "false",
-        compare_selected: "suggestion",
+        status: "false",
+        resolution: "suggestion",
       },
     },
   });
@@ -1397,19 +1497,19 @@ test("runStepRuntimeActionRoutingLayer keeps explicit reject inside the widget i
     current_step: "dream",
     active_specialist: "Dream",
     last_specialist_result: {
-      compare_pending: "true",
-      compare_mode: "text",
-      compare_presentation: "picker",
-      compare_target_field: "dream",
-      compare_user_raw: "Wij willen bedrijven helpen groeien.",
-      compare_user_normalized: "Wij willen bedrijven helpen groeien.",
-      compare_agent_current: "Mindd droomt van een wereld waarin ondernemers rust ervaren in hun keuzes.",
+      status: "true",
+      mode: "text",
+      presentation: "picker",
+      target_field: "dream",
+      user_text: "Wij willen bedrijven helpen groeien.",
+      user_normalized_text: "Wij willen bedrijven helpen groeien.",
+      suggestion_text: "Mindd droomt van een wereld waarin ondernemers rust ervaren in hun keuzes.",
       feedback_reason_text: "This version turns the dream into a clearer world-level change.",
-      compare_user_variant_semantics: "step_variant",
-      compare_user_variant_stepworthy: "true",
-      compare_user_items: [],
-      compare_suggestion_items: [],
-      compare_base_items: [],
+      user_variant_semantics: "step_variant",
+      user_variant_stepworthy: "true",
+      user_items: [],
+      suggestion_items: [],
+      base_items: [],
     },
   };
   params.runtime.userMessage = "Dat is niet wat ik bedoel.";
@@ -1423,7 +1523,7 @@ test("runStepRuntimeActionRoutingLayer keeps explicit reject inside the widget i
   const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
   assert.equal(result.submittedTextIntent, "reject_suggestion_explicit");
   assert.equal(result.submittedTextAnchor, "suggestion");
-  assert.equal(comparePendingValue(specialist), "false");
+  assert.equal(comparePendingValue(specialist), "true");
 });
 
 test("runStepRuntimeActionRoutingLayer suspends the picker and renders a normal widget response for off-topic text", async () => {
@@ -1437,7 +1537,7 @@ test("runStepRuntimeActionRoutingLayer suspends the picker and renders a normal 
     return {
       ...incoming.specialistResult,
       is_offtopic: true,
-      compare_pending: "false",
+      status: "false",
     };
   };
 
@@ -1494,16 +1594,15 @@ test("runStepRuntimeActionRoutingLayer treats new Dream Builder text as fresh in
     active_specialist: "DreamExplainer",
     __dream_runtime_mode: "builder_collect",
     last_specialist_result: {
-      __dream_builder_compare_pending: "true",
-      __dream_builder_compare_kind: "batch_rewrite_compare",
-      __dream_builder_compare_current_items: [
+      dream_builder_kind: "batch_rewrite_compare",
+      dream_builder_current_items: [
         "I want to help people solve a problem they truly care about.",
       ],
-      __dream_builder_compare_suggested_items: [
+      dream_builder_suggested_items: [
         "Over 5 tot 10 jaar zullen meer mensen vooral problemen willen oplossen die voor henzelf en hun omgeving echt betekenisvol zijn.",
       ],
-      __dream_builder_compare_segments: [{ kind: "unit", unit_id: "unit_1" }],
-      __dream_builder_compare_rationale: "Dream Builder zoekt naar bredere maatschappelijke verschuivingen.",
+      dream_builder_segments: [{ kind: "unit", unit_id: "unit_1" }],
+      dream_builder_rationale: "Dream Builder zoekt naar bredere maatschappelijke verschuivingen.",
       feedback_reason_text: "Dream Builder zoekt naar bredere maatschappelijke verschuivingen.",
     },
   };
@@ -1522,19 +1621,18 @@ test("runStepRuntimeActionRoutingLayer treats new Dream Builder text as fresh in
   params.compare.buildCompareFromTurn = () => ({
     specialist: {
       action: "ASK",
-      compare_pending: "false",
-      __dream_builder_compare_pending: "true",
-      __dream_builder_compare_kind: "batch_rewrite_compare",
-      __dream_builder_compare_current_items: [
+      status: "false",
+      dream_builder_kind: "batch_rewrite_compare",
+      dream_builder_current_items: [
         "I want to build a community around a shared belief or movement.",
         "I want to create opportunities for others.",
       ],
-      __dream_builder_compare_suggested_items: [
+      dream_builder_suggested_items: [
         "Mensen zullen zich vaker verbinden rond gedeelde overtuigingen en bewegingen die groter zijn dan henzelf.",
         "Er zal meer waarde worden gehecht aan ondernemingen die kansen creëren voor anderen.",
       ],
-      __dream_builder_compare_segments: [{ kind: "unit", unit_id: "unit_1" }],
-      __dream_builder_compare_rationale: "Dream Builder zoekt naar bredere maatschappelijke verschuivingen.",
+      dream_builder_segments: [{ kind: "unit", unit_id: "unit_1" }],
+      dream_builder_rationale: "Dream Builder zoekt naar bredere maatschappelijke verschuivingen.",
     },
     compare: {
       enabled: true,
@@ -1559,7 +1657,7 @@ test("runStepRuntimeActionRoutingLayer treats new Dream Builder text as fresh in
   assert.equal(result.submittedTextIntent, "");
   const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
   assert.notEqual(comparePendingValue(specialist), "true");
-  assert.equal(String(specialist.__dream_builder_compare_pending || ""), "false");
+  assert.equal(dreamBuilderComparePendingValue(specialist), "true");
 });
 
 test("runStepRuntimeActionRoutingLayer lets refine-adjust action codes continue as specialist routes", async () => {
@@ -1772,17 +1870,17 @@ test("runStepRuntimeActionRoutingLayer keeps rules proceed out of picker routing
       rulesofthegame: "user_input",
     },
     last_specialist_result: {
-      compare_pending: "true",
-      compare_mode: "list",
+      status: "true",
+      mode: "list",
       feedback_reason_text:
         "Er staat nog een open wording-keuze klaar. Werk eerst naar één definitieve set spelregels toe.",
-      compare_target_field: "rulesofthegame",
-      compare_user_items: [
+      target_field: "rulesofthegame",
+      user_items: [
         "Gratis is gratis voor iedereen.",
         "We komen afspraken na.",
         "We communiceren proactief.",
       ],
-      compare_suggestion_items: [
+      suggestion_items: [
         "We passen prijsafspraken consequent en transparant toe in iedere samenwerking.",
         "We komen afspraken na.",
         "We communiceren proactief.",

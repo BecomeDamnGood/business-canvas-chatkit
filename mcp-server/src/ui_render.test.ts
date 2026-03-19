@@ -39,9 +39,6 @@ import { STEP_REGISTRY_ORDER } from "./steps/step_registry.js";
 
 function buildPendingCompareUiPayload(overrides: Record<string, unknown> = {}) {
   return {
-    view: {
-      variant: "text_compare",
-    },
     pending_interaction: {
       version: "2026-03-18.pending_interaction.v1",
       id: "pi_compare_test",
@@ -90,14 +87,14 @@ function buildPendingCompareUiPayload(overrides: Record<string, unknown> = {}) {
 
 test("shouldSuppressMainCardForCompare suppresses the main card for compare view variants", () => {
   assert.equal(
-    shouldSuppressMainCardForCompare(buildPendingCompareUiPayload(), "text_compare"),
+    shouldSuppressMainCardForCompare(buildPendingCompareUiPayload()),
     true
   );
 });
 
 test("shouldSuppressMainCardForCompare suppresses the main card for explicit picker payloads", () => {
   assert.equal(
-    shouldSuppressMainCardForCompare(buildPendingCompareUiPayload(), "default"),
+    shouldSuppressMainCardForCompare(buildPendingCompareUiPayload()),
     true
   );
 });
@@ -116,11 +113,7 @@ test("shouldSuppressMainCardForCompare ignores stale compare payloads when Dream
         compare: {
           enabled: true,
         },
-        flags: {
-          require_compare_pick: true,
-        },
-      },
-      "text_compare"
+      }
     ),
     false
   );
@@ -134,8 +127,7 @@ test("shouldSuppressMainCardForCompare keeps the main card enabled for non-picke
           kind: "single_value",
           heading: "Wat denk je van deze formulering",
         },
-      },
-      "default"
+      }
     ),
     false
   );
@@ -147,8 +139,7 @@ test("shouldSuppressMainCardForCompare keeps the main card enabled for non-picke
           heading: "Hier zijn drie mogelijke grote waarom-formuleringen",
           items: ["Een", "Twee", "Drie"],
         },
-      },
-      "default"
+      }
     ),
     false
   );
@@ -198,8 +189,7 @@ test("shouldSuppressMainCardForCompare follows pending_interaction for compare f
           retained_heading: "Deze punten blijven al in de definitieve lijst:",
           retained_items: ["Terugkerende omzet"],
         },
-      }),
-      "default"
+      })
     ),
     true
   );
@@ -210,8 +200,7 @@ test("shouldSuppressMainCardForCompare follows pending_interaction for compare f
           kind: "single_value",
           canonical_text: "Wij bestaan om mensen positief in beweging te brengen.",
         },
-      },
-      "default"
+      }
     ),
     false
   );
@@ -220,20 +209,14 @@ test("shouldSuppressMainCardForCompare follows pending_interaction for compare f
 test("readCompareContractFailureReason fail-closes compare payloads that are missing pending_interaction", () => {
   assert.equal(
     readCompareContractFailureReason({
-      view: {
-        variant: "text_compare",
-      },
+      view: {},
     }),
-    "ui_pending_interaction_missing_for_compare"
+    null
   );
   assert.equal(
     shouldSuppressMainCardForCompare(
       {
-        view: {
-          variant: "text_compare",
-        },
-      },
-      "default"
+      }
     ),
     false
   );
@@ -242,9 +225,6 @@ test("readCompareContractFailureReason fail-closes compare payloads that are mis
 test("readCompareContractFailureReason rejects malformed pending_interaction payloads", () => {
   assert.equal(
     readCompareContractFailureReason({
-      view: {
-        variant: "text_compare",
-      },
       pending_interaction: {
         kind: "text_compare",
         status: "pending",
@@ -320,17 +300,13 @@ test("readDreamBuilderContract normalizes explicit Dream Builder compare ownersh
 test("shouldSuppressPromptForCompare hides the prompt while compare is active", () => {
   assert.equal(
     shouldSuppressPromptForCompare({
-      uiViewVariant: "text_compare",
       compareActive: true,
-      requireComparePick: true,
     }),
     true
   );
   assert.equal(
     shouldSuppressPromptForCompare({
-      uiViewVariant: "default",
       compareActive: false,
-      requireComparePick: false,
     }),
     false
   );
@@ -340,36 +316,22 @@ test("shouldShowTextInputForCompare keeps the field visible while a compare pick
   assert.equal(
     shouldShowTextInputForCompare({
       textSubmitAvailable: true,
-      uiViewVariant: "text_compare",
       compareActive: true,
-      requireComparePick: true,
     }),
     true
   );
   assert.equal(
     shouldShowTextInputForCompare({
       textSubmitAvailable: true,
-      uiViewVariant: "default",
       compareActive: false,
-      requireComparePick: false,
     }),
     true
   );
 });
 
-test("shouldDisableTextInputForCompare disables free input while a compare picker is active", () => {
-  assert.equal(
-    shouldDisableTextInputForCompare({
-      requireComparePick: true,
-    }),
-    true
-  );
-  assert.equal(
-    shouldDisableTextInputForCompare({
-      requireComparePick: false,
-    }),
-    false
-  );
+test("shouldDisableTextInputForCompare keeps free input enabled while compare is active", () => {
+  assert.equal(shouldDisableTextInputForCompare(), false);
+  assert.equal(shouldDisableTextInputForCompare(), false);
 });
 
 test("parseCompareInstruction separates retained bullets from the picker instruction", () => {

@@ -13,7 +13,8 @@ import { createTurnResponseEngine, type TurnResponseEngine } from "./run_step_tu
 import type { UiI18nTelemetryCounters } from "./run_step_i18n_runtime.js";
 import { looksLikeExamplesFramingLine } from "./run_step_value_shape.js";
 import { isSingleValueTextPickerState } from "./run_step_compare_picker_contract.js";
-import { readCompareRuntime } from "./compare_runtime.js";
+import { hasRenderablePendingCompareState, readCompareRuntime } from "./compare_runtime.js";
+import { readDreamBuilderCompareRuntime } from "./dream_builder_compare_runtime.js";
 import { hasGroupedCompareListSemantics } from "../steps/step_registry.js";
 
 export type RunStepRuntimeInputMode = "widget" | "chat";
@@ -519,26 +520,21 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
     const contractId = String((specialist as Record<string, unknown>)?.ui_contract_id || "").trim();
     const contractParts = contractId.split(":");
     const contractStepId = contractParts[0] || "";
-    const dreamBuilderComparePending =
-      contractStepId === deps.dreamStepId &&
-      String(specialist?.__dream_builder_compare_pending || "").trim().toLowerCase() === "true";
+    const dreamBuilderCompare = contractStepId === deps.dreamStepId
+      ? readDreamBuilderCompareRuntime(specialist)
+      : null;
+    const dreamBuilderComparePending = Boolean(dreamBuilderCompare);
     const comparePending =
-      compareState?.status === "pending" ||
+      hasRenderablePendingCompareState(compareState) ||
       dreamBuilderComparePending;
     const wordingMode = dreamBuilderComparePending
       ? "list"
       : (compareState?.mode === "list" ? "list" : "text");
-    const comparePresentation = String(compareState?.presentation || "").trim();
-    const canonicalPendingTextSuggestion =
-      comparePending && wordingMode === "text" && comparePresentation === "canonical";
+    const canonicalPendingTextSuggestion = false;
     const wordingSuggestion = stripMarkupPreserveLines(
       dreamBuilderComparePending
         ? String(
-            (
-              Array.isArray(specialist?.__dream_builder_compare_suggested_items)
-                ? (specialist.__dream_builder_compare_suggested_items as string[])
-                : []
-            ).join("\n") || specialist?.refined_formulation || ""
+            (dreamBuilderCompare?.suggested_items || []).join("\n") || specialist?.refined_formulation || ""
           )
         : String(compareState?.suggestion_text || specialist?.refined_formulation || "")
     );
@@ -607,7 +603,7 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
       (
         dreamBuilderModeActive ||
         String(specialist?.suggest_dreambuilder || "").trim() === "true" ||
-        menuId.startsWith("DREAM_EXPLAINER_MENU_")
+        Boolean(readDreamBuilderCompareRuntime(specialist))
       );
     const dreamBuilderCanonicalOnlyView = dreamBuilderRenderContext;
     const suppressRefinedAppend =
@@ -703,20 +699,12 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
     if (comparePending && wordingMode === "list" && msg) {
       const compareState = readCompareRuntime(specialist);
       const userItems = dreamBuilderComparePending
-        ? (
-            Array.isArray(specialist?.__dream_builder_compare_current_items)
-              ? (specialist.__dream_builder_compare_current_items as string[])
-              : []
-          )
+        ? (dreamBuilderCompare?.current_items || [])
             .map((line) => String(line || "").trim())
             .filter(Boolean)
         : (compareState?.user_items || []).map((line) => String(line || "").trim()).filter(Boolean);
       const suggestionItems = dreamBuilderComparePending
-        ? (
-            Array.isArray(specialist?.__dream_builder_compare_suggested_items)
-              ? (specialist.__dream_builder_compare_suggested_items as string[])
-              : []
-          )
+        ? (dreamBuilderCompare?.suggested_items || [])
             .map((line) => String(line || "").trim())
             .filter(Boolean)
         : (compareState?.suggestion_items || []).map((line) => String(line || "").trim()).filter(Boolean);
@@ -1378,10 +1366,10 @@ export function createRunStepRuntimeFinalizeLayer<TPayload extends Record<string
     const dreamExplainerSpecialist = response.getDreamExplainerSpecialist();
     const isDreamStep = currentStep === dreamStepId;
     const dreamBuilderComparePending =
-      isDreamStep && String(lastSpecialist.__dream_builder_compare_pending || "").trim().toLowerCase() === "true";
+      isDreamStep && Boolean(readDreamBuilderCompareRuntime(lastSpecialist));
     const compareState = readCompareRuntime(lastSpecialist);
     const comparePending =
-      compareState?.status === "pending" ||
+      hasRenderablePendingCompareState(compareState) ||
       dreamBuilderComparePending;
     const isDreamExplainer = activeSpecialist === dreamExplainerSpecialist;
     const isDreamSpecialist = isDreamStep && !isDreamExplainer;
@@ -1433,8 +1421,6 @@ export function createRunStepRuntimeFinalizeLayer<TPayload extends Record<string
       "ui_action_compare_pick_suggestion",
       interactiveSession && comparePending ? "ACTION_COMPARE_PICK_SUGGESTION" : ""
     );
-    setStateAction("ui_action_compare_pick_user", "");
-    setStateAction("ui_action_compare_pick_suggestion", "");
     setStateAction(
       "ui_action_dream_start_exercise",
       interactiveSession &&

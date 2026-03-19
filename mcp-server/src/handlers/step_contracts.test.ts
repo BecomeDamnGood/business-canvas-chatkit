@@ -355,15 +355,15 @@ test("dream follow-up menus keep exactly one exercise button with the original m
       expectedLabel: "Do a small exercise that helps to define your dream.",
     },
     {
-      menuId: "DREAM_MENU_REFINE",
-      contractId: "dream::valid_output::DREAM_MENU_REFINE",
+      menuId: "DREAM_MENU_CONFIRM_SINGLE",
+      contractId: "dream::valid_output::DREAM_MENU_CONFIRM_SINGLE",
       actionCodes: ["ACTION_DREAM_REFINE_CONFIRM", "ACTION_DREAM_REFINE_START_EXERCISE"],
       labelKeys: [
-        "menuLabel.DREAM_MENU_REFINE.ACTION_DREAM_REFINE_CONFIRM",
-        "menuLabel.DREAM_MENU_REFINE.ACTION_DREAM_REFINE_START_EXERCISE",
+        "menuLabel.DREAM_MENU_CONFIRM_SINGLE.ACTION_DREAM_REFINE_CONFIRM",
+        "menuLabel.DREAM_MENU_CONFIRM_SINGLE.ACTION_DREAM_REFINE_START_EXERCISE",
       ],
       expectedActionCode: "ACTION_DREAM_REFINE_START_EXERCISE",
-      expectedLabelKey: "menuLabel.DREAM_MENU_REFINE.ACTION_DREAM_REFINE_START_EXERCISE",
+      expectedLabelKey: "menuLabel.DREAM_MENU_CONFIRM_SINGLE.ACTION_DREAM_REFINE_START_EXERCISE",
       expectedLabel: "Do a small exercise that helps to define your dream.",
     },
   ] as const;
@@ -443,7 +443,7 @@ test("dream canonical refine recovers missing menu actions from the final contra
         view: {
           mode: "interactive",
         },
-        contract_id: "dream::valid_output::DREAM_MENU_REFINE",
+        contract_id: "dream::valid_output::DREAM_MENU_CONFIRM_SINGLE",
         content: {
           kind: "single_value",
           heading: "Op basis van je input stel ik de volgende droom voor",
@@ -453,10 +453,10 @@ test("dream canonical refine recovers missing menu actions from the final contra
     } as any,
     {
       applyUiClientActionContract: () => {},
-      parseMenuFromContractIdForStep: () => "DREAM_MENU_REFINE",
+      parseMenuFromContractIdForStep: () => "DREAM_MENU_CONFIRM_SINGLE",
       labelKeysForMenuActionCodes: () => [
-        "menuLabel.DREAM_MENU_REFINE.ACTION_DREAM_REFINE_CONFIRM",
-        "menuLabel.DREAM_MENU_REFINE.ACTION_DREAM_REFINE_START_EXERCISE",
+        "menuLabel.DREAM_MENU_CONFIRM_SINGLE.ACTION_DREAM_REFINE_CONFIRM",
+        "menuLabel.DREAM_MENU_CONFIRM_SINGLE.ACTION_DREAM_REFINE_START_EXERCISE",
       ],
       onUiParityError: () => {},
       attachRegistryPayload: (payload) => payload,
@@ -474,10 +474,10 @@ test("dream canonical refine recovers missing menu actions from the final contra
     validateUiPayloadContractParity(
       response as any,
       {
-        parseMenuFromContractIdForStep: () => "DREAM_MENU_REFINE",
+        parseMenuFromContractIdForStep: () => "DREAM_MENU_CONFIRM_SINGLE",
         labelKeysForMenuActionCodes: () => [
-          "menuLabel.DREAM_MENU_REFINE.ACTION_DREAM_REFINE_CONFIRM",
-          "menuLabel.DREAM_MENU_REFINE.ACTION_DREAM_REFINE_START_EXERCISE",
+          "menuLabel.DREAM_MENU_CONFIRM_SINGLE.ACTION_DREAM_REFINE_CONFIRM",
+          "menuLabel.DREAM_MENU_CONFIRM_SINGLE.ACTION_DREAM_REFINE_START_EXERCISE",
         ],
       }
     ),
@@ -580,7 +580,7 @@ test("pending interaction derives text_compare from compare text", () => {
   const ui = ((response.ui || {}) as Record<string, unknown>);
   const pending = ((ui.pending_interaction || {}) as Record<string, unknown>);
   const renderModel = ((pending.render_model || {}) as Record<string, unknown>);
-  assert.equal(String(ui.view && (ui.view as Record<string, unknown>).variant || ""), "text_compare");
+  assert.equal(String(ui.view && (ui.view as Record<string, unknown>).variant || ""), "");
   assert.equal("feedback_contract" in ui, false);
   assert.equal("compare" in ui, false);
   assert.equal(String(pending.kind || ""), "text_compare");
@@ -735,9 +735,6 @@ test("pending interaction derives list_compare from compare list feedback", () =
         view: {
           mode: "interactive",
         },
-        flags: {
-          require_compare_pick: true,
-        },
       },
     } as any,
     {
@@ -803,9 +800,6 @@ test("pending interaction derives grouped list compare into list_compare render 
         view: {
           mode: "interactive",
         },
-        flags: {
-          require_compare_pick: true,
-        },
       },
     } as any,
     {
@@ -870,7 +864,6 @@ test("compare contracts self-heal when pending interaction actions are missing",
         contract_id: "purpose:interactive:refine",
         view: {
           mode: "interactive",
-          variant: "text_compare",
         },
       },
     } as any,
@@ -918,7 +911,6 @@ test("dream compare contracts fail closed when generic card content is still pre
         contract_id: "dream:interactive:refine",
         view: {
           mode: "interactive",
-          variant: "text_compare",
         },
         content: {
           kind: "single_value",
@@ -1072,7 +1064,7 @@ test("specialist compare state keeps compare pick actions and default labels eve
   const view = ((ui.view || {}) as Record<string, unknown>);
   const pending = ((ui.pending_interaction || {}) as Record<string, unknown>);
   const renderModel = (pending.render_model || {}) as Record<string, unknown>;
-  assert.equal(String(view.variant || ""), "text_compare");
+  assert.equal(String(view.variant || ""), "");
   assert.equal(String(pending.kind || ""), "text_compare");
   assert.equal(String(renderModel.user_label || ""), "This is your input:");
   assert.equal(String(renderModel.suggestion_label || ""), "This would be my suggestion:");

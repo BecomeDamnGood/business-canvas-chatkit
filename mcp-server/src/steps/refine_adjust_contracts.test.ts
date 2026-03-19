@@ -13,7 +13,7 @@ const SCENARIOS = [
   {
     actionCode: "ACTION_DREAM_EXPLAINER_REFINE_ADJUST",
     route: "__ROUTE__DREAM_EXPLAINER_REFINE__",
-    menuId: "DREAM_EXPLAINER_MENU_REFINE",
+    menuId: "DREAM_EXPLAINER_MENU_CONFIRM_SINGLE",
     instructions: DREAM_EXPLAINER_INSTRUCTIONS,
     expectations: [/refine the current Dream candidate/i, /action="ASK"/i],
   },

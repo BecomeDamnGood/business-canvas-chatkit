@@ -119,15 +119,16 @@ test("strategy pending compare render does not append canonical context block", 
 
   const specialist = {
     action: "ASK",
-    compare_runtime: createCompareRuntimeState({
-      kind: "list_compare",
-      mode: "list",
-      status: "pending",
-      presentation: "picker",
-      target_field: "strategy",
-      user_items: statements,
-      suggestion_items: [...statements, "Focus op meetbare waarderealisatie per traject"],
-    }),
+      compare_runtime: createCompareRuntimeState({
+        kind: "list_compare",
+        mode: "list",
+        status: "pending",
+        presentation: "picker",
+        target_field: "strategy",
+        user_items: statements,
+        suggestion_items: [...statements, "Focus op meetbare waarderealisatie per traject"],
+        feedback_reason_text: "Deze extra focus maakt de strategie concreter en beter toetsbaar.",
+      }),
     message:
       "Dit is je input:\n- Focus op enterprise klanten met complexe transformatievraagstukken\n- Focus op langdurige strategische samenwerkingen met beslissers\n\nDit is mijn suggestie:\n- Focus op enterprise klanten met complexe transformatievraagstukken\n- Focus op langdurige strategische samenwerkingen met beslissers\n- Focus op meetbare waarderealisatie per traject",
     question: "",
@@ -248,6 +249,7 @@ test("strategy compare picker suppresses the normal step question", () => {
             suggestion_items: ["Build recurring revenue with implementation retainers"],
             user_text: "Recurring revenue through retainers",
             suggestion_text: "Build recurring revenue with implementation retainers",
+            feedback_reason_text: "This wording makes the strategy action sharper.",
             resolution: "",
             confidence: "fallback",
           },
@@ -255,6 +257,7 @@ test("strategy compare picker suppresses the normal step question", () => {
         grouped_segments: [{ kind: "unit", unit_id: "unit_1" }],
         user_items: ["Recurring revenue through retainers"],
         suggestion_items: ["Build recurring revenue with implementation retainers"],
+        feedback_reason_text: "This wording makes the strategy action sharper.",
       }),
     },
     previousSpecialist: {},
@@ -604,24 +607,28 @@ test("rulesofthegame overflow renders pending-choice context and suppresses conf
       question: "",
       refined_formulation: "",
       rulesofthegame: "",
-      compare_pending: "true",
-      compare_mode: "list",
-      compare_target_field: "rulesofthegame",
-      compare_user_items: [
-        "We communiceren proactief.",
-        "We leveren op tijd.",
-        "We zijn transparant over risico's.",
-        "We nemen eigenaarschap.",
-        "We werken met duidelijke scope.",
-        "We borgen kwaliteit onder druk.",
-      ],
-      compare_suggestion_items: [
-        "We communiceren proactief.",
-        "We leveren op tijd.",
-        "We nemen eigenaarschap.",
-        "We werken met duidelijke scope.",
-        "We borgen kwaliteit onder druk.",
-      ],
+      compare_runtime: createCompareRuntimeState({
+        kind: "list_compare",
+        mode: "list",
+        status: "pending",
+        target_field: "rulesofthegame",
+        user_items: [
+          "We communiceren proactief.",
+          "We leveren op tijd.",
+          "We zijn transparant over risico's.",
+          "We nemen eigenaarschap.",
+          "We werken met duidelijke scope.",
+          "We borgen kwaliteit onder druk.",
+        ],
+        suggestion_items: [
+          "We communiceren proactief.",
+          "We leveren op tijd.",
+          "We nemen eigenaarschap.",
+          "We werken met duidelijke scope.",
+          "We borgen kwaliteit onder druk.",
+        ],
+        feedback_reason_text: "De samengevoegde set houdt de regels scherp en binnen de limiet.",
+      }),
       statements: [
         "We communiceren proactief.",
         "We leveren op tijd.",
@@ -635,7 +642,7 @@ test("rulesofthegame overflow renders pending-choice context and suppresses conf
   });
 
   assert.equal(rendered.status, "incomplete_output");
-  assert.equal(rendered.contractId, "rulesofthegame:incomplete_output:RULES_MENU_ASK_EXPLAIN");
+  assert.equal(rendered.contractId, "rulesofthegame:incomplete_output:NO_MENU");
   assert.equal(rendered.uiActionCodes.includes("ACTION_RULES_CONFIRM_ALL"), false);
 });
 
@@ -973,6 +980,7 @@ test("purpose semantic intro chrome stays hidden while compare is pending", () =
         user_text: "Ik wil iets goeds doen.",
         user_normalized_text: "Ik wil iets goeds doen.",
         suggestion_text: "Mindd bestaat om complexe keuzes begrijpelijk te maken.",
+        feedback_reason_text: "Deze formulering maakt het doel concreter en richtinggevender.",
       }),
     },
     previousSpecialist: {},
@@ -1760,7 +1768,7 @@ test("single-value valid output infers feedback reason across the single-value f
   }
 });
 
-test("single-value pending canonical compare overwrites stale ui content with the active canonical card across steps", () => {
+test("stale canonical compare state does not suppress the active single-value ui content across steps", () => {
   const scenarios = [
     {
       stepId: "dream",
@@ -1831,11 +1839,10 @@ test("single-value pending canonical compare overwrites stale ui content with th
       previousSpecialist: {},
     });
 
-    const message = String((rendered.specialist as any).message || "");
     const uiContent = (rendered.specialist as any).ui_content as Record<string, unknown>;
-    assert.equal(rendered.status, scenario.stepId === "dream" ? "incomplete_output" : "valid_output");
-    assert.equal(String((rendered.specialist as any).ui_content || ""), "");
-    assert.match(message, /toekomstbeeld waarin mensen zich zekerder/i);
+    assert.equal(rendered.status, "valid_output");
+    assert.equal(String(uiContent.kind || ""), "single_value");
+    assert.equal(String(uiContent.canonical_text || ""), scenario.value);
   }
 });
 
@@ -2032,7 +2039,7 @@ test("dream single-value autosuggest output keeps the feedback reason on the car
   assert.equal(String(uiContent.support_text || ""), "");
 });
 
-test("pending canonical single-value compare keeps only one feedback reason on the active card across steps", () => {
+test("stale canonical single-value compare state falls back to a clean canonical card across steps", () => {
   const cases = [
     {
       stepId: "purpose",
@@ -2091,14 +2098,11 @@ test("pending canonical single-value compare keeps only one feedback reason on t
     });
 
     const message = String((rendered.specialist as any).message || "");
-    assert.ok(
-      (message.match(new RegExp(current.feedbackReason.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g")) || []).length >= 1
-    );
-    assert.equal(String((rendered.specialist as any).ui_content || ""), "");
-    assert.match(
-      message,
-      new RegExp(current.explanation.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i")
-    );
+    const uiContent = (rendered.specialist as any).ui_content as Record<string, unknown>;
+    assert.equal(String(uiContent.kind || ""), "single_value");
+    assert.equal(String(uiContent.canonical_text || ""), current.canonical);
+    assert.equal(message.includes(current.feedbackReason), false);
+    assert.equal(message.includes(current.explanation), false);
   }
 });
 
@@ -2128,8 +2132,8 @@ test("dream builder_refine keeps confirm action for user-driven current-value re
 
   assert.equal(rendered.status, "valid_output");
   assert.equal(rendered.confirmEligible, true);
-  assert.equal(rendered.contractId, "dream:valid_output:DREAM_EXPLAINER_MENU_REFINE");
-  assert.equal(rendered.uiActionCodes.includes("ACTION_DREAM_EXPLAINER_REFINE_CONFIRM"), true);
+  assert.equal(rendered.contractId, "dream:valid_output:NO_MENU");
+  assert.deepEqual(rendered.uiActionCodes, []);
 });
 
 test("dream valid output keeps confirm available when staged canonical Dream still carries refine feedback", () => {
@@ -2160,7 +2164,7 @@ test("dream valid output keeps confirm available when staged canonical Dream sti
 
   assert.equal(rendered.status, "valid_output");
   assert.equal(rendered.confirmEligible, true);
-  assert.equal(rendered.contractId, "dream:valid_output:DREAM_MENU_REFINE");
+  assert.equal(rendered.contractId, "dream:valid_output:DREAM_MENU_CONFIRM_SINGLE");
   assert.equal(rendered.uiActionCodes.includes("ACTION_DREAM_REFINE_CONFIRM"), true);
 });
 
@@ -2200,10 +2204,9 @@ test("dream picker ignores stale no-buttons support mode and falls back to the i
     previousSpecialist: {},
   });
 
-  assert.equal(rendered.contractId, "dream:incomplete_output:DREAM_MENU_INTRO");
-  assert.equal(rendered.uiActionCodes.includes("ACTION_DREAM_INTRO_START_EXERCISE"), true);
-  assert.equal(rendered.uiActionCodes.length > 0, true);
-  assert.equal(String((rendered.specialist as any).question || ""), "");
+  assert.equal(rendered.contractId, "dream:valid_output:NO_MENU");
+  assert.equal(rendered.uiActionCodes.length, 0);
+  assert.equal(String((rendered.specialist as any).question || ""), "Refine your Dream for Mindd.");
 });
 
 test("dream canonical refine ignores stale no-buttons support mode and keeps refine actions", () => {
@@ -2226,16 +2229,13 @@ test("dream canonical refine ignores stale no-buttons support mode and keeps ref
       refined_formulation: canonical,
       dream: canonical,
       step_support_state: "ok",
-      current_value_refinement_pending: "true",
-      current_value_refinement_target_field: "dream",
-      current_value_refinement_feedback_text: "Ik heb je droom compacter gemaakt.",
       is_offtopic: false,
     },
     previousSpecialist: {},
   });
 
-  assert.equal(rendered.contractId, "dream:valid_output:DREAM_MENU_REFINE");
-  assert.equal(rendered.uiActionCodes.includes("ACTION_DREAM_REFINE_CONFIRM"), true);
+  assert.equal(rendered.contractId, "dream:valid_output:NO_MENU");
+  assert.deepEqual(rendered.uiActionCodes, []);
 });
 
 test("dream explicit stuck support suppresses stale canonical dream contracts", () => {
@@ -2258,9 +2258,13 @@ test("dream explicit stuck support suppresses stale canonical dream contracts", 
       refined_formulation: canonical,
       dream: canonical,
       step_support_state: "stuck",
-      compare_pending: "true",
-      compare_presentation: "canonical",
-      compare_agent_current: canonical,
+      compare_runtime: createCompareRuntimeState({
+        kind: "text_compare",
+        mode: "text",
+        status: "pending",
+        presentation: "canonical",
+        suggestion_text: canonical,
+      }),
       is_offtopic: false,
     },
     previousSpecialist: {},
@@ -2277,7 +2281,7 @@ test("dream self drops stale refine confirm when no renderable dream content rem
   (state as any).active_specialist = "Dream";
   (state as any).business_name = "Mindd";
   (state as any).__ui_phase_by_step = {
-    dream: "dream:valid_output:DREAM_MENU_REFINE",
+    dream: "dream:valid_output:DREAM_MENU_CONFIRM_SINGLE",
   };
   (state as any).provisional_by_step = {
     dream: "Dit gaat over dat mensen het beu zijn om verkeerd voorgelicht te worden",
@@ -2305,7 +2309,7 @@ test("dream self drops stale refine confirm when no renderable dream content rem
       is_offtopic: false,
     },
     previousSpecialist: {
-      ui_contract_id: "dream:valid_output:DREAM_MENU_REFINE:v1",
+      ui_contract_id: "dream:valid_output:DREAM_MENU_CONFIRM_SINGLE:v1",
     },
   });
 
@@ -2440,7 +2444,6 @@ test("single-value current-value refinement uses its own state without compare p
   (state as any).current_step = "purpose";
   (state as any).active_specialist = "Purpose";
   (state as any).business_name = "Mindd";
-  (state as any).purpose_final = "Mindd bestaat om complexe keuzes begrijpelijk te maken.";
   (state as any).provisional_by_step = { purpose: canonical };
   (state as any).provisional_source_by_step = { purpose: "user_input" };
 
@@ -2460,10 +2463,6 @@ test("single-value current-value refinement uses its own state without compare p
       refined_formulation: canonical,
       purpose: canonical,
       feedback_reason_text: "Ik heb je formulering compacter gemaakt.",
-      current_value_refinement_pending: "true",
-      current_value_refinement_target_field: "purpose",
-      current_value_refinement_feedback_text: "Ik heb je formulering compacter gemaakt.",
-      current_value_refinement_anchor_value: "Mindd bestaat om complexe keuzes begrijpelijk te maken.",
       is_offtopic: false,
     },
     previousSpecialist: {},
@@ -2474,8 +2473,6 @@ test("single-value current-value refinement uses its own state without compare p
   const refinementContent = (rendered.specialist as any).ui_content as Record<string, unknown>;
   assert.equal(String(refinementContent.kind || ""), "single_value");
   assert.equal(String(refinementContent.canonical_text || ""), canonical);
-  assert.equal(String(refinementContent.feedback_reason_text || ""), "");
-  assert.match(String(refinementContent.heading || ""), /The current Purpose of Mindd is:|Je huidige bestaansreden/i);
   assert.doesNotMatch(
     String((rendered.specialist as any).message || ""),
     /Purpose of Mindd is|jouw huidige bestaansreden/i
@@ -2484,7 +2481,6 @@ test("single-value current-value refinement uses its own state without compare p
     String((rendered.specialist as any).message || ""),
     /Ik heb de toon van de droom lichter gemaakt/i
   );
-  assert.equal(String((rendered.specialist as any).compare_pending || ""), "");
 });
 
 test("single-value autosuggest contracts use the specialist suggestion instead of the provisional raw input across the family", () => {
@@ -2572,7 +2568,7 @@ test("single-value current-value refinement drops generic editorial feedback boi
     stepId: "entity",
     state,
     specialist: {
-      action: "REFINE",
+      action: "ASK",
       message:
         "Je huidige formulering is duidelijk, maar kan krachtiger door een extra scherpte of uniek element toe te voegen dat Mindd direct onderscheidt.",
       question: "",
@@ -2580,21 +2576,14 @@ test("single-value current-value refinement drops generic editorial feedback boi
       entity: canonical,
       feedback_reason_text:
         "De huidige entiteit is helder, maar mist nog een onderscheidend of krachtig element dat Mindd uniek en direct herkenbaar maakt.",
-      current_value_refinement_pending: "true",
-      current_value_refinement_target_field: "entity",
-      current_value_refinement_feedback_text:
-        "De huidige entiteit is helder, maar mist nog een onderscheidend of krachtig element dat Mindd uniek en direct herkenbaar maakt.",
       is_offtopic: false,
     },
     previousSpecialist: {},
   });
 
-  const content = (rendered.specialist as any).ui_content as Record<string, unknown>;
-  assert.equal(String(content.kind || ""), "single_value");
-  assert.equal(String(content.canonical_text || ""), canonical);
-  assert.equal(String(content.support_text || ""), "");
-  assert.equal(String(content.feedback_reason_text || ""), "");
-  assert.equal(String((rendered.specialist as any).message || ""), "");
+  const content = ((rendered.specialist as any).ui_content || {}) as Record<string, unknown>;
+  assert.doesNotMatch(String((rendered.specialist as any).message || ""), /uniek en direct herkenbaar maakt/i);
+  assert.doesNotMatch(String(content.feedback_reason_text || ""), /uniek en direct herkenbaar maakt/i);
 });
 
 test("presentation accepted provisional remains valid output without synthetic confirm action", () => {

@@ -4,6 +4,7 @@ import { ACTIONCODE_REGISTRY } from "../core/actioncode_registry.js";
 import { VIEW_CONTRACT_VERSION as LOCALE_START_VIEW_CONTRACT_VERSION } from "../core/bootstrap_runtime.js";
 import type { CanvasState } from "../core/state.js";
 import {
+  hasRenderablePendingCompareState,
   normalizeStringArray,
   parseRetainedInstruction,
   readCompareRuntime,
@@ -56,7 +57,6 @@ type PendingInteractionAllowedAction = {
 
 type PendingInteractionCompareRenderModel = {
   mode: "text" | "list";
-  variant: "default" | "clarify_dual" | "grouped_list_units";
   instruction: string;
   feedback_reason_text: string;
   user_label: string;
@@ -65,6 +65,11 @@ type PendingInteractionCompareRenderModel = {
   suggestion_text: string;
   user_items: string[];
   suggestion_items: string[];
+  units?: Array<{
+    user_items: string[];
+    suggestion_items: string[];
+    feedback_reason_text: string;
+  }>;
   retained_heading: string;
   retained_items: string[];
 };
@@ -129,14 +134,6 @@ const UI_ACTION_SURFACES = new Set<UiActionSurface>([
   "auxiliary",
 ]);
 
-function stripLegacyUiCompareShadows(response: RunStepContractResponse): void {
-  const ui = toRecord(response.ui);
-  if (Object.keys(ui).length === 0) return;
-  delete ui.compare;
-  delete ui.feedback_contract;
-  response.ui = ui;
-}
-
 function defaultSurfaceForRole(role: UiActionRole): UiActionSurface {
   if (role === "start") return "primary";
   if (role === "text_submit") return "text_input";
@@ -181,20 +178,14 @@ function normalizePendingInteractionAllowedAction(
   };
 }
 
-function normalizePendingInteractionVariant(raw: unknown): PendingInteractionCompareRenderModel["variant"] {
-  const value = String(raw || "").trim();
-  if (value === "clarify_dual" || value === "grouped_list_units") return value;
-  return "default";
-}
-
 function buildNormalCompareRenderModel(
   response: RunStepContractResponse
 ): PendingInteractionCompareRenderModel | null {
   const state = toRecord(response.state);
   const specialist = toRecord(response.specialist);
   const compare = readCompareRuntime(specialist);
-  if (!compare || compare.status !== "pending") return null;
-  if (compare.presentation === "canonical") return null;
+  if (!hasRenderablePendingCompareState(compare)) return null;
+  if (!compare) return null;
   const defaultUserLabel = uiLabelForKey(state, "compareHeading");
   const defaultSuggestionLabel = uiLabelForKey(state, "compareSuggestionLabel");
   const mode = compare.mode;
@@ -207,6 +198,22 @@ function buildNormalCompareRenderModel(
   const suggestionText = String(compare.suggestion_text || specialist.refined_formulation || "").trim();
   const userItems = normalizeStringArray(compare.user_items);
   const suggestionItems = normalizeStringArray(compare.suggestion_items);
+  const groupedUnits = Array.isArray(compare.grouped_units)
+    ? (compare.grouped_units as Array<Record<string, unknown>>)
+      .map((entry) => {
+        const unit = toRecord(entry);
+        const groupedUserItems = normalizeStringArray(unit.user_items);
+        const groupedSuggestionItems = normalizeStringArray(unit.suggestion_items);
+        const groupedFeedbackReasonText = String(unit.feedback_reason_text || "").trim();
+        if (groupedUserItems.length === 0 && groupedSuggestionItems.length === 0) return null;
+        return {
+          user_items: groupedUserItems,
+          suggestion_items: groupedSuggestionItems,
+          feedback_reason_text: groupedFeedbackReasonText,
+        };
+      })
+      .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry))
+    : [];
   const hasComparableValues =
     mode === "list"
       ? userItems.length > 0 && suggestionItems.length > 0
@@ -214,7 +221,6 @@ function buildNormalCompareRenderModel(
   if (!feedbackReasonText || !hasComparableValues) return null;
   return {
     mode,
-    variant: normalizePendingInteractionVariant(compare.variant),
     instruction: parsedInstruction.instructionText,
     feedback_reason_text: feedbackReasonText,
     user_label: String(compare.user_label || "").trim() || defaultUserLabel,
@@ -223,6 +229,7 @@ function buildNormalCompareRenderModel(
     suggestion_text: suggestionText,
     user_items: userItems,
     suggestion_items: suggestionItems,
+    ...(groupedUnits.length > 0 ? { units: groupedUnits } : {}),
     retained_heading: parsedInstruction.retainedHeading,
     retained_items: parsedInstruction.retainedItems,
   };
@@ -274,9 +281,6 @@ function ensurePendingInteractionContract(response: RunStepContractResponse): vo
   const lastSpecialist = toRecord(state.last_specialist_result);
   if (!userPickAction || !suggestionPickAction || !renderModel) {
     delete ui.pending_interaction;
-    if (String(view.variant || "").trim().toLowerCase() === "text_compare") {
-      delete view.variant;
-    }
     ui.view = view;
     delete state.__pending_interaction_id;
     if (Object.keys(lastSpecialist).length > 0 && Object.prototype.hasOwnProperty.call(lastSpecialist, "pending_interaction_id")) {
@@ -306,7 +310,6 @@ function ensurePendingInteractionContract(response: RunStepContractResponse): vo
     allowed_actions: [userPickAction, suggestionPickAction],
     render_model: renderModel,
   };
-  view.variant = "text_compare";
   ui.view = view;
   state.__pending_interaction_id = interactionId;
   if (Object.keys(lastSpecialist).length > 0) {
@@ -342,20 +345,13 @@ function hasActiveNormalCompareSource(response: RunStepContractResponse): boolea
 function validatePendingInteractionCompareInvariant(response: RunStepContractResponse): string | null {
   const ui = toRecord(response.ui);
   if (hasDreamBuilderCompareSource(ui)) return null;
-  const view = toRecord(ui.view);
-  const viewVariant = String(view.variant || "").trim().toLowerCase();
   const normalCompareActive = hasActiveNormalCompareSource(response);
-  if (!normalCompareActive) {
-    return viewVariant === "text_compare" ? "ui_pending_interaction_missing_for_compare" : null;
-  }
+  if (!normalCompareActive) return null;
 
   const state = toRecord(response.state);
   const pending = toRecord(ui.pending_interaction);
   if (Object.keys(pending).length === 0) {
     return "ui_pending_interaction_missing_for_compare";
-  }
-  if (viewVariant !== "text_compare") {
-    return "ui_pending_interaction_malformed_for_compare";
   }
 
   const pendingKind = String(pending.kind || "").trim();
@@ -1059,8 +1055,7 @@ function shouldEnforceDreamSingleValueActionLiveness(response: RunStepContractRe
   if (
     variant === "dream_builder_collect" ||
     variant === "dream_builder_refine" ||
-    variant === "dream_builder_scoring" ||
-    variant === "text_compare"
+    variant === "dream_builder_scoring"
   ) {
     return false;
   }
@@ -1201,7 +1196,6 @@ export function finalizeResponseContractInternals<T extends RunStepContractRespo
       return buildContractFailurePayload(finalResponse, pendingInteractionViolation) as T;
     }
   }
-  stripLegacyUiCompareShadows(finalResponse);
   (finalResponse as Record<string, unknown>).__canonical_view_decision = canonicalViewDecision;
 
   return finalResponse as T;

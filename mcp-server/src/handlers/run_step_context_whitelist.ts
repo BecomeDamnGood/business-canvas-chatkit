@@ -59,7 +59,6 @@ function sanitizeCompareRuntime(value: unknown): Record<string, unknown> | null 
     mode: compare.mode,
     status: compare.status,
     presentation: compare.presentation,
-    target_field: compare.target_field,
     feedback_reason_text: compare.feedback_reason_text,
   };
   if (compare.user_text) next.user_text = compare.user_text;

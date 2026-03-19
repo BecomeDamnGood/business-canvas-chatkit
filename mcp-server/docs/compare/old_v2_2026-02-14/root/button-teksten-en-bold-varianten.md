@@ -50,7 +50,7 @@ Geen specifieke bold teksten gedefinieerd in Step 0 instructies.
 1) `Pick one for me and continue`
 2) `Do a small exercise that helps to define your dream.`
 
-**REFINE menu (DREAM_MENU_REFINE):**
+**REFINE menu (DREAM_MENU_CONFIRM_SINGLE):**
 1) `I'm happy with this wording, please continue to step 3 Purpose`
 2) `Do a small exercise that helps to define your dream.`
 
@@ -68,7 +68,7 @@ Geen specifieke bold teksten gedefinieerd in Dream instructies.
 1) `Continue Dream exercise now`
 2) `Finish later`
 
-**REFINE menu (DREAM_EXPLAINER_MENU_REFINE):**
+**REFINE menu (DREAM_EXPLAINER_MENU_CONFIRM_SINGLE):**
 1) `I'm happy with this wording, please continue to step 3 Purpose`
 2) `Please refine the compare.`
 
@@ -406,13 +406,13 @@ Deze sectie groepeert inconsistente button teksten per patroon, met exacte refer
 
 **Variant A:** `I'm happy with this wording, please continue to step 3 Purpose`
 - **Stap:** Dream
-- **Menu:** REFINE (DREAM_MENU_REFINE)
+- **Menu:** REFINE (DREAM_MENU_CONFIRM_SINGLE)
 - **Bestand:** `mcp-server/src/steps/dream.ts`
 - **Regel:** ~361
 
 **Variant B:** `I'm happy with this wording, please continue to step 3 Purpose`
 - **Stap:** Dream Explainer (Exercise)
-- **Menu:** REFINE (DREAM_EXPLAINER_MENU_REFINE)
+- **Menu:** REFINE (DREAM_EXPLAINER_MENU_CONFIRM_SINGLE)
 - **Bestand:** `mcp-server/src/steps/dream_explainer.ts`
 - **Regel:** ~491
 
@@ -451,7 +451,7 @@ Deze sectie groepeert inconsistente button teksten per patroon, met exacte refer
 
 **Variant B:** `Please refine the compare.`
 - **Stap:** Dream Explainer (Exercise)
-- **Menu:** REFINE (DREAM_EXPLAINER_MENU_REFINE)
+- **Menu:** REFINE (DREAM_EXPLAINER_MENU_CONFIRM_SINGLE)
 - **Bestand:** `mcp-server/src/steps/dream_explainer.ts`
 - **Regel:** ~492
 
@@ -740,7 +740,7 @@ Deze sectie groepeert inconsistente button teksten per patroon, met exacte refer
 
 **Variant A:** `Do a small exercise that helps to define your dream.`
 - **Stap:** Dream
-- **Menu:** INTRO (DREAM_MENU_INTRO), WHY (DREAM_MENU_WHY), SUGGESTIONS (DREAM_MENU_SUGGESTIONS), REFINE (DREAM_MENU_REFINE)
+- **Menu:** INTRO (DREAM_MENU_INTRO), WHY (DREAM_MENU_WHY), SUGGESTIONS (DREAM_MENU_SUGGESTIONS), REFINE (DREAM_MENU_CONFIRM_SINGLE)
 - **Bestand:** `mcp-server/src/steps/dream.ts`
 - **Regel:** ~192, ~277, ~296, ~362
 

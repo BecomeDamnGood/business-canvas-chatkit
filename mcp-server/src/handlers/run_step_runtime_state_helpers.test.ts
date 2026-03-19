@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import { RECAP_INSTRUCTION, createRunStepRuntimeStateHelpers } from "./run_step_runtime_state_helpers.js";
 import { canonicalizeComparableText, parseListItems } from "./run_step_compare_heuristics.js";
+import { createCompareRuntimeState } from "./compare_runtime.js";
 
 function buildHelpers() {
   const defaults: Record<string, string> = {
@@ -69,9 +70,13 @@ test("clearStepInteractiveState clears wording metadata but keeps provisional st
       provisional_by_step: { entity: "Mindd is een digitale innovatiepartner voor mkb-bedrijven." },
       provisional_source_by_step: { entity: "compare_pick" },
       last_specialist_result: {
-        compare_pending: "true",
-        compare_target_field: "entity",
-        compare_agent_current: "Mindd is een digitale innovatiepartner voor mkb-bedrijven.",
+        compare_runtime: createCompareRuntimeState({
+          kind: "text_compare",
+          mode: "text",
+          status: "pending",
+          target_field: "entity",
+          suggestion_text: "Mindd is een digitale innovatiepartner voor mkb-bedrijven.",
+        }),
       },
     } as any,
     "entity"
@@ -82,8 +87,7 @@ test("clearStepInteractiveState clears wording metadata but keeps provisional st
     "Mindd is een digitale innovatiepartner voor mkb-bedrijven."
   );
   assert.equal(String((next.provisional_source_by_step || {}).entity || ""), "compare_pick");
-  assert.equal(String((next.last_specialist_result || {}).compare_pending || ""), "false");
-  assert.equal(String((next.last_specialist_result || {}).compare_agent_current || ""), "");
+  assert.equal(String((next.last_specialist_result || {}).compare_runtime || ""), "");
 });
 
 test("compareSelectionMessage normalizes explicit products/services selection to bullets", () => {
@@ -191,11 +195,16 @@ test("buildSpecialistContextBlock whitelists last_specialist_result payload", ()
       meta_topic: "NONE",
       statements: ["Segment 1", "Segment 2"],
       targetgroup: "B2B software scale-ups",
-      pending_suggestion_intent: "feedback_on_suggestion",
-      pending_suggestion_anchor: "suggestion",
-      pending_suggestion_seed_source: "previous_suggestion",
-      pending_suggestion_feedback_text: "Dit klinkt nog te algemeen.",
-      pending_suggestion_presentation_mode: "canonical",
+      compare_runtime: createCompareRuntimeState({
+        kind: "text_compare",
+        mode: "text",
+        status: "pending",
+        pending_text_intent: "feedback_on_suggestion",
+        pending_text_anchor: "suggestion",
+        pending_text_seed_source: "previous_suggestion",
+        pending_text_feedback_text: "Dit klinkt nog te algemeen.",
+        pending_text_presentation_mode: "canonical",
+      }),
       debug_payload: { giant: "blob" },
       ui_contract: "should_not_leak",
       scratchpad: "remove me",
@@ -208,12 +217,20 @@ test("buildSpecialistContextBlock whitelists last_specialist_result payload", ()
   assert.equal(parsed.action, "REFINE");
   assert.equal(parsed.targetgroup, "B2B software scale-ups");
   assert.deepEqual(parsed.statements, ["Segment 1", "Segment 2"]);
-  assert.equal(parsed.pending_suggestion_intent, "feedback_on_suggestion");
-  assert.equal(parsed.pending_suggestion_anchor, "suggestion");
+  assert.deepEqual(parsed.compare_runtime, createCompareRuntimeState({
+    kind: "text_compare",
+    mode: "text",
+    status: "pending",
+    pending_text_intent: "feedback_on_suggestion",
+    pending_text_anchor: "suggestion",
+    pending_text_seed_source: "previous_suggestion",
+    pending_text_feedback_text: "Dit klinkt nog te algemeen.",
+    pending_text_presentation_mode: "canonical",
+  }));
   assert.equal(Object.prototype.hasOwnProperty.call(parsed, "debug_payload"), false);
   assert.equal(Object.prototype.hasOwnProperty.call(parsed, "ui_contract"), false);
   assert.equal(Object.prototype.hasOwnProperty.call(parsed, "scratchpad"), false);
-  assert.match(block, /PENDING SUGGESTION CONTRACT/i);
+  assert.match(block, /PENDING COMPARE FEEDBACK CONTRACT/i);
   assert.match(block, /rewrite the previous suggestion itself/i);
 });
 

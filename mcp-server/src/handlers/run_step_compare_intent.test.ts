@@ -4,59 +4,124 @@ import assert from "node:assert/strict";
 import { createRunStepCompareHelpers as createRunStepCompareHelpersBase } from "./run_step_compare.js";
 import { pickDualChoiceSuggestion as defaultPickDualChoiceSuggestion } from "./run_step_compare_heuristics_defaults.js";
 import { attachCompareRuntime, createCompareRuntimeState, patchCompareRuntime, readCompareRuntime } from "./compare_runtime.js";
+import {
+  createDreamBuilderCompareRuntimeState,
+  patchDreamBuilderCompareRuntime,
+  readDreamBuilderCompareRuntime,
+} from "./dream_builder_compare_runtime.js";
 
 function normalizeCompareFixture(raw: Record<string, unknown>): Record<string, unknown> {
-  const existing = readCompareRuntime(raw);
-  if (existing) return attachCompareRuntime(raw);
-  const comparePending = String(raw.compare_pending || "").trim().toLowerCase() === "true";
-  const compareMode = String(raw.compare_mode || "").trim() === "list" ? "list" : "text";
-  const hasLegacyCompare =
-    comparePending ||
-    String(raw.compare_target_field || "").trim() !== "" ||
-    String(raw.compare_agent_current || "").trim() !== "" ||
-    String(raw.compare_user_normalized || raw.compare_user_raw || "").trim() !== "" ||
-    (Array.isArray(raw.compare_user_items) && raw.compare_user_items.length > 0) ||
-    (Array.isArray(raw.compare_suggestion_items) && raw.compare_suggestion_items.length > 0);
-  if (!hasLegacyCompare) return attachCompareRuntime(raw);
-  return patchCompareRuntime(
-    raw,
-    createCompareRuntimeState({
-      kind: compareMode === "list" ? "list_compare" : "text_compare",
-      mode: compareMode,
-      status: comparePending ? "pending" : "resolved",
-      presentation: String(raw.compare_presentation || "").trim() === "canonical" ? "canonical" : "picker",
+  let next = { ...raw };
+  const inlineCompareKeys = [
+    "status",
+    "mode",
+    "presentation",
+    "resolution",
+    "target_field",
+    "variant",
+    "user_text",
+    "user_normalized_text",
+    "user_items",
+    "suggestion_text",
+    "suggestion_items",
+    "base_items",
+    "list_semantics",
+    "user_label",
+    "suggestion_label",
+    "grouped_mode",
+    "grouped_cursor",
+    "grouped_units",
+    "grouped_segments",
+    "user_variant_semantics",
+    "user_variant_stepworthy",
+    "feedback_reason_key",
+    "feedback_reason_text",
+    "pending_text_intent",
+    "pending_text_anchor",
+    "pending_text_seed_source",
+    "pending_text_feedback_text",
+    "pending_text_presentation_mode",
+  ];
+  const hasInlineCompare = inlineCompareKeys.some((key) => key in next);
+  if (!readCompareRuntime(next) && hasInlineCompare) {
+    const rawStatus = String(next.status || "").trim().toLowerCase();
+    next = patchCompareRuntime(next, {
+      kind: String(next.mode || "").trim() === "list" ? "list_compare" : "text_compare",
+      mode: String(next.mode || "").trim() === "list" ? "list" : "text",
+      status: rawStatus === "true" ? "pending" : rawStatus === "false" ? "resolved" : (next.status as any),
+      presentation: String(next.presentation || "").trim() === "canonical" ? "canonical" : "picker",
       resolution:
-        String(raw.compare_selected || "").trim() === "user" || String(raw.compare_selected || "").trim() === "suggestion"
-          ? (String(raw.compare_selected || "").trim() as "user" | "suggestion")
+        String(next.resolution || "").trim() === "user" || String(next.resolution || "").trim() === "suggestion"
+          ? (String(next.resolution || "").trim() as "user" | "suggestion")
           : "",
-      target_field: String(raw.compare_target_field || "").trim(),
-      variant: String(raw.compare_variant || "").trim(),
-      user_text: String(raw.compare_user_raw || "").trim(),
-      user_normalized_text: String(raw.compare_user_normalized || raw.compare_user_raw || "").trim(),
-      user_items: Array.isArray(raw.compare_user_items) ? (raw.compare_user_items as unknown[]).map(String) : [],
-      suggestion_text: String(raw.compare_agent_current || "").trim(),
-      suggestion_items: Array.isArray(raw.compare_suggestion_items)
-        ? (raw.compare_suggestion_items as unknown[]).map(String)
+      target_field: String(next.target_field || "").trim(),
+      variant: String(next.variant || "").trim(),
+      user_text: String(next.user_text || "").trim(),
+      user_normalized_text: String(next.user_normalized_text || next.user_text || "").trim(),
+      user_items: Array.isArray(next.user_items) ? (next.user_items as unknown[]).map(String) : [],
+      suggestion_text: String(next.suggestion_text || "").trim(),
+      suggestion_items: Array.isArray(next.suggestion_items) ? (next.suggestion_items as unknown[]).map(String) : [],
+      base_items: Array.isArray(next.base_items) ? (next.base_items as unknown[]).map(String) : [],
+      list_semantics: String(next.list_semantics || "").trim() === "full" ? "full" : "delta",
+      user_label: String(next.user_label || "").trim(),
+      suggestion_label: String(next.suggestion_label || "").trim(),
+      grouped_mode: String(next.grouped_mode || "").trim() === "grouped_units" ? "grouped_units" : "",
+      grouped_cursor: String(next.grouped_cursor || "").trim(),
+      grouped_units: Array.isArray(next.grouped_units) ? (next.grouped_units as unknown[]) : [],
+      grouped_segments: Array.isArray(next.grouped_segments) ? (next.grouped_segments as unknown[]) : [],
+      user_variant_semantics: String(next.user_variant_semantics || "").trim(),
+      user_variant_stepworthy: String(next.user_variant_stepworthy || "").trim().toLowerCase() === "true",
+      feedback_reason_key: String(next.feedback_reason_key || "").trim(),
+      feedback_reason_text: String(next.feedback_reason_text || "").trim(),
+      pending_text_intent: String(next.pending_text_intent || "").trim(),
+      pending_text_anchor: String(next.pending_text_anchor || "").trim(),
+      pending_text_seed_source: String(next.pending_text_seed_source || "").trim(),
+      pending_text_feedback_text: String(next.pending_text_feedback_text || "").trim(),
+      pending_text_presentation_mode: String(next.pending_text_presentation_mode || "").trim(),
+    });
+    for (const key of inlineCompareKeys) delete next[key];
+  }
+  const compare = readCompareRuntime(next);
+  if (compare) next = attachCompareRuntime(next);
+  const dreamBuilderKeys = [
+    "dream_builder_kind",
+    "dream_builder_current_items",
+    "dream_builder_suggested_items",
+    "dream_builder_segments",
+    "dream_builder_rationale",
+    "dream_builder_current_label",
+    "dream_builder_suggested_label",
+    "dream_builder_retained_heading",
+    "dream_builder_instruction",
+    "dream_builder_committed_statements",
+  ];
+  const hasInlineDreamBuilderCompare = dreamBuilderKeys.some((key) => key in next);
+  if (!readDreamBuilderCompareRuntime(next) && hasInlineDreamBuilderCompare) {
+    next = patchDreamBuilderCompareRuntime(next, {
+      kind: String(next.dream_builder_kind || "").trim() as any,
+      current_items: Array.isArray(next.dream_builder_current_items)
+        ? (next.dream_builder_current_items as unknown[]).map(String)
         : [],
-      base_items: Array.isArray(raw.compare_base_items) ? (raw.compare_base_items as unknown[]).map(String) : [],
-      list_semantics: String(raw.compare_list_semantics || "").trim() === "full" ? "full" : "delta",
-      user_label: String(raw.compare_user_label || "").trim(),
-      suggestion_label: String(raw.compare_suggestion_label || "").trim(),
-      grouped_mode: String(raw.compare_compare_mode || "").trim() === "grouped_units" ? "grouped_units" : "",
-      grouped_cursor: String(raw.compare_compare_cursor || "").trim(),
-      grouped_units: Array.isArray(raw.compare_compare_units) ? (raw.compare_compare_units as unknown[]) : [],
-      grouped_segments: Array.isArray(raw.compare_compare_segments) ? (raw.compare_compare_segments as unknown[]) : [],
-      user_variant_semantics: String(raw.compare_user_variant_semantics || "").trim(),
-      user_variant_stepworthy: String(raw.compare_user_variant_stepworthy || "").trim().toLowerCase() === "true",
-      feedback_reason_key: String(raw.feedback_reason_key || "").trim(),
-      feedback_reason_text: String(raw.feedback_reason_text || "").trim(),
-      pending_text_intent: String(raw.pending_suggestion_intent || "").trim(),
-      pending_text_anchor: String(raw.pending_suggestion_anchor || "").trim(),
-      pending_text_seed_source: String(raw.pending_suggestion_seed_source || "").trim(),
-      pending_text_feedback_text: String(raw.pending_suggestion_feedback_text || "").trim(),
-      pending_text_presentation_mode: String(raw.pending_suggestion_presentation_mode || "").trim(),
-    })
-  );
+      suggested_items: Array.isArray(next.dream_builder_suggested_items)
+        ? (next.dream_builder_suggested_items as unknown[]).map(String)
+        : [],
+      segments: Array.isArray(next.dream_builder_segments) ? (next.dream_builder_segments as Array<Record<string, unknown>>) : [],
+      rationale: String(next.dream_builder_rationale || "").trim(),
+      current_label: String(next.dream_builder_current_label || "").trim(),
+      suggested_label: String(next.dream_builder_suggested_label || "").trim(),
+      retained_heading: String(next.dream_builder_retained_heading || "").trim(),
+      instruction: String(next.dream_builder_instruction || "").trim(),
+      committed_statements: Array.isArray(next.dream_builder_committed_statements)
+        ? (next.dream_builder_committed_statements as unknown[]).map(String)
+        : [],
+    });
+    for (const key of dreamBuilderKeys) delete next[key];
+  }
+  const dreamBuilderCompare = readDreamBuilderCompareRuntime(next);
+  if (dreamBuilderCompare) {
+    next = patchDreamBuilderCompareRuntime(next, createDreamBuilderCompareRuntimeState(dreamBuilderCompare));
+  }
+  return next;
 }
 
 function normalizeCompareResult(result: Record<string, unknown> | null | undefined) {
@@ -102,6 +167,34 @@ function createRunStepCompareHelpers(...args: Parameters<typeof createRunStepCom
 
 function compareState(raw: Record<string, unknown>) {
   return readCompareRuntime(raw);
+}
+
+function dreamBuilderCompareState(raw: Record<string, unknown>) {
+  return readDreamBuilderCompareRuntime(raw);
+}
+
+function dreamBuilderComparePendingValue(raw: Record<string, unknown>): string {
+  return dreamBuilderCompareState(raw) ? "true" : "false";
+}
+
+function withCompareRuntime(
+  raw: Record<string, unknown>,
+  runtime: Partial<Parameters<typeof createCompareRuntimeState>[0]>
+): Record<string, unknown> {
+  return {
+    ...raw,
+    compare_runtime: createCompareRuntimeState(runtime),
+  };
+}
+
+function withDreamBuilderCompareRuntime(
+  raw: Record<string, unknown>,
+  runtime: Parameters<typeof createDreamBuilderCompareRuntimeState>[0]
+): Record<string, unknown> {
+  return {
+    ...raw,
+    dream_builder_compare_runtime: createDreamBuilderCompareRuntimeState(runtime),
+  };
 }
 
 function comparePendingValue(raw: Record<string, unknown>): string {
@@ -655,7 +748,7 @@ test("buildCompareFromTurn keeps Dream Builder statements canonical while a rewr
 
   assert.equal(result.compare, null);
   assert.equal(comparePendingValue(result.specialist as Record<string, unknown>), "false");
-  assert.equal(String((result.specialist as Record<string, unknown>).__dream_builder_compare_pending || ""), "true");
+  assert.equal(dreamBuilderComparePendingValue(result.specialist as Record<string, unknown>), "true");
   assert.deepEqual((result.specialist as Record<string, unknown>).statements, [
     "Over 5 tot 10 jaar zullen meer mensen streven naar werk dat een positieve impact heeft op het leven van anderen.",
   ]);
@@ -692,7 +785,7 @@ test("buildCompareFromTurn keeps Dream in picker for a first draft even when the
   );
 });
 
-test("buildCompareFromTurn suppresses Dream picker when user text is refine feedback", () => {
+test("buildCompareFromTurn keeps Dream picker pending when user text is refine feedback", () => {
   const helpers = buildHelpers(true);
   const result = helpers.buildCompareFromTurn({
     stepId: "dream",
@@ -716,9 +809,9 @@ test("buildCompareFromTurn suppresses Dream picker when user text is refine feed
     },
   });
 
-  assert.equal(result.compare, null);
+  assert.ok(result.compare);
   assert.equal(comparePendingValue(result.specialist as Record<string, unknown>), "true");
-  assert.equal(comparePresentationValue(result.specialist as Record<string, unknown>), "canonical");
+  assert.equal(comparePresentationValue(result.specialist as Record<string, unknown>), "picker");
   assert.equal(
     compareUserVariantSemanticsValue(result.specialist as Record<string, unknown>),
     "feedback_on_existing_content"
@@ -771,7 +864,7 @@ test("buildCompareFromTurn keeps Role in picker pending presentation for direct 
   assert.equal(comparePresentationValue(result.specialist as Record<string, unknown>), "picker");
 });
 
-test("buildCompareFromTurn suppresses Role picker when user text is pure rejection", () => {
+test("buildCompareFromTurn suppresses Role compare when user text is pure rejection without explicit compare reason", () => {
   const helpers = buildHelpers(true);
   const result = helpers.buildCompareFromTurn({
     stepId: "role",
@@ -794,12 +887,8 @@ test("buildCompareFromTurn suppresses Role picker when user text is pure rejecti
   });
 
   assert.equal(result.compare, null);
-  assert.equal(comparePendingValue(result.specialist as Record<string, unknown>), "true");
+  assert.equal(comparePendingValue(result.specialist as Record<string, unknown>), "false");
   assert.equal(comparePresentationValue(result.specialist as Record<string, unknown>), "canonical");
-  assert.equal(
-    compareUserVariantSemanticsValue(result.specialist as Record<string, unknown>),
-    "rejection_without_replacement"
-  );
 });
 
 test("buildCompareFromTurn skips compare panel for meta-topic turns", () => {
@@ -953,26 +1042,26 @@ test("buildCompareFromPendingSpecialist applies interpreted list labels for busi
   const helpers = buildHelpers(true);
   const compare = helpers.buildCompareFromPendingSpecialist(
     {
-      compare_pending: "true",
-      compare_mode: "list",
-      compare_target_field: "rulesofthegame",
+      status: "true",
+      mode: "list",
+      target_field: "rulesofthegame",
       feedback_reason_text: "This suggestion makes the remaining rule interpretation more concrete.",
-      compare_user_normalized: [
+      user_normalized_text: [
         "We communicate proactively.",
         "We keep commitments.",
         "We escalate risks early.",
       ].join("\n"),
-      compare_agent_current: [
+      suggestion_text: [
         "We communicate proactively.",
         "We keep commitments.",
         "We escalate risks early.",
       ].join("\n"),
-      compare_user_items: [
+      user_items: [
         "We communicate proactively.",
         "We keep commitments.",
         "We escalate risks early.",
       ],
-      compare_suggestion_items: [
+      suggestion_items: [
         "We communicate proactively.",
         "We keep commitments.",
         "We escalate risks early.",
@@ -992,13 +1081,13 @@ test("buildCompareFromPendingSpecialist suppresses picker when only a generic in
   const helpers = buildHelpers(true);
   const compare = helpers.buildCompareFromPendingSpecialist(
     {
-      compare_pending: "true",
-      compare_mode: "text",
-      compare_target_field: "purpose",
-      compare_user_variant_stepworthy: "true",
-      compare_user_normalized:
+      status: "true",
+      mode: "text",
+      target_field: "purpose",
+      user_variant_stepworthy: "true",
+      user_normalized_text:
         "Mindd bestaat om bij te dragen aan een wereld waarin communicatie en verhalen authentiek, eerlijk en origineel zijn.",
-      compare_agent_current:
+      suggestion_text:
         "Mindd bestaat om communicatie en verhalen authentiek, eerlijk en origineel te maken, zodat echte mensen en echte waarden centraal staan.",
       refined_formulation:
         "Mindd bestaat om communicatie en verhalen authentiek, eerlijk en origineel te maken, zodat echte mensen en echte waarden centraal staan.",
@@ -1018,19 +1107,19 @@ test("buildCompareFromPendingSpecialist keeps grouped compare feedback bound to 
   const helpers = buildHelpers(true);
   const compare = helpers.buildCompareFromPendingSpecialist(
     {
-      compare_pending: "true",
-      compare_mode: "list",
-      compare_presentation: "picker",
-      compare_target_field: "strategy",
-      compare_variant: "grouped_list_units",
-      compare_compare_mode: "grouped_units",
-      compare_compare_cursor: "1",
-      compare_compare_segments: [
+      status: "true",
+      mode: "list",
+      presentation: "picker",
+      target_field: "strategy",
+      variant: "grouped_list_units",
+      grouped_mode: "grouped_units",
+      grouped_cursor: "1",
+      grouped_segments: [
         { kind: "retained", items: ["Recurring revenue"] },
         { kind: "unit", unit_id: "unit_1" },
         { kind: "unit", unit_id: "unit_2" },
       ],
-      compare_compare_units: [
+      grouped_units: [
         {
           id: "unit_1",
           user_items: ["Expert-led delivery"],
@@ -1053,10 +1142,10 @@ test("buildCompareFromPendingSpecialist keeps grouped compare feedback bound to 
           confidence: "anchored",
         },
       ],
-      compare_user_items: ["Operational simplicity"],
-      compare_suggestion_items: ["Operational focus"],
-      compare_user_normalized: "Operational simplicity",
-      compare_agent_current: "Operational focus",
+      user_items: ["Operational simplicity"],
+      suggestion_items: ["Operational focus"],
+      user_normalized_text: "Operational simplicity",
+      suggestion_text: "Operational focus",
       feedback_reason_text: "Earlier unit feedback should not stay on screen.",
     },
     { current_step: "strategy" } as any,
@@ -1078,19 +1167,19 @@ test("buildCompareFromPendingSpecialist suppresses grouped compare when the acti
   const helpers = buildHelpers(true);
   const compare = helpers.buildCompareFromPendingSpecialist(
     {
-      compare_pending: "true",
-      compare_mode: "list",
-      compare_presentation: "picker",
-      compare_target_field: "strategy",
-      compare_variant: "grouped_list_units",
-      compare_compare_mode: "grouped_units",
-      compare_compare_cursor: "1",
-      compare_compare_segments: [
+      status: "true",
+      mode: "list",
+      presentation: "picker",
+      target_field: "strategy",
+      variant: "grouped_list_units",
+      grouped_mode: "grouped_units",
+      grouped_cursor: "1",
+      grouped_segments: [
         { kind: "retained", items: ["Recurring revenue"] },
         { kind: "unit", unit_id: "unit_1" },
         { kind: "unit", unit_id: "unit_2" },
       ],
-      compare_compare_units: [
+      grouped_units: [
         {
           id: "unit_1",
           user_items: ["Expert-led delivery"],
@@ -1112,10 +1201,10 @@ test("buildCompareFromPendingSpecialist suppresses grouped compare when the acti
           confidence: "anchored",
         },
       ],
-      compare_user_items: ["Operational simplicity"],
-      compare_suggestion_items: ["Operational focus"],
-      compare_user_normalized: "Operational simplicity",
-      compare_agent_current: "Operational focus",
+      user_items: ["Operational simplicity"],
+      suggestion_items: ["Operational focus"],
+      user_normalized_text: "Operational simplicity",
+      suggestion_text: "Operational focus",
       feedback_reason_text: "Earlier unit feedback should not stay on screen.",
     },
     { current_step: "strategy" } as any,
@@ -1603,10 +1692,10 @@ test("buildCompareFromTurn suppresses forced grouped compare when no explicit ag
     previousSpecialist: {
       statements: ["Recurring revenue", "Expert-led delivery"],
       strategy: ["Recurring revenue", "Expert-led delivery"].join("\n"),
-      compare_pending: "true",
-      compare_mode: "list",
-      compare_user_normalized: "Operational simplicity",
-      compare_agent_current: ["Recurring revenue", "Expert-led delivery", "Operational focus"].join("\n"),
+      status: "true",
+      mode: "list",
+      user_normalized_text: "Operational simplicity",
+      suggestion_text: ["Recurring revenue", "Expert-led delivery", "Operational focus"].join("\n"),
     },
     specialistResult: {
       message: "Okay.",
@@ -2194,19 +2283,19 @@ test("applyComparePickSelection resolves grouped compare units into one final pr
     current_step: "productsservices",
     active_specialist: "ProductsServices",
     last_specialist_result: {
-      compare_pending: "true",
-      compare_mode: "list",
-      compare_target_field: "productsservices",
-      compare_presentation: "picker",
-      compare_variant: "grouped_list_units",
-      compare_compare_mode: "grouped_units",
-      compare_compare_cursor: "0",
-      compare_compare_segments: [
+      status: "true",
+      mode: "list",
+      target_field: "productsservices",
+      presentation: "picker",
+      variant: "grouped_list_units",
+      grouped_mode: "grouped_units",
+      grouped_cursor: "0",
+      grouped_segments: [
         { kind: "retained", items: ["Strategy workshops"] },
         { kind: "unit", unit_id: "unit_1" },
         { kind: "unit", unit_id: "unit_2" },
       ],
-      compare_compare_units: [
+      grouped_units: [
         {
           id: "unit_1",
           user_items: ["AI websites"],
@@ -2230,12 +2319,12 @@ test("applyComparePickSelection resolves grouped compare units into one final pr
           confidence: "anchored",
         },
       ],
-      compare_user_items: ["AI websites"],
-      compare_suggestion_items: ["AI-compatible websites"],
-      compare_user_normalized: "AI websites",
-      compare_agent_current: "AI-compatible websites",
-      compare_user_label: "This is your compact wording:",
-      compare_suggestion_label: "This is my suggestion:",
+      user_items: ["AI websites"],
+      suggestion_items: ["AI-compatible websites"],
+      user_normalized_text: "AI websites",
+      suggestion_text: "AI-compatible websites",
+      user_label: "This is your compact wording:",
+      suggestion_label: "This is my suggestion:",
     },
   } as any;
 
@@ -2281,22 +2370,22 @@ test("applyComparePickSelection persists accepted Dream Builder statements into 
         "Over 5 tot 10 jaar zullen meer mensen streven naar werk dat een positieve impact heeft op het leven van anderen.",
       ],
       last_specialist_result: {
-        compare_pending: "true",
-        compare_mode: "list",
-        compare_target_field: "dream",
-        compare_presentation: "picker",
-        compare_base_items: [
+        status: "true",
+        mode: "list",
+        target_field: "dream",
+        presentation: "picker",
+        base_items: [
           "Over 5 tot 10 jaar zullen meer mensen streven naar werk dat een positieve impact heeft op het leven van anderen.",
         ],
-        compare_user_items: [
+        user_items: [
           "Over 5 tot 10 jaar zullen meer mensen streven naar werk dat een positieve impact heeft op het leven van anderen.",
         ],
-        compare_suggestion_items: [
+        suggestion_items: [
           "Er zal meer waarde worden gehecht aan het creëren van iets dat generaties overstijgt en blijvende betekenis heeft.",
         ],
-        compare_user_normalized:
+        user_normalized_text:
           "Over 5 tot 10 jaar zullen meer mensen streven naar werk dat een positieve impact heeft op het leven van anderen.",
-        compare_agent_current:
+        suggestion_text:
           "Er zal meer waarde worden gehecht aan het creëren van iets dat generaties overstijgt en blijvende betekenis heeft.",
         feedback_reason_text:
           "Deze suggestie vertaalt je wens naar een bredere maatschappelijke verandering.",
@@ -2353,24 +2442,22 @@ test("buildCompareFromTurn opens a merge choice for a near-duplicate Dream Build
 
   assert.equal(result.compare, null);
   assert.equal(comparePendingValue(result.specialist as Record<string, unknown>), "false");
-  assert.equal(String((result.specialist as Record<string, unknown>).__dream_builder_compare_pending || ""), "true");
-  assert.equal(String((result.specialist as Record<string, unknown>).__dream_builder_compare_kind || ""), "batch_rewrite_compare");
+  const dreamBuilderCompare = dreamBuilderCompareState(result.specialist as Record<string, unknown>);
+  assert.ok(dreamBuilderCompare);
+  assert.equal(dreamBuilderCompare.kind, "batch_rewrite_compare");
   assert.deepEqual((result.specialist as Record<string, unknown>).statements, [
     "Over 5 tot 10 jaar zullen meer mensen streven naar werk dat een positieve impact heeft op het leven van anderen.",
     "Er zal meer behoefte zijn aan bedrijven en initiatieven die een blijvende waarde nalaten voor toekomstige generaties.",
   ]);
-  assert.deepEqual((result.specialist as Record<string, unknown>).__dream_builder_compare_current_items, [
+  assert.deepEqual(dreamBuilderCompare.current_items, [
     "Over 5 tot 10 jaar zal het belangrijker worden dat werk zichtbaar iets goeds doet in het leven van mensen.",
   ]);
-  assert.deepEqual((result.specialist as Record<string, unknown>).__dream_builder_compare_suggested_items, [
+  assert.deepEqual(dreamBuilderCompare.suggested_items, [
     "Over 5 tot 10 jaar zal werk steeds vaker worden gezien als iets dat zichtbaar betekenis toevoegt aan het leven van anderen.",
   ]);
-  assert.equal(
-    String((result.specialist as Record<string, unknown>).__dream_builder_compare_instruction || ""),
-    "Choose the version that fits best for the remaining difference."
-  );
-  assert.equal(String((result.specialist as Record<string, unknown>).__dream_builder_compare_current_label || "").trim().length >= 0, true);
-  assert.equal(String((result.specialist as Record<string, unknown>).__dream_builder_compare_suggested_label || "").trim().length >= 0, true);
+  assert.equal(dreamBuilderCompare.instruction, "Choose the version that fits best for the remaining difference.");
+  assert.equal(String(dreamBuilderCompare.current_label || "").trim().length >= 0, true);
+  assert.equal(String(dreamBuilderCompare.suggested_label || "").trim().length >= 0, true);
 });
 
 test("buildCompareFromTurn opens a grouped compare for multiple Dream Builder wishes that are rewritten into future statements", () => {
@@ -2413,17 +2500,18 @@ test("buildCompareFromTurn opens a grouped compare for multiple Dream Builder wi
 
   assert.equal(result.compare, null);
   assert.equal(comparePendingValue(result.specialist as Record<string, unknown>), "false");
-  assert.equal(String((result.specialist as Record<string, unknown>).__dream_builder_compare_pending || ""), "true");
-  assert.equal(String((result.specialist as Record<string, unknown>).__dream_builder_compare_kind || ""), "batch_rewrite_compare");
+  const dreamBuilderCompare = dreamBuilderCompareState(result.specialist as Record<string, unknown>);
+  assert.ok(dreamBuilderCompare);
+  assert.equal(dreamBuilderCompare.kind, "batch_rewrite_compare");
   assert.deepEqual((result.specialist as Record<string, unknown>).statements, []);
-  assert.deepEqual((result.specialist as Record<string, unknown>).__dream_builder_compare_current_items, [
+  assert.deepEqual(dreamBuilderCompare.current_items, [
     "I want my work to make a positive difference in people's lives.",
     "I want to build something that lasts beyond me.",
     "I want to create freedom in my time and choices.",
     "I want to feel proud when I talk about what I do.",
     "I want my business to reflect who I am and what I stand for.",
   ]);
-  assert.deepEqual((result.specialist as Record<string, unknown>).__dream_builder_compare_suggested_items, [
+  assert.deepEqual(dreamBuilderCompare.suggested_items, [
     "Over 5 tot 10 jaar zal positieve impact op het leven van anderen voor meer mensen een belangrijk criterium worden in hun werk.",
     "Mensen zullen meer waarde hechten aan het opbouwen van iets dat duurzaam blijft bestaan voorbij henzelf.",
     "Vrijheid in tijd en keuzes zal voor steeds meer mensen een belangrijk onderdeel worden van hun werkende leven.",
@@ -2471,15 +2559,16 @@ test("buildCompareFromTurn uses the real Dream Builder suggestion gate for multi
 
   assert.equal(result.compare, null);
   assert.equal(comparePendingValue(result.specialist as Record<string, unknown>), "false");
-  assert.equal(String((result.specialist as Record<string, unknown>).__dream_builder_compare_pending || ""), "true");
-  assert.deepEqual((result.specialist as Record<string, unknown>).__dream_builder_compare_current_items, [
+  const dreamBuilderCompare = dreamBuilderCompareState(result.specialist as Record<string, unknown>);
+  assert.ok(dreamBuilderCompare);
+  assert.deepEqual(dreamBuilderCompare.current_items, [
     "I want my work to make a positive difference in people's lives.",
     "I want to build something that lasts beyond me.",
     "I want to create freedom in my time and choices.",
     "I want to feel proud when I talk about what I do.",
     "I want my business to reflect who I am and what I stand for.",
   ]);
-  assert.deepEqual((result.specialist as Record<string, unknown>).__dream_builder_compare_suggested_items, [
+  assert.deepEqual(dreamBuilderCompare.suggested_items, [
     "Over 5 tot 10 jaar zal het voor mensen belangrijker zijn dat hun werk een positieve impact heeft op anderen.",
     "Mensen zullen steeds meer waarde hechten aan het bouwen van iets dat generaties overstijgt.",
     "Vrijheid in tijd en keuzes wordt een centrale waarde in het werkende leven.",
@@ -2527,11 +2616,9 @@ test("buildCompareFromTurn keeps Dream Builder grouped compare active for multip
 
   assert.equal(result.compare, null);
   assert.equal(comparePendingValue(result.specialist as Record<string, unknown>), "false");
-  assert.equal(String((result.specialist as Record<string, unknown>).__dream_builder_compare_pending || ""), "true");
-  assert.match(
-    String((result.specialist as Record<string, unknown>).__dream_builder_compare_rationale || ""),
-    /broader change|bredere verandering/i
-  );
+  const dreamBuilderCompare = dreamBuilderCompareState(result.specialist as Record<string, unknown>);
+  assert.ok(dreamBuilderCompare);
+  assert.match(String(dreamBuilderCompare.rationale || ""), /broader change|bredere verandering/i);
 });
 
 test("buildCompareFromTurn keeps existing Dream Builder statements retained while comparing new multi-line wishes against rewritten suggestions", () => {
@@ -2580,22 +2667,23 @@ test("buildCompareFromTurn keeps existing Dream Builder statements retained whil
   });
 
   assert.equal(result.compare, null);
-  assert.deepEqual((result.specialist as Record<string, unknown>).__dream_builder_compare_current_items, [
+  const dreamBuilderCompare = dreamBuilderCompareState(result.specialist as Record<string, unknown>);
+  assert.ok(dreamBuilderCompare);
+  assert.deepEqual(dreamBuilderCompare.current_items, [
     "I want to help people solve a problem they truly care about.",
     "I want to bring clarity and simplicity to a confusing area.",
     "I want to create a safe space where people feel seen and supported.",
     "I want to challenge the status quo and improve how things are done.",
     "I want to grow into the best version of myself through this business.",
   ]);
-  assert.deepEqual((result.specialist as Record<string, unknown>).__dream_builder_compare_suggested_items, [
+  assert.deepEqual(dreamBuilderCompare.suggested_items, [
     "Over 5 tot 10 jaar zullen meer mensen hulp zoeken bij problemen die voor hen echt betekenisvol zijn.",
     "Duidelijkheid en eenvoud worden belangrijker in domeinen die nu nog verwarrend of complex zijn.",
     "Er zal meer behoefte ontstaan aan omgevingen waarin mensen zich gezien, veilig en gesteund voelen.",
     "Steeds meer mensen zullen bestaande systemen ter discussie stellen en zoeken naar betere manieren van werken.",
     "Persoonlijke groei en zelfontwikkeling zullen vaker een drijvende kracht worden achter ondernemerschap en werk.",
   ]);
-  const instruction = String((result.specialist as Record<string, unknown>).__dream_builder_compare_instruction || "");
-  assert.equal(instruction, "Choose the version that fits best for the remaining difference.");
+  assert.equal(dreamBuilderCompare.instruction, "Choose the version that fits best for the remaining difference.");
 });
 
 test("buildCompareFromTurn keeps a full 14-line Dream Builder rewrite in one compare contract", () => {
@@ -2664,10 +2752,11 @@ test("buildCompareFromTurn keeps a full 14-line Dream Builder rewrite in one com
   });
 
   assert.equal(result.compare, null);
-  assert.deepEqual((result.specialist as Record<string, unknown>).__dream_builder_compare_current_items, userWishBatch);
-  assert.deepEqual((result.specialist as Record<string, unknown>).__dream_builder_compare_suggested_items, rewrittenBatch);
-  const instruction = String((result.specialist as Record<string, unknown>).__dream_builder_compare_instruction || "");
-  assert.equal(instruction, "Choose the version that fits best for the remaining difference.");
+  const dreamBuilderCompare = dreamBuilderCompareState(result.specialist as Record<string, unknown>);
+  assert.ok(dreamBuilderCompare);
+  assert.deepEqual(dreamBuilderCompare.current_items, userWishBatch);
+  assert.deepEqual(dreamBuilderCompare.suggested_items, rewrittenBatch);
+  assert.equal(dreamBuilderCompare.instruction, "Choose the version that fits best for the remaining difference.");
 });
 
 test("buildCompareFromTurn uses the merged Dream Builder rewrite instead of unchanged statements when overlap requires REFINE", () => {
@@ -2710,19 +2799,18 @@ test("buildCompareFromTurn uses the merged Dream Builder rewrite instead of unch
   });
 
   assert.equal(result.compare, null);
-  assert.deepEqual((result.specialist as Record<string, unknown>).__dream_builder_compare_current_items, [
+  const dreamBuilderCompare = dreamBuilderCompareState(result.specialist as Record<string, unknown>);
+  assert.ok(dreamBuilderCompare);
+  assert.deepEqual(dreamBuilderCompare.current_items, [
     "Bedrijven zullen vaker een weerspiegeling zijn van persoonlijke waarden en identiteit, in plaats van alleen winstgedreven te zijn.",
     "Ondernemingen worden een weerspiegeling van eigen waarden en identiteit, in plaats van alleen de focus te leggen op winst.",
   ]);
-  assert.deepEqual((result.specialist as Record<string, unknown>).__dream_builder_compare_suggested_items, [
+  assert.deepEqual(dreamBuilderCompare.suggested_items, [
     "Ondernemingen zullen steeds vaker een weerspiegeling worden van de waarden en identiteit van hun oprichters, in plaats van alleen winst na te streven.",
   ]);
-  assert.equal((result.specialist as Record<string, unknown>).__dream_builder_compare_current_label, "This is your compact wording:");
-  assert.equal((result.specialist as Record<string, unknown>).__dream_builder_compare_suggested_label, "This is my suggestion:");
-  assert.match(
-    String((result.specialist as Record<string, unknown>).__dream_builder_compare_instruction || ""),
-    /keep both similar statements or merge them into one stronger statement/i
-  );
+  assert.equal(dreamBuilderCompare.current_label, "This is your compact wording:");
+  assert.equal(dreamBuilderCompare.suggested_label, "This is my suggestion:");
+  assert.match(String(dreamBuilderCompare.instruction || ""), /keep both similar statements or merge them into one stronger statement/i);
 });
 
 test("applyComparePickSelection can keep both Dream Builder near-duplicate statements", () => {
@@ -2739,25 +2827,24 @@ test("applyComparePickSelection can keep both Dream Builder near-duplicate state
         "Er zal meer behoefte zijn aan bedrijven en initiatieven die een blijvende waarde nalaten voor toekomstige generaties.",
       ],
       last_specialist_result: {
-        __dream_builder_compare_pending: "true",
-        __dream_builder_compare_kind: "overlap_merge_compare",
-        __dream_builder_compare_segments: [
+        dream_builder_kind: "overlap_merge_compare",
+        dream_builder_segments: [
           { kind: "unit", unit_id: "unit_1" },
           {
             kind: "retained",
             items: ["Er zal meer behoefte zijn aan bedrijven en initiatieven die een blijvende waarde nalaten voor toekomstige generaties."],
           },
         ],
-        __dream_builder_compare_current_items: [
+        dream_builder_current_items: [
           "Over 5 tot 10 jaar zullen meer mensen streven naar werk dat een positieve impact heeft op het leven van anderen.",
           "Over 5 tot 10 jaar zal het belangrijker worden dat werk zichtbaar iets goeds doet in het leven van mensen.",
         ],
-        __dream_builder_compare_suggested_items: [
+        dream_builder_suggested_items: [
           "Over 5 tot 10 jaar zal werk steeds vaker worden gezien als iets dat zichtbaar betekenis toevoegt aan het leven van anderen.",
         ],
-        __dream_builder_compare_current_label: "Keep both statements:",
-        __dream_builder_compare_suggested_label: "Merge into one statement:",
-        __dream_builder_compare_rationale:
+        dream_builder_current_label: "Keep both statements:",
+        dream_builder_suggested_label: "Merge into one statement:",
+        dream_builder_rationale:
           "Deze twee statements gaan bijna over dezelfde maatschappelijke beweging, dus een samengevoegde formulering houdt je lijst scherper.",
       },
     } as any,
@@ -2785,25 +2872,24 @@ test("applyComparePickSelection can merge a Dream Builder near-duplicate into on
         "Er zal meer behoefte zijn aan bedrijven en initiatieven die een blijvende waarde nalaten voor toekomstige generaties.",
       ],
       last_specialist_result: {
-        __dream_builder_compare_pending: "true",
-        __dream_builder_compare_kind: "overlap_merge_compare",
-        __dream_builder_compare_segments: [
+        dream_builder_kind: "overlap_merge_compare",
+        dream_builder_segments: [
           { kind: "unit", unit_id: "unit_1" },
           {
             kind: "retained",
             items: ["Er zal meer behoefte zijn aan bedrijven en initiatieven die een blijvende waarde nalaten voor toekomstige generaties."],
           },
         ],
-        __dream_builder_compare_current_items: [
+        dream_builder_current_items: [
           "Over 5 tot 10 jaar zullen meer mensen streven naar werk dat een positieve impact heeft op het leven van anderen.",
           "Over 5 tot 10 jaar zal het belangrijker worden dat werk zichtbaar iets goeds doet in het leven van mensen.",
         ],
-        __dream_builder_compare_suggested_items: [
+        dream_builder_suggested_items: [
           "Over 5 tot 10 jaar zal werk steeds vaker worden gezien als iets dat zichtbaar betekenis toevoegt aan het leven van anderen.",
         ],
-        __dream_builder_compare_current_label: "Keep both statements:",
-        __dream_builder_compare_suggested_label: "Merge into one statement:",
-        __dream_builder_compare_rationale:
+        dream_builder_current_label: "Keep both statements:",
+        dream_builder_suggested_label: "Merge into one statement:",
+        dream_builder_rationale:
           "Deze twee statements gaan bijna over dezelfde maatschappelijke beweging, dus een samengevoegde formulering houdt je lijst scherper.",
       },
     } as any,
@@ -2822,19 +2908,19 @@ test("applyComparePickSelection keeps explicit agent feedback available for the 
     current_step: "productsservices",
     active_specialist: "ProductsServices",
     last_specialist_result: {
-      compare_pending: "true",
-      compare_mode: "list",
-      compare_target_field: "productsservices",
-      compare_presentation: "picker",
-      compare_variant: "grouped_list_units",
-      compare_compare_mode: "grouped_units",
-      compare_compare_cursor: "0",
-      compare_compare_segments: [
+      status: "true",
+      mode: "list",
+      target_field: "productsservices",
+      presentation: "picker",
+      variant: "grouped_list_units",
+      grouped_mode: "grouped_units",
+      grouped_cursor: "0",
+      grouped_segments: [
         { kind: "retained", items: ["Strategy workshops"] },
         { kind: "unit", unit_id: "unit_1" },
         { kind: "unit", unit_id: "unit_2" },
       ],
-      compare_compare_units: [
+      grouped_units: [
         {
           id: "unit_1",
           user_items: ["AI flows"],
@@ -2856,10 +2942,10 @@ test("applyComparePickSelection keeps explicit agent feedback available for the 
           confidence: "anchored",
         },
       ],
-      compare_user_items: ["AI flows"],
-      compare_suggestion_items: ["AI-driven flows"],
-      compare_user_normalized: "AI flows",
-      compare_agent_current: "AI-driven flows",
+      user_items: ["AI flows"],
+      suggestion_items: ["AI-driven flows"],
+      user_normalized_text: "AI flows",
+      suggestion_text: "AI-driven flows",
       feedback_reason_text: "This suggestion keeps the service wording more precise.",
     },
   } as any;
@@ -2892,36 +2978,36 @@ test("applyComparePickSelection keeps removals when user picks own edited list",
       current_step: "productsservices",
       active_specialist: "ProductsAndServices",
       last_specialist_result: {
-        compare_pending: "true",
-        compare_mode: "list",
-        compare_target_field: "productsservices",
-        compare_list_semantics: "full",
-        compare_base_items: [
+        status: "true",
+        mode: "list",
+        target_field: "productsservices",
+        list_semantics: "full",
+        base_items: [
           "AI-compatible websites and apps",
           "AI-tools and support",
           "Branding",
           "Strategy",
           "The rest we do not do",
         ],
-        compare_user_items: [
+        user_items: [
           "AI-compatible websites and apps",
           "AI-tools and support",
           "Branding",
           "Strategy",
         ],
-        compare_suggestion_items: [
+        suggestion_items: [
           "AI-compatible websites and apps",
           "AI-tools and support",
           "Branding",
           "Strategy",
         ],
-        compare_user_normalized: [
+        user_normalized_text: [
           "AI-compatible websites and apps",
           "AI-tools and support",
           "Branding",
           "Strategy",
         ].join("\n"),
-        compare_agent_current: [
+        suggestion_text: [
           "AI-compatible websites and apps",
           "AI-tools and support",
           "Branding",
@@ -2986,11 +3072,11 @@ test("buildCompareFromTurn strips markup from picker pending compare fields", ()
   assert.ok(result.compare);
   assert.ok(result.compare);
   assert.doesNotMatch(
-    String((result.specialist as Record<string, unknown>).compare_user_normalized || ""),
+    String(compareState(result.specialist as Record<string, unknown>)?.user_normalized_text || ""),
     /<[^>]+>/
   );
   assert.doesNotMatch(
-    String((result.specialist as Record<string, unknown>).compare_agent_current || ""),
+    String(compareState(result.specialist as Record<string, unknown>)?.suggestion_text || ""),
     /<[^>]+>/
   );
 });
@@ -3004,11 +3090,11 @@ test("applyComparePickSelection strips markup before committing selected compare
       current_step: "targetgroup",
       active_specialist: "TargetGroup",
       last_specialist_result: {
-        compare_pending: "true",
-        compare_mode: "text",
-        compare_target_field: "targetgroup",
-        compare_user_normalized: "bedrijven met complexe producten",
-        compare_agent_current: "<strong>Technische mkb-bedrijven</strong> met complexe vraagstukken.",
+        status: "true",
+        mode: "text",
+        target_field: "targetgroup",
+        user_normalized_text: "bedrijven met complexe producten",
+        suggestion_text: "<strong>Technische mkb-bedrijven</strong> met complexe vraagstukken.",
       },
     } as any,
   });
@@ -3063,11 +3149,11 @@ test("applyComparePickSelection unwraps current-context heading before committin
       current_step: "purpose",
       active_specialist: "Purpose",
       last_specialist_result: {
-        compare_pending: "true",
-        compare_mode: "text",
-        compare_target_field: "purpose",
-        compare_user_normalized: value,
-        compare_agent_current: wrapped,
+        status: "true",
+        mode: "text",
+        target_field: "purpose",
+        user_normalized_text: value,
+        suggestion_text: wrapped,
       },
     } as any,
   });
@@ -3123,11 +3209,11 @@ test("applyComparePickSelection unwraps autosuggest heading before committing su
       current_step: "dream",
       active_specialist: "Dream",
       last_specialist_result: {
-        compare_pending: "true",
-        compare_mode: "text",
-        compare_target_field: "dream",
-        compare_user_normalized: value,
-        compare_agent_current: wrapped,
+        status: "true",
+        mode: "text",
+        target_field: "dream",
+        user_normalized_text: value,
+        suggestion_text: wrapped,
       },
     } as any,
   });
@@ -3138,7 +3224,7 @@ test("applyComparePickSelection unwraps autosuggest heading before committing su
   assert.equal(String(applyResult.specialist.dream || ""), value);
 });
 
-test("applyComparePickSelection clears stale current-value refinement context after suggestion pick", () => {
+test("applyComparePickSelection clears stale compare feedback context after suggestion pick", () => {
   const helpers = buildHelpers(true);
   const chosen = "Retailbedrijven in de Randstad met marketingteams";
   const applyResult = helpers.applyComparePickSelection({
@@ -3148,16 +3234,19 @@ test("applyComparePickSelection clears stale current-value refinement context af
       current_step: "targetgroup",
       active_specialist: "TargetGroup",
       last_specialist_result: {
-        compare_pending: "true",
-        compare_mode: "text",
-        compare_target_field: "targetgroup",
-        compare_user_normalized: "Bedrijven in de retailsector",
-        compare_agent_current: chosen,
-        current_value_refinement_pending: "true",
-        current_value_refinement_target_field: "targetgroup",
-        current_value_refinement_feedback_text:
-          "Alleen 'bedrijven in de retailsector' is te algemeen; een extra kenmerk zoals teamtype maakt het bruikbaarder.",
-        current_value_refinement_anchor_value: "Bedrijven in de retailsector",
+        compare_runtime: {
+          kind: "text_compare",
+          mode: "text",
+          status: "pending",
+          target_field: "targetgroup",
+          user_normalized_text: "Bedrijven in de retailsector",
+          suggestion_text: chosen,
+          pending_text_intent: "feedback_on_current_value",
+          pending_text_anchor: "current_value",
+          pending_text_seed_source: "current_value",
+          pending_text_feedback_text:
+            "Alleen 'bedrijven in de retailsector' is te algemeen; een extra kenmerk zoals teamtype maakt het bruikbaarder.",
+        },
         feedback_reason_text:
           "Alleen 'bedrijven in de retailsector' is te algemeen; een extra kenmerk zoals teamtype maakt het bruikbaarder.",
       },
@@ -3167,10 +3256,6 @@ test("applyComparePickSelection clears stale current-value refinement context af
   assert.equal(applyResult.handled, true);
   assert.equal(String(applyResult.specialist.refined_formulation || ""), chosen);
   assert.equal(String(applyResult.specialist.targetgroup || ""), chosen);
-  assert.equal(String(applyResult.specialist.current_value_refinement_pending || ""), "false");
-  assert.equal(String(applyResult.specialist.current_value_refinement_target_field || ""), "");
-  assert.equal(String(applyResult.specialist.current_value_refinement_feedback_text || ""), "");
-  assert.equal(String(applyResult.specialist.current_value_refinement_anchor_value || ""), "");
   assert.equal(String(applyResult.specialist.feedback_reason_text || ""), "");
 });
 
@@ -3189,11 +3274,11 @@ test("applyComparePickSelection strips stale autosuggest UI contracts after sugg
       current_step: "entity",
       active_specialist: "Entity",
       last_specialist_result: {
-        compare_pending: "true",
-        compare_mode: "text",
-        compare_target_field: "entity",
-        compare_user_normalized: "gevoel voor communicatie",
-        compare_agent_current: chosen,
+        status: "true",
+        mode: "text",
+        target_field: "entity",
+        user_normalized_text: "gevoel voor communicatie",
+        suggestion_text: chosen,
         ui_content: {
           kind: "single_value",
           heading: "OP BASIS VAN JE INPUT STEL IK DE VOLGENDE ENTITEIT VOOR:",
@@ -3230,11 +3315,11 @@ test("applyComparePickSelection preserves feedback reason when user picks own si
       current_step: "dream",
       active_specialist: "Dream",
       last_specialist_result: {
-        compare_pending: "true",
-        compare_mode: "text",
-        compare_target_field: "dream",
-        compare_user_normalized: userValue,
-        compare_agent_current: suggestionValue,
+        status: "true",
+        mode: "text",
+        target_field: "dream",
+        user_normalized_text: userValue,
+        suggestion_text: suggestionValue,
         feedback_reason_text: feedbackReason,
       },
     } as any,
@@ -3266,11 +3351,11 @@ test("applyComparePickSelection falls back to the user-pick reason when explicit
       current_step: "dream",
       active_specialist: "Dream",
       last_specialist_result: {
-        compare_pending: "true",
-        compare_mode: "text",
-        compare_target_field: "dream",
-        compare_user_normalized: userValue,
-        compare_agent_current: suggestionValue,
+        status: "true",
+        mode: "text",
+        target_field: "dream",
+        user_normalized_text: userValue,
+        suggestion_text: suggestionValue,
       },
     } as any,
   });
@@ -3303,11 +3388,11 @@ test("applyComparePickSelection replaces generic user-pick feedback with the fal
         "compare.feedback.reason.generic": "Ik denk dat ik begrijp wat je bedoelt.",
       },
       last_specialist_result: {
-        compare_pending: "true",
-        compare_mode: "text",
-        compare_target_field: "purpose",
-        compare_user_normalized: userValue,
-        compare_agent_current: suggestionValue,
+        status: "true",
+        mode: "text",
+        target_field: "purpose",
+        user_normalized_text: userValue,
+        suggestion_text: suggestionValue,
         feedback_reason_key: "generic",
         feedback_reason_text: "Ik denk dat ik begrijp wat je bedoelt.",
       },
@@ -3352,10 +3437,10 @@ test("buildCompareFromTurn keeps canonical pending during forced pending feedbac
       state: {} as any,
       activeSpecialist: scenario.activeSpecialist,
       previousSpecialist: {
-        compare_pending: "true",
-        compare_mode: "text",
-        compare_user_normalized: scenario.value,
-        compare_agent_current: scenario.value,
+        status: "true",
+        mode: "text",
+        user_normalized_text: scenario.value,
+        suggestion_text: scenario.value,
       },
       specialistResult: {
         message: "Dat is een goed beginpunt.",
@@ -3383,10 +3468,10 @@ test("buildCompareFromTurn bypasses contributing-input gate while forced pending
     state: {} as any,
     activeSpecialist: "Purpose",
     previousSpecialist: {
-      compare_pending: "true",
-      compare_mode: "text",
-      compare_user_normalized: value,
-      compare_agent_current: value,
+      status: "true",
+      mode: "text",
+      user_normalized_text: value,
+      suggestion_text: value,
     },
     specialistResult: {
       message: "Dat is een goed beginpunt.",
@@ -3405,7 +3490,7 @@ test("buildCompareFromTurn bypasses contributing-input gate while forced pending
   assert.equal(comparePresentationValue(result.specialist as Record<string, unknown>), "canonical");
 });
 
-test("buildCompareFromTurn does not open compare when feedback mode affirms the user input", () => {
+test("buildCompareFromTurn keeps compare driven by compare payload data even when feedback mode affirms the user input", () => {
   const helpers = buildHelpers(true);
   const result = helpers.buildCompareFromTurn({
     stepId: "purpose",
@@ -3431,7 +3516,7 @@ test("buildCompareFromTurn does not open compare when feedback mode affirms the 
     submittedFeedbackText: "",
   });
 
-  assert.equal(result.compare, null);
-  assert.equal(comparePresentationValue(result.specialist as Record<string, unknown>), "canonical");
+  assert.ok(result.compare);
+  assert.equal(comparePresentationValue(result.specialist as Record<string, unknown>), "picker");
   assert.equal(String((result.specialist as Record<string, unknown>).feedback_mode || ""), "affirm_input");
 });

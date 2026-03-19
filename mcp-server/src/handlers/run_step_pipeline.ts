@@ -22,6 +22,10 @@ import {
 } from "./run_step_context.js";
 import type { RunStepPipelinePorts } from "./run_step_ports.js";
 import type { TurnResponseRenderFailureContext } from "./run_step_turn_response_engine.js";
+import {
+  clearDreamBuilderCompareRuntime,
+  readDreamBuilderCompareRuntime,
+} from "./dream_builder_compare_runtime.js";
 import type { UiContractMeta, CompareUiPayload } from "./run_step_ui_payload.js";
 import {
   asRecord,
@@ -48,6 +52,7 @@ import { deriveStructuredSuggestionsContent } from "../core/structured_suggestio
 import {
   attachCompareRuntime,
   clearCompareRuntime,
+  hasRenderablePendingCompareState,
   patchCompareRuntime,
   readCompareRuntime,
 } from "./compare_runtime.js";
@@ -564,10 +569,6 @@ function stateWithCurrentValueFeedbackContext(
     last_specialist_result: patchCompareRuntime({
       ...last,
       feedback_mode: "refine_current",
-      current_value_refinement_pending: "true",
-      current_value_refinement_target_field: stepId,
-      current_value_refinement_feedback_text: "",
-      current_value_refinement_anchor_value: currentValue,
       refined_formulation: currentValue,
       [stepId]: currentValue,
     }, {
@@ -591,10 +592,6 @@ function withCurrentValueRefinementFields(params: {
     String((specialistResult as Record<string, unknown>).refined_formulation || "").trim();
   return {
     ...clearPendingCompareFields(specialistResult),
-    current_value_refinement_pending: "true",
-    current_value_refinement_target_field: stepId,
-    current_value_refinement_feedback_text: String((specialistResult as Record<string, unknown>).feedback_reason_text || "").trim(),
-    current_value_refinement_anchor_value: anchorValue,
     feedback_mode: "refine_current",
     ...(targetValue ? { [stepId]: targetValue } : {}),
     ...(targetValue ? { refined_formulation: targetValue } : {}),
@@ -645,16 +642,12 @@ function clearPendingCompareFields(specialistResult: Record<string, unknown>): R
   return {
     ...clearCompareRuntime(specialistResult),
     feedback_mode: "none",
-    current_value_refinement_pending: "false",
-    current_value_refinement_target_field: "",
-    current_value_refinement_feedback_text: "",
-    current_value_refinement_anchor_value: "",
   };
 }
 
-function clearDreamBuilderLegacyCompareFields(specialistResult: Record<string, unknown>): Record<string, unknown> {
+function clearDreamBuilderCompareState(specialistResult: Record<string, unknown>): Record<string, unknown> {
   return {
-    ...specialistResult,
+    ...clearDreamBuilderCompareRuntime(specialistResult),
     ...clearPendingCompareFields(specialistResult),
   };
 }
@@ -1122,7 +1115,7 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
       decision1.specialist_to_call === deps.dreamExplainerSpecialist &&
       String(decision1.current_step || "") === deps.dreamStepId &&
       !isTrueFlag(specialistResult.is_offtopic) &&
-      !(readCompareRuntime(specialistResult)?.status === "pending") &&
+      !hasRenderablePendingCompareState(readCompareRuntime(specialistResult)) &&
       String(specialistResult.action || "").trim() === "ASK" &&
       !String(specialistResult.refined_formulation || "").trim()
     ) {
@@ -1178,7 +1171,7 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
       String(decision1.current_step || "") === deps.dreamStepId &&
       !isTrueFlag(specialistResult.is_offtopic) &&
       !dreamBuilderOverlapRepairApplied &&
-      !(readCompareRuntime(specialistResult)?.status === "pending") &&
+      !hasRenderablePendingCompareState(readCompareRuntime(specialistResult)) &&
       String(specialistResult.action || "").trim() === "REFINE" &&
       String(specialistResult.refined_formulation || "").trim()
     ) {
@@ -1501,7 +1494,7 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
       decision1.specialist_to_call === deps.dreamExplainerSpecialist &&
       String(decision1.current_step || "") === deps.dreamStepId &&
       !isTrueFlag(specialistResult.is_offtopic) &&
-      String((specialistResult as Record<string, unknown>).__dream_builder_compare_pending || "").trim() !== "true" &&
+      !readDreamBuilderCompareRuntime(specialistResult) &&
       String((nextState as Record<string, unknown>).dream_awaiting_direction ?? "").trim() !== "true"
     ) {
       const canonicalDreamBuilderStatements = readStringArray((nextState as Record<string, unknown>).dream_builder_statements);
@@ -1649,7 +1642,6 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
     actionCodesOverride = initialRender.value.actionCodes;
     renderedActionsOverride = initialRender.value.renderedActions;
     contractMetaOverride = initialRender.value.contractMeta;
-    let requireComparePick = false;
 
     const isDreamExplainerOfftopicTurn =
       String(asStateRecord(nextState).current_step || "") === deps.dreamStepId &&
@@ -1726,7 +1718,7 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
       eligibleForCompareTurn &&
       !isCurrentTurnOfftopic &&
       !skipCompareForTurn &&
-      !(readCompareRuntime(specialistResult)?.status === "pending")
+      !hasRenderablePendingCompareState(readCompareRuntime(specialistResult))
     ) {
       const acceptedOutputUserTurnClassification =
         !forcePendingCompare &&
@@ -1765,9 +1757,8 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
       });
     }
     if (dreamBuilderFlowActiveForCompare) {
-      specialistResult = clearDreamBuilderLegacyCompareFields(asRecord(specialistResult));
+      specialistResult = clearDreamBuilderCompareState(asRecord(specialistResult));
       compareOverride = null;
-      requireComparePick = false;
     }
     asStateRecord(nextState).last_specialist_result = attachCompareRuntime(specialistResult);
     if (
@@ -1800,20 +1791,15 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
           stepIdHint: String(asStateRecord(nextState).current_step || ""),
         });
         compareOverride = pendingChoice;
-        requireComparePick = true;
         actionCodesOverride = [];
         renderedActionsOverride = [];
-      } else if (readCompareRuntime(specialistResult)?.status === "pending") {
-        const presentation = String(readCompareRuntime(specialistResult)?.presentation || "").trim();
-        if (presentation !== "canonical") {
-          specialistResult = clearPendingCompareFields(asRecord(specialistResult));
-        }
+      } else if (readCompareRuntime(specialistResult)) {
+        specialistResult = clearPendingCompareFields(asRecord(specialistResult));
       }
     } else if (dreamBuilderFlowActiveForCompare) {
-      specialistResult = clearDreamBuilderLegacyCompareFields(asRecord(specialistResult));
+      specialistResult = clearDreamBuilderCompareState(asRecord(specialistResult));
       compareOverride = null;
-      requireComparePick = false;
-    } else if (readCompareRuntime(specialistResult)?.status === "pending") {
+    } else if (readCompareRuntime(specialistResult)) {
       specialistResult = clearPendingCompareFields(asRecord(specialistResult));
     }
 
@@ -1825,11 +1811,10 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
       canonicalStatementCount: canonicalDreamBuilderStatementsCount,
       comparePending:
         dreamBuilderFlowActiveForCompare
-          ? String((specialistResult as Record<string, unknown>).__dream_builder_compare_pending || "").trim() === "true"
+          ? Boolean(readDreamBuilderCompareRuntime(specialistResult))
           : (
-            requireComparePick ||
             Boolean(compareOverride?.enabled) ||
-            readCompareRuntime(specialistResult as Record<string, unknown>)?.status === "pending"
+            hasRenderablePendingCompareState(readCompareRuntime(specialistResult as Record<string, unknown>))
           ),
       state: nextState,
     });
@@ -1864,15 +1849,10 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
       asStateRecord(nextState).intro_shown_session = "true";
     }
 
-    const mergedFlags = {
-      ...(params.responseUiFlags || {}),
-      ...(requireComparePick ? { require_compare_pick: true } : {}),
-    };
-
     return deps.turnResponseEngine.attachAndFinalize({
       state: nextState,
       specialist: specialistResult,
-      responseUiFlags: mergedFlags,
+      responseUiFlags: params.responseUiFlags || {},
       actionCodesOverride,
       renderedActionsOverride,
       compareOverride,

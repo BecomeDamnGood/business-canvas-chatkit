@@ -13,11 +13,6 @@ export const STEP_REGISTRY_ORDER = [
 ] as const;
 
 export type StepRegistryStepId = (typeof STEP_REGISTRY_ORDER)[number];
-export type StepRegistryStepKind = "bootstrap" | "single_value" | "list_value" | "presentation";
-export type StepRegistryListSemantics = "none" | "grouped_compare";
-export type StepRegistryCompareFamily = "none" | "single_value" | "grouped_list";
-export type StepRegistrySupportFamily = "none" | "interactive_step";
-export type StepRegistryPresentationMode = "bootstrap" | "interactive" | "presentation";
 export type StepRegistrySectionTitleMode = "plain_key" | "business_name_template" | "presentation_key";
 export type StepRegistryChooseForMeMode = "suggestions" | "examples";
 export type StepRegistryChooseForMeItemKind = "sentence" | "phrase" | "multiline_list";
@@ -28,6 +23,12 @@ export type StepRegistryChooseForMeField =
   | "role"
   | "entity"
   | "strategy";
+export type StepRegistryUiMode =
+  | "no_feedback"
+  | "text_compare"
+  | "list_compare"
+  | "dream_builder"
+  | "terminal";
 
 export type StepRegistryChooseForMe = {
   routeToken: string;
@@ -50,11 +51,7 @@ export type StepRegistryEntry = {
   sectionTitleWithoutBusinessKey: string;
   finalField: string;
   specialistId: string;
-  stepKind: StepRegistryStepKind;
-  listSemantics: StepRegistryListSemantics;
-  compareFamily: StepRegistryCompareFamily;
-  supportFamily: StepRegistrySupportFamily;
-  presentationMode: StepRegistryPresentationMode;
+  uiMode: StepRegistryUiMode;
   chooseForMe: StepRegistryChooseForMe | null;
 };
 
@@ -74,11 +71,7 @@ export const STEP_REGISTRY_BY_STEP_ID = {
     sectionTitleWithoutBusinessKey: "",
     finalField: "step_0_final",
     specialistId: "ValidationAndBusinessName",
-    stepKind: "bootstrap",
-    listSemantics: "none",
-    compareFamily: "none",
-    supportFamily: "none",
-    presentationMode: "bootstrap",
+    uiMode: "no_feedback",
     chooseForMe: null,
   },
   dream: {
@@ -92,16 +85,12 @@ export const STEP_REGISTRY_BY_STEP_ID = {
     sectionTitleWithoutBusinessKey: "",
     finalField: "dream_final",
     specialistId: "Dream",
-    stepKind: "single_value",
-    listSemantics: "none",
-    compareFamily: "single_value",
-    supportFamily: "interactive_step",
-    presentationMode: "interactive",
+    uiMode: "text_compare",
     chooseForMe: {
       routeToken: "__ROUTE__DREAM_PICK_ONE__",
       menuId: "DREAM_MENU_SUGGESTIONS",
       actionCode: "ACTION_DREAM_SUGGESTIONS_PICK_ONE",
-      nextMenuId: "DREAM_MENU_REFINE",
+      nextMenuId: "DREAM_MENU_CONFIRM_SINGLE",
       mode: "suggestions",
       itemKind: "sentence",
       field: "dream",
@@ -118,11 +107,7 @@ export const STEP_REGISTRY_BY_STEP_ID = {
     sectionTitleWithoutBusinessKey: "sectionTitle.purposeOfFuture",
     finalField: "purpose_final",
     specialistId: "Purpose",
-    stepKind: "single_value",
-    listSemantics: "none",
-    compareFamily: "single_value",
-    supportFamily: "interactive_step",
-    presentationMode: "interactive",
+    uiMode: "text_compare",
     chooseForMe: {
       routeToken: "__ROUTE__PURPOSE_CHOOSE_FOR_ME__",
       menuId: "PURPOSE_MENU_EXAMPLES",
@@ -144,11 +129,7 @@ export const STEP_REGISTRY_BY_STEP_ID = {
     sectionTitleWithoutBusinessKey: "sectionTitle.bigwhyOfFuture",
     finalField: "bigwhy_final",
     specialistId: "BigWhy",
-    stepKind: "single_value",
-    listSemantics: "none",
-    compareFamily: "single_value",
-    supportFamily: "interactive_step",
-    presentationMode: "interactive",
+    uiMode: "text_compare",
     chooseForMe: {
       routeToken: "__ROUTE__BIGWHY_CHOOSE_FOR_ME__",
       menuId: "BIGWHY_MENU_FROM_GIVE",
@@ -170,11 +151,7 @@ export const STEP_REGISTRY_BY_STEP_ID = {
     sectionTitleWithoutBusinessKey: "sectionTitle.roleOfFuture",
     finalField: "role_final",
     specialistId: "Role",
-    stepKind: "single_value",
-    listSemantics: "none",
-    compareFamily: "single_value",
-    supportFamily: "interactive_step",
-    presentationMode: "interactive",
+    uiMode: "text_compare",
     chooseForMe: {
       routeToken: "__ROUTE__ROLE_CHOOSE_FOR_ME__",
       menuId: "ROLE_MENU_EXAMPLES",
@@ -196,11 +173,7 @@ export const STEP_REGISTRY_BY_STEP_ID = {
     sectionTitleWithoutBusinessKey: "sectionTitle.entityOfFuture",
     finalField: "entity_final",
     specialistId: "Entity",
-    stepKind: "single_value",
-    listSemantics: "none",
-    compareFamily: "single_value",
-    supportFamily: "interactive_step",
-    presentationMode: "interactive",
+    uiMode: "text_compare",
     chooseForMe: {
       routeToken: "__ROUTE__ENTITY_CHOOSE_FOR_ME__",
       menuId: "ENTITY_MENU_SUGGESTIONS",
@@ -222,11 +195,7 @@ export const STEP_REGISTRY_BY_STEP_ID = {
     sectionTitleWithoutBusinessKey: "sectionTitle.strategyOfFuture",
     finalField: "strategy_final",
     specialistId: "Strategy",
-    stepKind: "list_value",
-    listSemantics: "grouped_compare",
-    compareFamily: "grouped_list",
-    supportFamily: "interactive_step",
-    presentationMode: "interactive",
+    uiMode: "list_compare",
     chooseForMe: {
       routeToken: "__ROUTE__STRATEGY_CHOOSE_FOR_ME__",
       menuId: "STRATEGY_MENU_EXAMPLES",
@@ -248,11 +217,7 @@ export const STEP_REGISTRY_BY_STEP_ID = {
     sectionTitleWithoutBusinessKey: "sectionTitle.targetgroupOfFuture",
     finalField: "targetgroup_final",
     specialistId: "TargetGroup",
-    stepKind: "single_value",
-    listSemantics: "none",
-    compareFamily: "single_value",
-    supportFamily: "interactive_step",
-    presentationMode: "interactive",
+    uiMode: "text_compare",
     chooseForMe: null,
   },
   productsservices: {
@@ -266,11 +231,7 @@ export const STEP_REGISTRY_BY_STEP_ID = {
     sectionTitleWithoutBusinessKey: "sectionTitle.productsservicesOfFuture",
     finalField: "productsservices_final",
     specialistId: "ProductsServices",
-    stepKind: "list_value",
-    listSemantics: "grouped_compare",
-    compareFamily: "grouped_list",
-    supportFamily: "interactive_step",
-    presentationMode: "interactive",
+    uiMode: "list_compare",
     chooseForMe: null,
   },
   rulesofthegame: {
@@ -284,11 +245,7 @@ export const STEP_REGISTRY_BY_STEP_ID = {
     sectionTitleWithoutBusinessKey: "sectionTitle.rulesofthegameOfFuture",
     finalField: "rulesofthegame_final",
     specialistId: "RulesOfTheGame",
-    stepKind: "list_value",
-    listSemantics: "grouped_compare",
-    compareFamily: "grouped_list",
-    supportFamily: "interactive_step",
-    presentationMode: "interactive",
+    uiMode: "list_compare",
     chooseForMe: null,
   },
   presentation: {
@@ -302,11 +259,7 @@ export const STEP_REGISTRY_BY_STEP_ID = {
     sectionTitleWithoutBusinessKey: "",
     finalField: "presentation_brief_final",
     specialistId: "Presentation",
-    stepKind: "presentation",
-    listSemantics: "none",
-    compareFamily: "none",
-    supportFamily: "none",
-    presentationMode: "presentation",
+    uiMode: "terminal",
     chooseForMe: null,
   },
 } as const satisfies Record<StepRegistryStepId, StepRegistryEntry>;
@@ -379,28 +332,28 @@ export function getChooseForMeRegistryEntryForMenu(
 }
 
 export function isSingleValueStep(stepId: string): boolean {
-  return getStepRegistryEntry(stepId)?.stepKind === "single_value";
+  return getStepRegistryEntry(stepId)?.uiMode === "text_compare";
 }
 
 export function isSingleValueCompareStep(stepId: string): boolean {
-  return getStepRegistryEntry(stepId)?.compareFamily === "single_value";
+  return getStepRegistryEntry(stepId)?.uiMode === "text_compare";
 }
 
 export function isGroupedListCompareStep(stepId: string): boolean {
-  return getStepRegistryEntry(stepId)?.compareFamily === "grouped_list";
+  return getStepRegistryEntry(stepId)?.uiMode === "list_compare";
 }
 
 export function hasGroupedCompareListSemantics(stepId: string): boolean {
-  return getStepRegistryEntry(stepId)?.listSemantics === "grouped_compare";
+  return getStepRegistryEntry(stepId)?.uiMode === "list_compare";
 }
 
 export function isInteractiveSupportStep(stepId: string): boolean {
-  return getStepRegistryEntry(stepId)?.supportFamily === "interactive_step";
+  const uiMode = getStepRegistryEntry(stepId)?.uiMode;
+  return uiMode === "text_compare" || uiMode === "list_compare";
 }
 
 export function supportsAutoSuggest(stepId: string): boolean {
   const entry = getStepRegistryEntry(stepId);
   if (!entry) return false;
-  if (entry.presentationMode !== "interactive") return false;
-  return entry.stepKind === "single_value" || entry.stepKind === "list_value";
+  return entry.uiMode === "text_compare" || entry.uiMode === "list_compare";
 }

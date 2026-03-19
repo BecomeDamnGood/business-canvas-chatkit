@@ -49,7 +49,7 @@ test("shouldTreatAsStepContributingInput ignores process navigation utterances",
   );
 });
 
-test("resolvePendingCompareIntent resolves semantic intent and anchor against pending suggestion context", () => {
+test("resolvePendingCompareIntent resolves semantic intent and anchor against pending compare suggestion context", () => {
   const context = {
     pendingSuggestion: "Technische mkb-bedrijven met complexe productontwikkeling.",
     pendingUserInput: "Alle bedrijven met complexe producten.",

@@ -6,6 +6,7 @@ import {
   evaluateRulesRuntimeGate,
   RULESOFTHEGAME_MAX_RULES,
 } from "./rulesofthegame_runtime_policy.js";
+import { readCompareRuntime } from "../handlers/compare_runtime.js";
 
 test("rules runtime gate blocks confirm when accepted list has fewer than 3 rules", () => {
   const gate = evaluateRulesRuntimeGate({
@@ -40,9 +41,10 @@ test("rules runtime policy enforces explicit choice when list exceeds maximum", 
   });
 
   assert.equal(result.requiresChoice, true);
-  assert.equal(String(result.specialist.compare_pending || ""), "true");
-  assert.equal(Array.isArray(result.specialist.compare_suggestion_items), true);
-  assert.equal((result.specialist.compare_suggestion_items as string[]).length <= RULESOFTHEGAME_MAX_RULES, true);
+  const compareState = readCompareRuntime(result.specialist);
+  assert.equal(String(compareState?.status || ""), "pending");
+  assert.equal(Array.isArray(compareState?.suggestion_items), true);
+  assert.equal((compareState?.suggestion_items || []).length <= RULESOFTHEGAME_MAX_RULES, true);
 });
 
 test("rules runtime policy enforces internal suggestion for external phrasing", () => {
@@ -59,8 +61,6 @@ test("rules runtime policy enforces internal suggestion for external phrasing", 
   });
 
   assert.equal(result.requiresChoice, true);
-  const suggestions = Array.isArray(result.specialist.compare_suggestion_items)
-    ? (result.specialist.compare_suggestion_items as string[])
-    : [];
+  const suggestions = readCompareRuntime(result.specialist)?.suggestion_items || [];
   assert.equal(suggestions.some((line) => /prijsafspraken|pricing rules/i.test(String(line || ""))), true);
 });

@@ -28,6 +28,18 @@ export type BuildCanonicalWidgetStateResult = {
   variant?: string;
 };
 
+function normalizeViewVariant(raw: unknown): string {
+  const variant = String(raw || "").trim().toLowerCase();
+  if (
+    variant === "dream_builder_collect" ||
+    variant === "dream_builder_refine" ||
+    variant === "dream_builder_scoring"
+  ) {
+    return variant;
+  }
+  return "";
+}
+
 function normalizeStep0InteractionState(
   raw: unknown,
   currentStepId: string,
@@ -57,7 +69,7 @@ export function buildCanonicalWidgetState(
   const started = input.started === true;
   const hasRenderableContent = input.hasRenderableContent === true;
   const hasStartAction = input.hasStartAction === true;
-  const variant = String(input.variant || "").trim();
+  const variant = normalizeViewVariant(input.variant);
   const interactionState = normalizeStep0InteractionState(
     input.step0InteractionState,
     currentStepId,

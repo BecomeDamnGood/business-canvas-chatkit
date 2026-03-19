@@ -4,7 +4,12 @@ import type {
   TurnPolicyRenderResult,
 } from "../core/turn_policy_renderer.js";
 import { evaluateRulesRuntimeGate } from "../steps/rulesofthegame_runtime_policy.js";
-import { attachCompareRuntime, patchCompareRuntime, readCompareRuntime } from "./compare_runtime.js";
+import {
+  attachCompareRuntime,
+  hasRenderablePendingCompareState,
+  patchCompareRuntime,
+  readCompareRuntime,
+} from "./compare_runtime.js";
 
 type ActioncodeRegistryEntry = {
   route?: string;
@@ -189,12 +194,12 @@ export function createRunStepRuntimeSemanticHelpers(deps: CreateRunStepRuntimeSe
     if (stepId === deps.dreamStepId && state) {
       const dreamMode = deps.getDreamRuntimeMode(state);
       if (dreamMode === "builder_collect") {
-        if (menuId !== deps.dreamExplainerSwitchSelfMenuId) return "dream_builder_collect_menu_mismatch";
-        if (actionCodes.length !== 1 || actionCodes[0] !== "ACTION_DREAM_SWITCH_TO_SELF") {
+        if (menuId) return "dream_builder_collect_menu_mismatch";
+        if (actionCodes.length > 0) {
           return "dream_builder_collect_action_mismatch";
         }
       }
-      if (dreamMode === "builder_refine" && menuId !== deps.dreamExplainerRefineMenuId) {
+      if (dreamMode === "builder_refine" && menuId) {
         return "dream_builder_refine_menu_mismatch";
       }
       if (dreamMode === "builder_scoring" && actionCodes.length > 0) {
@@ -240,7 +245,7 @@ export function createRunStepRuntimeSemanticHelpers(deps: CreateRunStepRuntimeSe
       return "confirm_present_without_accepted_evidence";
     }
     if (stepId === "rulesofthegame" && state && hasConfirmAction) {
-      const comparePending = readCompareRuntime(specialist)?.status === "pending";
+      const comparePending = hasRenderablePendingCompareState(readCompareRuntime(specialist));
       const acceptedOutput = hasAcceptedOutputEvidence(state, stepId);
       const acceptedValue = acceptedValueForStep(state, stepId);
       const visibleValue =
@@ -267,7 +272,8 @@ export function createRunStepRuntimeSemanticHelpers(deps: CreateRunStepRuntimeSe
       }
     }
     const compareState = readCompareRuntime(specialist);
-    if (compareState?.status === "pending") {
+    if (hasRenderablePendingCompareState(compareState)) {
+      if (!compareState) return "compare_requires_instruction_or_context";
       const hasCompareContext =
         Boolean(String((specialist as Record<string, unknown>).message || "").trim()) ||
         Boolean(question) ||

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import { createRunStepStateUpdateHelpers } from "./run_step_state_update.js";
 import { parseListItems } from "./run_step_compare_heuristics.js";
+import { createDreamBuilderCompareRuntimeState } from "./dream_builder_compare_runtime.js";
 import { applyDreamRuntimePolicy } from "../steps/dream_runtime_policy.js";
 
 function buildHelpers() {
@@ -439,17 +440,19 @@ test("applyPostSpecialistStateMutations keeps committed Dream Builder statements
     decision: { current_step: "dream", specialist_to_call: "DreamExplainer" } as any,
     specialistResult: {
       action: "REFINE",
-      __dream_builder_compare_pending: "true",
+      dream_builder_compare_runtime: createDreamBuilderCompareRuntimeState({
+        kind: "batch_rewrite_compare",
+        current_items: [
+          "Bedrijven weerspiegelen steeds vaker de waarden en identiteit van hun oprichters.",
+          "De waarden en identiteit van oprichters worden beter zichtbaar voor de buitenwereld.",
+        ],
+        suggested_items: [
+          "Bedrijven weerspiegelen steeds vaker zichtbaarder de waarden en identiteit van hun oprichters.",
+        ],
+      }),
       statements: [
         ...existingStatements,
         "De waarden en identiteit van oprichters worden beter zichtbaar voor de buitenwereld.",
-      ],
-      __dream_builder_compare_current_items: [
-        "Bedrijven weerspiegelen steeds vaker de waarden en identiteit van hun oprichters.",
-        "De waarden en identiteit van oprichters worden beter zichtbaar voor de buitenwereld.",
-      ],
-      __dream_builder_compare_suggested_items: [
-        "Bedrijven weerspiegelen steeds vaker zichtbaarder de waarden en identiteit van hun oprichters.",
       ],
     } as any,
     showSessionIntroUsed: "false",

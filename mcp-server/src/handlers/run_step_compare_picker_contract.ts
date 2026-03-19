@@ -1,6 +1,7 @@
 import { isSingleValueCompareStep } from "../steps/step_registry.js";
 import {
   attachCompareRuntime,
+  hasRenderablePendingCompareState,
   readCompareRuntime,
 } from "./compare_runtime.js";
 
@@ -12,12 +13,7 @@ export function resolvePendingCompareStepId(
   specialist: Record<string, unknown> | null | undefined,
   stepIdHint = ""
 ): string {
-  const compare = readCompareRuntime(specialist);
-  return String(stepIdHint || compare?.target_field || "").trim();
-}
-
-export function isPickerPresentation(presentationRaw: unknown): boolean {
-  return String(presentationRaw || "").trim() !== "canonical";
+  return String(stepIdHint || "").trim();
 }
 
 export function isSingleValueTextPickerStep(stepId: string, modeRaw: unknown): boolean {
@@ -29,9 +25,9 @@ export function isSingleValueTextPickerState(params: {
   stepIdHint?: string;
 }): boolean {
   const compare = readCompareRuntime(params.specialist);
-  if (compare?.status !== "pending") return false;
-  if (!isPickerPresentation(compare.presentation)) return false;
-  const stepId = String(params.stepIdHint || compare.target_field || "").trim();
+  if (!hasRenderablePendingCompareState(compare)) return false;
+  if (!compare) return false;
+  const stepId = String(params.stepIdHint || "").trim();
   return isSingleValueTextPickerStep(stepId, compare.mode);
 }
 
@@ -43,10 +39,7 @@ export function normalizePendingPickerSpecialistContract(params: {
     ? ({ ...(params.specialist as Record<string, unknown>) })
     : {};
   const compare = readCompareRuntime(specialist);
-  if (
-    compare?.status !== "pending" ||
-    !isPickerPresentation(compare.presentation)
-  ) {
+  if (!hasRenderablePendingCompareState(compare)) {
     return attachCompareRuntime(specialist);
   }
 

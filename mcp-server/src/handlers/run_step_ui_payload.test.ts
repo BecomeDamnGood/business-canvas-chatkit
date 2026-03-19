@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { createCompareRuntimeState } from "./compare_runtime.js";
+import { createDreamBuilderCompareRuntimeState } from "./dream_builder_compare_runtime.js";
 import { createRunStepUiPayloadHelpers } from "./run_step_ui_payload.js";
 
 function compareRuntime(overrides: Record<string, unknown>) {
@@ -84,7 +85,7 @@ test("attachRegistryPayload marks short canonical dream-builder coaching text as
       } as any,
     },
     {
-      ui_contract_id: "dream:ASK:DREAM_MENU_REFINE:v1",
+      ui_contract_id: "dream:ASK:DREAM_MENU_CONFIRM_SINGLE:v1",
       suggest_dreambuilder: "false",
       __canonical_text: "Dat is een goed beginpunt.",
       message: "Dat is een goed beginpunt.",
@@ -217,21 +218,22 @@ test("attachRegistryPayload emits explicit Dream Builder compare ownership contr
     {
       ui_contract_id: "dream:incomplete_output:DREAM_EXPLAINER_MENU_SWITCH_SELF:v1",
       suggest_dreambuilder: "true",
-      __dream_builder_compare_pending: "true",
-      __dream_builder_compare_kind: "overlap_merge_compare",
-      __dream_builder_compare_rationale: "Dream Builder zoekt naar bredere maatschappelijke verschuivingen.",
-      __dream_builder_compare_current_label: "Keep both statements",
-      __dream_builder_compare_suggested_label: "Merge into one statement",
-      __dream_builder_compare_current_items: [
-        "I want my work to make a positive difference in people's lives.",
-      ],
-      __dream_builder_compare_suggested_items: [
-        "Over 5 tot 10 jaar zal positieve impact op het leven van anderen belangrijker worden.",
-      ],
-      __dream_builder_compare_instruction: "Choose the version that fits best.",
-      __dream_builder_compare_segments: [{ kind: "unit", unit_id: "unit_1" }],
+      dream_builder_compare_runtime: createDreamBuilderCompareRuntimeState({
+        kind: "overlap_merge_compare",
+        rationale: "Dream Builder zoekt naar bredere maatschappelijke verschuivingen.",
+        current_label: "Keep both statements",
+        suggested_label: "Merge into one statement",
+        current_items: [
+          "I want my work to make a positive difference in people's lives.",
+        ],
+        suggested_items: [
+          "Over 5 tot 10 jaar zal positieve impact op het leven van anderen belangrijker worden.",
+        ],
+        instruction: "Choose the version that fits best.",
+        segments: [{ kind: "unit", unit_id: "unit_1" }],
+      }),
     },
-    { require_compare_pick: true },
+    null,
     [],
     [],
     {
@@ -306,7 +308,7 @@ test("attachRegistryPayload forwards structured single-value content into ui.con
   });
 });
 
-test("attachRegistryPayload never emits legacy compare payloads for Dream Builder when the contract is present", () => {
+test("attachRegistryPayload never emits ordinary compare payloads for Dream Builder when the contract is present", () => {
   const helpers = buildHelpers();
   const payload = helpers.attachRegistryPayload(
     {
@@ -330,15 +332,16 @@ test("attachRegistryPayload never emits legacy compare payloads for Dream Builde
         presentation: "picker",
         variant: "grouped_list_units",
       }),
-      __dream_builder_compare_pending: "true",
-      __dream_builder_compare_kind: "batch_rewrite_compare",
-      __dream_builder_compare_rationale: "Dream Builder zoekt naar bredere maatschappelijke verschuivingen.",
-      __dream_builder_compare_current_items: ["I want to help people solve a problem they truly care about."],
-      __dream_builder_compare_suggested_items: ["Over 5 tot 10 jaar zoeken mensen steeds meer naar oplossingen die voor hen echt betekenisvol zijn."],
-      __dream_builder_compare_instruction: "Choose the version that fits best.",
-      __dream_builder_compare_segments: [{ kind: "retained", items: ["Statement 1", "Statement 2"] }],
+      dream_builder_compare_runtime: createDreamBuilderCompareRuntimeState({
+        kind: "batch_rewrite_compare",
+        rationale: "Dream Builder zoekt naar bredere maatschappelijke verschuivingen.",
+        current_items: ["I want to help people solve a problem they truly care about."],
+        suggested_items: ["Over 5 tot 10 jaar zoeken mensen steeds meer naar oplossingen die voor hen echt betekenisvol zijn."],
+        instruction: "Choose the version that fits best.",
+        segments: [{ kind: "retained", items: ["Statement 1", "Statement 2"] }],
+      }),
     },
-    { require_compare_pick: true },
+    null,
     [],
     [],
     {
@@ -356,7 +359,6 @@ test("attachRegistryPayload never emits legacy compare payloads for Dream Builde
   assert.equal(payload.ui?.view?.variant, "dream_builder_collect");
   assert.ok(payload.ui?.dream_builder_contract);
   assert.equal("compare" in (payload.ui || {}), false);
-  assert.equal(payload.ui?.flags?.require_compare_pick, true);
 });
 
 test("attachRegistryPayload does not publish Dream Builder contract in self mode just because resume statements exist", () => {
@@ -492,7 +494,7 @@ test("attachRegistryPayload does not synthesize public compare contracts from co
         suggestion_items: ["Voorstel A"],
       }),
     },
-    { require_compare_pick: true },
+    null,
     [],
     [],
     {
@@ -531,26 +533,27 @@ test("attachRegistryPayload preserves compare rationale and retained items from 
     },
     {
       ui_contract_id: "dream:incomplete_output:DREAM_EXPLAINER_MENU_SWITCH_SELF:v1",
-      __dream_builder_compare_pending: "true",
-      __dream_builder_compare_kind: "batch_rewrite_compare",
-      __dream_builder_compare_rationale: "Dream Builder vraagt hier om een bredere maatschappelijke verschuiving.",
-      __dream_builder_compare_current_label: "Jouw compacte formulering",
-      __dream_builder_compare_suggested_label: "Mijn suggestie",
-      __dream_builder_compare_retained_heading: "Deze punten blijven al in de definitieve lijst:",
-      __dream_builder_compare_current_items: ["I want to help people solve a problem they truly care about."],
-      __dream_builder_compare_suggested_items: [
-        "Over 5 tot 10 jaar zullen meer mensen hulp zoeken voor problemen die er echt toe doen.",
-      ],
-      __dream_builder_compare_instruction: "Kies de versie die het beste past bij het resterende verschil.",
-      __dream_builder_compare_segments: [
-        {
-          kind: "retained",
-          items: ["Eerder punt 1", "Eerder punt 2"],
-        },
-        { kind: "unit", unit_id: "unit_1" },
-      ],
+      dream_builder_compare_runtime: createDreamBuilderCompareRuntimeState({
+        kind: "batch_rewrite_compare",
+        rationale: "Dream Builder vraagt hier om een bredere maatschappelijke verschuiving.",
+        current_label: "Jouw compacte formulering",
+        suggested_label: "Mijn suggestie",
+        retained_heading: "Deze punten blijven al in de definitieve lijst:",
+        current_items: ["I want to help people solve a problem they truly care about."],
+        suggested_items: [
+          "Over 5 tot 10 jaar zullen meer mensen hulp zoeken voor problemen die er echt toe doen.",
+        ],
+        instruction: "Kies de versie die het beste past bij het resterende verschil.",
+        segments: [
+          {
+            kind: "retained",
+            items: ["Eerder punt 1", "Eerder punt 2"],
+          },
+          { kind: "unit", unit_id: "unit_1" },
+        ],
+      }),
     },
-    { require_compare_pick: true },
+    null,
     [],
     [],
     {
@@ -618,31 +621,32 @@ test("attachRegistryPayload does not duplicate committed Dream Builder statement
     },
     {
       ui_contract_id: "dream:incomplete_output:DREAM_EXPLAINER_MENU_SWITCH_SELF:v1",
-      __dream_builder_compare_pending: "true",
-      __dream_builder_compare_kind: "batch_rewrite_compare",
-      __dream_builder_compare_rationale: "Dream Builder vraagt hier om een bredere maatschappelijke verschuiving.",
-      __dream_builder_compare_current_label: "Dit is jouw input",
-      __dream_builder_compare_suggested_label: "Dit zou mijn suggestie zijn",
-      __dream_builder_compare_retained_heading: "Deze punten blijven al in de definitieve lijst:",
-      __dream_builder_compare_current_items: [
-        "I want to help people solve a problem they truly care about.",
-      ],
-      __dream_builder_compare_suggested_items: [
-        "Over 5 tot 10 jaar zullen meer mensen problemen willen oplossen die er echt toe doen.",
-      ],
-      __dream_builder_compare_instruction: "Kies de versie die het beste past.",
-      __dream_builder_compare_segments: [
-        {
-          kind: "retained",
-          items: [
-            "Over 5 tot 10 jaar zullen meer mensen streven naar werk dat een positieve impact heeft op het leven van anderen.",
-            "De samenleving zal meer waarde hechten aan initiatieven die generaties overstijgen en blijvende betekenis hebben.",
-          ],
-        },
-        { kind: "unit", unit_id: "unit_1" },
-      ],
+      dream_builder_compare_runtime: createDreamBuilderCompareRuntimeState({
+        kind: "batch_rewrite_compare",
+        rationale: "Dream Builder vraagt hier om een bredere maatschappelijke verschuiving.",
+        current_label: "Dit is jouw input",
+        suggested_label: "Dit zou mijn suggestie zijn",
+        retained_heading: "Deze punten blijven al in de definitieve lijst:",
+        current_items: [
+          "I want to help people solve a problem they truly care about.",
+        ],
+        suggested_items: [
+          "Over 5 tot 10 jaar zullen meer mensen problemen willen oplossen die er echt toe doen.",
+        ],
+        instruction: "Kies de versie die het beste past.",
+        segments: [
+          {
+            kind: "retained",
+            items: [
+              "Over 5 tot 10 jaar zullen meer mensen streven naar werk dat een positieve impact heeft op het leven van anderen.",
+              "De samenleving zal meer waarde hechten aan initiatieven die generaties overstijgen en blijvende betekenis hebben.",
+            ],
+          },
+          { kind: "unit", unit_id: "unit_1" },
+        ],
+      }),
     },
-    { require_compare_pick: true }
+    null
   );
 
   assert.deepEqual(payload.ui?.dream_builder_contract, {
@@ -691,7 +695,7 @@ test("attachRegistryPayload keeps Dream single-value ui.content when stale canon
       } as any,
     },
     {
-      ui_contract_id: "dream:ASK:DREAM_MENU_REFINE:v1",
+      ui_contract_id: "dream:ASK:DREAM_MENU_CONFIRM_SINGLE:v1",
       compare_runtime: compareRuntime({
         kind: "text_compare",
         mode: "text",
@@ -707,12 +711,13 @@ test("attachRegistryPayload keeps Dream single-value ui.content when stale canon
         canonical_text: canonical,
       },
     },
-    { require_compare_pick: true },
+    null,
     [],
     [],
     {
       enabled: true,
       mode: "text",
+      feedback_reason_text: "Deze versie maakt de droom concreter en wereldgerichter.",
       user_text: "Wij willen bedrijven helpen groeien.",
       suggestion_text: canonical,
       user_items: [],
@@ -731,7 +736,7 @@ test("attachRegistryPayload keeps Dream single-value ui.content when stale canon
   assert.equal("compare" in (payload.ui || {}), false);
 });
 
-test("attachRegistryPayload suppresses Dream single-value ui.content for active compare picker state without publishing compare UI", () => {
+test("attachRegistryPayload keeps Dream single-value ui.content available while active compare stays server-owned", () => {
   const helpers = buildHelpers();
   const canonical = "Mindd droomt van een wereld waarin keuzes rust geven.";
   const payload = helpers.attachRegistryPayload(
@@ -745,7 +750,7 @@ test("attachRegistryPayload suppresses Dream single-value ui.content for active 
       } as any,
     },
     {
-      ui_contract_id: "dream:ASK:DREAM_MENU_REFINE:v1",
+      ui_contract_id: "dream:ASK:DREAM_MENU_CONFIRM_SINGLE:v1",
       compare_runtime: compareRuntime({
         kind: "text_compare",
         mode: "text",
@@ -761,12 +766,13 @@ test("attachRegistryPayload suppresses Dream single-value ui.content for active 
         canonical_text: canonical,
       },
     },
-    { require_compare_pick: true },
+    null,
     [],
     [],
     {
       enabled: true,
       mode: "text",
+      feedback_reason_text: "Deze versie maakt de droom concreter en wereldgerichter.",
       user_text: "Dit gaat over dat mensen het beu zijn om verkeerd voorgelicht te worden.",
       suggestion_text: canonical,
       user_items: [],
@@ -776,7 +782,11 @@ test("attachRegistryPayload suppresses Dream single-value ui.content for active 
   );
 
   assert.notEqual(payload.ui?.view?.variant, "text_compare");
-  assert.equal(payload.ui?.content, undefined);
+  assert.deepEqual(payload.ui?.content, {
+    kind: "single_value",
+    heading: "JE HUIDIGE DROOM VOOR MINDD IS",
+    canonical_text: canonical,
+  });
   assert.equal(payload.ui?.feedback_contract, undefined);
   assert.equal("compare" in (payload.ui || {}), false);
 });
@@ -796,7 +806,7 @@ test("attachRegistryPayload does not publish Dream compare payloads when overrid
       } as any,
     },
     {
-      ui_contract_id: "dream:ASK:DREAM_MENU_REFINE:v1",
+      ui_contract_id: "dream:ASK:DREAM_MENU_CONFIRM_SINGLE:v1",
       compare_runtime: compareRuntime({
         kind: "text_compare",
         mode: "text",
@@ -807,7 +817,7 @@ test("attachRegistryPayload does not publish Dream compare payloads when overrid
         suggestion_text: canonical,
       }),
     },
-    { require_compare_pick: true },
+    null,
     [],
     [],
     {
@@ -852,7 +862,7 @@ test("attachRegistryPayload does not publish non-Dream compare payloads when ove
         suggestion_text: canonical,
       }),
     },
-    { require_compare_pick: true },
+    null,
     [],
     [],
     {
@@ -886,7 +896,7 @@ test("attachRegistryPayload ignores explicit single-value compare contracts that
       } as any,
     },
     {
-      ui_contract_id: "dream:ASK:DREAM_MENU_REFINE:v1",
+      ui_contract_id: "dream:ASK:DREAM_MENU_CONFIRM_SINGLE:v1",
       compare_runtime: compareRuntime({
         kind: "text_compare",
         mode: "text",
@@ -901,7 +911,7 @@ test("attachRegistryPayload ignores explicit single-value compare contracts that
         suggestion_label: "Dit zou mijn suggestie zijn",
       }),
     },
-    { require_compare_pick: true },
+    null,
     [],
     [],
     null
@@ -911,7 +921,7 @@ test("attachRegistryPayload ignores explicit single-value compare contracts that
   assert.equal(payload.ui?.feedback_contract, undefined);
 });
 
-test("attachRegistryPayload suppresses single-value ui.content while compare picker is active for non-Dream steps", () => {
+test("attachRegistryPayload keeps single-value ui.content available while non-Dream compare stays server-owned", () => {
   const helpers = buildHelpers();
   const canonical = "Mindd bestaat om complexe keuzes begrijpelijk te maken.";
   const payload = helpers.attachRegistryPayload(
@@ -941,7 +951,7 @@ test("attachRegistryPayload suppresses single-value ui.content while compare pic
         canonical_text: canonical,
       },
     },
-    { require_compare_pick: true },
+    null,
     [],
     [],
     {
@@ -956,7 +966,11 @@ test("attachRegistryPayload suppresses single-value ui.content while compare pic
   );
 
   assert.notEqual(payload.ui?.view?.variant, "text_compare");
-  assert.equal(payload.ui?.content, undefined);
+  assert.deepEqual(payload.ui?.content, {
+    kind: "single_value",
+    heading: "JE HUIDIGE BESTAANSREDEN VOOR MINDD IS",
+    canonical_text: canonical,
+  });
   assert.equal(payload.ui?.feedback_contract, undefined);
   assert.equal("compare" in (payload.ui || {}), false);
 });
@@ -987,7 +1001,7 @@ test("attachRegistryPayload omits questionText while compare picker is active", 
         suggestion_items: [canonical],
       }),
     },
-    { require_compare_pick: true },
+    null,
     [],
     [],
     {
@@ -1030,7 +1044,7 @@ test("attachRegistryPayload keeps compare feedback internal and out of the publi
         suggestion_text: canonical,
       }),
     },
-    { require_compare_pick: true },
+    null,
     [],
     [],
     {
@@ -1075,7 +1089,7 @@ test("attachRegistryPayload keeps grouped compare feedback internal and out of t
         suggestion_items: ["Operational focus"],
       }),
     },
-    { require_compare_pick: true },
+    null,
     [],
     [],
     {

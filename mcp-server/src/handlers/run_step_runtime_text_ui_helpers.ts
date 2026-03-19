@@ -1,7 +1,7 @@
 import type { RenderedAction } from "../contracts/ui_actions.js";
 import type { StepIntent } from "../contracts/intents.js";
 import type { CanvasState } from "../core/state.js";
-import { readCompareRuntime } from "./compare_runtime.js";
+import { hasRenderablePendingCompareState, readCompareRuntime } from "./compare_runtime.js";
 
 type ActioncodeRegistryEntry = {
   route?: string;
@@ -278,7 +278,7 @@ export function createRunStepRuntimeTextUiHelpers(deps: CreateRunStepRuntimeText
 
     const currentQuestion = String((specialist as Record<string, unknown>).question || "").trim();
     const currentMessage = String((specialist as Record<string, unknown>).message || "").trim();
-    const comparePending = readCompareRuntime(specialist)?.status === "pending";
+    const comparePending = hasRenderablePendingCompareState(readCompareRuntime(specialist));
     const next = { ...specialist };
     if (!currentQuestion) {
       (next as Record<string, unknown>).question = promptFallbackForInteractiveAsk(context.state, stepId);

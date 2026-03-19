@@ -90,9 +90,7 @@ function extractProof(result: Record<string, unknown>): Record<string, unknown> 
     main_card_suppressed: compareActive,
     compare_failure_reason: compareFailureReason || "",
     prompt_hidden: dreamBuilderCompareActive || shouldSuppressPromptForCompare({
-      uiViewVariant: String(view.variant || ""),
       compareActive,
-      requireComparePick: toRecord(ui.flags).require_compare_pick === true,
     }),
     pending_kind: String(pending.kind || ""),
     pending_status: String(pending.status || ""),
@@ -150,7 +148,7 @@ const fixtures: Fixture[] = [
       allowed_roles: ["compare_pick_user", "compare_pick_suggestion"],
       user_label: "This is your input:",
       suggestion_label: "This would be my suggestion:",
-      view_variant: "text_compare",
+      view_variant: "",
     },
   },
   {
@@ -398,7 +396,7 @@ const fixtures: Fixture[] = [
       },
       ui: {
         contract_id: "dream:interactive:refine",
-        view: { mode: "interactive", variant: "text_compare" },
+        view: { mode: "interactive" },
       },
     },
     expected: {

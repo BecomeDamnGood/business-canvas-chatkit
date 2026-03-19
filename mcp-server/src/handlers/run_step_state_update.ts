@@ -2,6 +2,7 @@ import { normalizeDreamBuilderStatements, type BoolString, type CanvasState, typ
 import type { OrchestratorOutput } from "../core/orchestrator.js";
 import { canonicalPresentationRecapForState } from "./run_step_presentation_recap.js";
 import { attachCompareRuntime } from "./compare_runtime.js";
+import { readDreamBuilderCompareRuntime } from "./dream_builder_compare_runtime.js";
 import { isValidStepValueForStorage } from "./run_step_value_shape.js";
 
 type DreamRuntimeMode = "self" | "builder_collect" | "builder_scoring" | "builder_refine";
@@ -331,8 +332,7 @@ export function createRunStepStateUpdateHelpers(deps: RunStepStateUpdateDeps) {
       decision.specialist_to_call === deps.dreamExplainerSpecialist &&
       Array.isArray(specialistResult?.statements)
     ) {
-      const hasPendingDreamBuilderCompare =
-        String((specialistResult as Record<string, unknown>).__dream_builder_compare_pending || "").trim() === "true";
+      const hasPendingDreamBuilderCompare = Boolean(readDreamBuilderCompareRuntime(specialistResult));
       const canonicalStatements = normalizeDreamBuilderStatements(specialistResult.statements);
       const previousCanonicalStatements = normalizeDreamBuilderStatements(
         Array.isArray((prevState as any)?.dream_builder_statements)
@@ -356,7 +356,7 @@ export function createRunStepStateUpdateHelpers(deps: RunStepStateUpdateDeps) {
       decision.specialist_to_call === deps.dreamExplainerSpecialist &&
       specialistResult &&
       Array.isArray(specialistResult.statements) &&
-      String((specialistResult as Record<string, unknown>).__dream_builder_compare_pending || "").trim() !== "true" &&
+      !readDreamBuilderCompareRuntime(specialistResult) &&
       specialistResult.statements.length >= 20
     ) {
       (nextState as any).dream_scoring_statements = normalizeDreamBuilderStatements(specialistResult.statements);

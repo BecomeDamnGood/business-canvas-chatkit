@@ -5,6 +5,7 @@ import {
   createRunStepRuntimeFinalizeLayer,
   createRunStepRuntimeTextHelpers,
 } from "./run_step_runtime_finalize.js";
+import { createCompareRuntimeState } from "./compare_runtime.js";
 
 function buildTextHelpers(compareSelectionMessage: (
   stepId: string,
@@ -755,7 +756,7 @@ test("buildTextForWidget removes monolithic dream summary paragraph when stateme
   ];
   const output = helpers.buildTextForWidget({
     specialist: {
-      ui_contract_id: "dream:ASK:DREAM_EXPLAINER_MENU_REFINE:v1",
+      ui_contract_id: "dream:ASK:DREAM_EXPLAINER_MENU_CONFIRM_SINGLE:v1",
       suggest_dreambuilder: "true",
       message: [
         "Ga verder met de Droom-oefening.",
@@ -786,7 +787,7 @@ test("buildTextForWidget removes duplicate dream summary paragraph using canonic
   ];
   const output = helpers.buildTextForWidget({
     specialist: {
-      ui_contract_id: "dream:ASK:DREAM_EXPLAINER_MENU_REFINE:v1",
+      ui_contract_id: "dream:ASK:DREAM_EXPLAINER_MENU_CONFIRM_SINGLE:v1",
       suggest_dreambuilder: "true",
       message: [
         "People will have more opportunities to improve their lives and feel valued for their contributions. Positive impact and meaningful work will be increasingly valued in society. Individuals will have greater freedom in how they use their time and make choices. People will take greater pride in their work and its contribution to the world. Businesses will increasingly reflect the values and identities of their founders.",
@@ -830,7 +831,7 @@ test("buildTextForWidget removes duplicate dream summary paragraph in builder ru
   ];
   const output = helpers.buildTextForWidget({
     specialist: {
-      ui_contract_id: "dream:ASK:DREAM_MENU_REFINE:v1",
+      ui_contract_id: "dream:ASK:DREAM_MENU_CONFIRM_SINGLE:v1",
       suggest_dreambuilder: "false",
       message: [
         "Ga verder met de Droom-oefening.",
@@ -866,7 +867,7 @@ test("buildTextForWidget drops dream narrative paragraph when it only repeats ca
   ];
   const output = helpers.buildTextForWidget({
     specialist: {
-      ui_contract_id: "dream:ASK:DREAM_MENU_REFINE:v1",
+      ui_contract_id: "dream:ASK:DREAM_MENU_CONFIRM_SINGLE:v1",
       suggest_dreambuilder: "false",
       message: statements.join(" "),
       refined_formulation: "",
@@ -898,7 +899,7 @@ test("buildTextForWidget drops paraphrased dream narrative summary when canonica
   ];
   const output = helpers.buildTextForWidget({
     specialist: {
-      ui_contract_id: "dream:ASK:DREAM_MENU_REFINE:v1",
+      ui_contract_id: "dream:ASK:DREAM_MENU_CONFIRM_SINGLE:v1",
       suggest_dreambuilder: "false",
       message: [
         "Mensen zullen vaker betekenis zoeken in werk dat positief doorwerkt in hun omgeving.",
@@ -936,7 +937,7 @@ test("buildTextForWidget keeps short dream-builder support sentence while droppi
   ];
   const output = helpers.buildTextForWidget({
     specialist: {
-      ui_contract_id: "dream:ASK:DREAM_MENU_REFINE:v1",
+      ui_contract_id: "dream:ASK:DREAM_MENU_CONFIRM_SINGLE:v1",
       suggest_dreambuilder: "false",
       message: [
         "Dat is een goed beginpunt.",
@@ -966,7 +967,7 @@ test("buildTextForWidget keeps recap body exclusive when refined append is suppr
   const canonical = "Mindd droomt van een wereld waarin mensen met vertrouwen complexe keuzes maken.";
   const output = helpers.buildTextForWidget({
     specialist: {
-      ui_contract_id: "dream:valid_output:DREAM_MENU_REFINE:v1",
+      ui_contract_id: "dream:valid_output:DREAM_MENU_CONFIRM_SINGLE:v1",
       wants_recap: true,
       __suppress_refined_append: "true",
       message: [
@@ -996,7 +997,7 @@ test("buildTextForWidget does not append refined dream text when it semantically
   ];
   const output = helpers.buildTextForWidget({
     specialist: {
-      ui_contract_id: "dream:ASK:DREAM_MENU_REFINE:v1",
+      ui_contract_id: "dream:ASK:DREAM_MENU_CONFIRM_SINGLE:v1",
       suggest_dreambuilder: "false",
       message: "Dat is een sterk startpunt.",
       refined_formulation: statements.join(" "),
@@ -1028,7 +1029,7 @@ test("buildTextForWidget keeps dream-builder rendering canonical-only and skips 
   ];
   const output = helpers.buildTextForWidget({
     specialist: {
-      ui_contract_id: "dream:ASK:DREAM_MENU_REFINE:v1",
+      ui_contract_id: "dream:ASK:DREAM_MENU_CONFIRM_SINGLE:v1",
       suggest_dreambuilder: "false",
       message: "Ga verder met de Droom-oefening.",
       refined_formulation: "We bouwen een toekomst met meer humane AI-keuzes.",
@@ -1049,18 +1050,21 @@ test("buildTextForWidget keeps dream-builder rendering canonical-only and skips 
   assert.equal(output, "Ga verder met de Droom-oefening.");
 });
 
-test("buildTextForWidget includes canonical pending suggestion text when compare is pending", () => {
+test("buildTextForWidget includes canonical pending compare suggestion text when compare is pending", () => {
   const helpers = buildTextHelpers(() => "");
   const suggestion =
     "Mindd droomt van een wereld waarin mensen dankzij AI beter geinformeerde keuzes maken en meer rust ervaren bij aankopen.";
   const output = helpers.buildTextForWidget({
     specialist: {
-      ui_contract_id: "dream:ASK:DREAM_MENU_REFINE:v1",
+      ui_contract_id: "dream:ASK:DREAM_MENU_CONFIRM_SINGLE:v1",
       message: "Dat is een interessant uitgangspunt.",
-      compare_pending: "true",
-      compare_mode: "text",
-      compare_presentation: "canonical",
-      compare_agent_current: suggestion,
+      compare_runtime: createCompareRuntimeState({
+        kind: "text_compare",
+        mode: "text",
+        status: "pending",
+        presentation: "canonical",
+        suggestion_text: suggestion,
+      }),
       refined_formulation: "",
       dream: "",
     },
@@ -1078,7 +1082,7 @@ test("buildTextForWidget includes canonical pending suggestion text when compare
   assert.equal((output.match(/Mindd droomt van een wereld/g) || []).length, 1);
 });
 
-test("buildTextForWidget keeps canonical pending suggestion visible across single-value confirm steps", () => {
+test("buildTextForWidget keeps canonical pending compare suggestion visible across single-value confirm steps", () => {
   const helpers = buildTextHelpers(() => "");
   const scenarios = [
     {
@@ -1100,10 +1104,13 @@ test("buildTextForWidget keeps canonical pending suggestion visible across singl
       specialist: {
         ui_contract_id: scenario.contract,
         message: "Heldere richting helpt je keuzes verscherpen.",
-        compare_pending: "true",
-        compare_mode: "text",
-        compare_presentation: "canonical",
-        compare_agent_current: scenario.suggestion,
+        compare_runtime: createCompareRuntimeState({
+          kind: "text_compare",
+          mode: "text",
+          status: "pending",
+          presentation: "canonical",
+          suggestion_text: scenario.suggestion,
+        }),
         refined_formulation: "",
       },
       state: {
@@ -1149,12 +1156,15 @@ test("buildTextForWidget suppresses standalone body text for single-value compar
         ui_contract_id: scenario.contract,
         message: scenario.message,
         refined_formulation: scenario.suggestion,
-        compare_pending: "true",
-        compare_mode: "text",
-        compare_presentation: "picker",
-        compare_target_field: scenario.stepId,
-        compare_user_normalized: "Originele input",
-        compare_agent_current: scenario.suggestion,
+        compare_runtime: createCompareRuntimeState({
+          kind: "text_compare",
+          mode: "text",
+          status: "pending",
+          presentation: "picker",
+          target_field: scenario.stepId,
+          user_normalized_text: "Originele input",
+          suggestion_text: scenario.suggestion,
+        }),
       },
       state: {
         active_specialist: scenario.stepId,
@@ -1178,7 +1188,7 @@ test("buildTextForWidget keeps Dream single-value body visible even when stale c
 
   const output = helpers.buildTextForWidget({
     specialist: {
-      ui_contract_id: "dream:ASK:DREAM_MENU_REFINE:v1",
+      ui_contract_id: "dream:ASK:DREAM_MENU_CONFIRM_SINGLE:v1",
       message: [
         "Je voorstel is te algemeen voor een droom.",
         "",
@@ -1187,12 +1197,15 @@ test("buildTextForWidget keeps Dream single-value body visible even when stale c
         "Mindd droomt van een wereld waarin ondernemers rust ervaren in hun keuzes.",
       ].join("\n"),
       refined_formulation: "Mindd droomt van een wereld waarin ondernemers rust ervaren in hun keuzes.",
-      compare_pending: "true",
-      compare_mode: "text",
-      compare_presentation: "canonical",
-      compare_target_field: "dream",
-      compare_user_normalized: "Originele input",
-      compare_agent_current: "Mindd droomt van een wereld waarin ondernemers rust ervaren in hun keuzes.",
+      compare_runtime: createCompareRuntimeState({
+        kind: "text_compare",
+        mode: "text",
+        status: "pending",
+        presentation: "canonical",
+        target_field: "dream",
+        user_normalized_text: "Originele input",
+        suggestion_text: "Mindd droomt van een wereld waarin ondernemers rust ervaren in hun keuzes.",
+      }),
     },
     state: {
       active_specialist: "Dream",
@@ -1217,7 +1230,7 @@ test("buildTextForWidget suppresses Dream standalone body while an active compar
 
   const output = helpers.buildTextForWidget({
     specialist: {
-      ui_contract_id: "dream:ASK:DREAM_MENU_REFINE:v1",
+      ui_contract_id: "dream:ASK:DREAM_MENU_CONFIRM_SINGLE:v1",
       message: [
         "Ik heb je input herschreven naar een droom.",
         "",
@@ -1226,12 +1239,15 @@ test("buildTextForWidget suppresses Dream standalone body while an active compar
         "Mindd droomt van een wereld waarin ondernemers rust ervaren in hun keuzes.",
       ].join("\n"),
       refined_formulation: "Mindd droomt van een wereld waarin ondernemers rust ervaren in hun keuzes.",
-      compare_pending: "true",
-      compare_mode: "text",
-      compare_presentation: "picker",
-      compare_target_field: "dream",
-      compare_user_normalized: "Dit gaat over dat mensen het beu zijn om verkeerd voorgelicht te worden.",
-      compare_agent_current: "Mindd droomt van een wereld waarin ondernemers rust ervaren in hun keuzes.",
+      compare_runtime: createCompareRuntimeState({
+        kind: "text_compare",
+        mode: "text",
+        status: "pending",
+        presentation: "picker",
+        target_field: "dream",
+        user_normalized_text: "Dit gaat over dat mensen het beu zijn om verkeerd voorgelicht te worden.",
+        suggestion_text: "Mindd droomt van een wereld waarin ondernemers rust ervaren in hun keuzes.",
+      }),
     },
     state: {
       active_specialist: "Dream",
@@ -1270,14 +1286,16 @@ test("finalizeResponse keeps Dream self compare actions when builder compare is 
     active_specialist: "Dream",
     started: "true",
     last_specialist_result: {
-      ui_contract_id: "dream:ASK:DREAM_MENU_REFINE:v1",
-      compare_pending: "true",
-      compare_mode: "text",
-      compare_presentation: "picker",
-      compare_target_field: "dream",
-      compare_user_normalized: "Mijn ruwe droom",
-      compare_agent_current: "Mindd droomt van een wereld waarin keuzes rust geven.",
-      __dream_builder_compare_pending: "false",
+      ui_contract_id: "dream:ASK:DREAM_MENU_CONFIRM_SINGLE:v1",
+      compare_runtime: createCompareRuntimeState({
+        kind: "text_compare",
+        mode: "text",
+        status: "pending",
+        presentation: "picker",
+        target_field: "dream",
+        user_normalized_text: "Mijn ruwe droom",
+        suggestion_text: "Mindd droomt van een wereld waarin keuzes rust geven.",
+      }),
     },
   } satisfies Record<string, unknown>;
   helpers.setState(state);
@@ -1290,13 +1308,12 @@ test("finalizeResponse keeps Dream self compare actions when builder compare is 
     text: "",
     prompt: "Kies welke formulering het beste past.",
     specialist: {
-      ui_contract_id: "dream:ASK:DREAM_MENU_REFINE:v1",
+      ui_contract_id: "dream:ASK:DREAM_MENU_CONFIRM_SINGLE:v1",
     },
     state: state as any,
     ui: {
       view: {
         mode: "interactive",
-        variant: "text_compare",
       },
     },
   });

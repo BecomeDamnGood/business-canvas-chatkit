@@ -69,12 +69,12 @@ export const NEXT_MENU_BY_ACTIONCODE: Record<string, UiMenuTransition> = {
   },
   ACTION_DREAM_REFINE_START_EXERCISE: {
     step_id: "dream",
-    from_menu_ids: ["DREAM_MENU_REFINE"],
+    from_menu_ids: ["DREAM_MENU_CONFIRM_SINGLE"],
     to_menu_id: "DREAM_EXPLAINER_MENU_SWITCH_SELF",
   },
   ACTION_DREAM_REFINE_CONFIRM: {
     step_id: "dream",
-    from_menu_ids: ["DREAM_MENU_REFINE"],
+    from_menu_ids: ["DREAM_MENU_CONFIRM_SINGLE"],
     to_step_id: "purpose",
     to_menu_id: "PURPOSE_MENU_INTRO",
   },
@@ -85,14 +85,14 @@ export const NEXT_MENU_BY_ACTIONCODE: Record<string, UiMenuTransition> = {
   },
   ACTION_DREAM_EXPLAINER_REFINE_CONFIRM: {
     step_id: "dream",
-    from_menu_ids: ["DREAM_EXPLAINER_MENU_REFINE"],
+    from_menu_ids: ["DREAM_EXPLAINER_MENU_CONFIRM_SINGLE"],
     to_step_id: "purpose",
     to_menu_id: "PURPOSE_MENU_INTRO",
   },
   ACTION_DREAM_EXPLAINER_REFINE_ADJUST: {
     step_id: "dream",
-    from_menu_ids: ["DREAM_EXPLAINER_MENU_REFINE"],
-    to_menu_id: "DREAM_EXPLAINER_MENU_REFINE",
+    from_menu_ids: ["DREAM_EXPLAINER_MENU_CONFIRM_SINGLE"],
+    to_menu_id: "DREAM_EXPLAINER_MENU_CONFIRM_SINGLE",
   },
   ACTION_PURPOSE_INTRO_EXPLAIN_MORE: {
     step_id: "purpose",
@@ -373,7 +373,7 @@ export const DEFAULT_MENU_BY_STATUS: Record<string, Record<TurnOutputStatus, str
   dream: {
     no_output: "DREAM_MENU_INTRO",
     incomplete_output: "DREAM_MENU_INTRO",
-    valid_output: "DREAM_MENU_REFINE",
+    valid_output: "DREAM_MENU_CONFIRM_SINGLE",
   },
   purpose: {
     no_output: "PURPOSE_MENU_INTRO",

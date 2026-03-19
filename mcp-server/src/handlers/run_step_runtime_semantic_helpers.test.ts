@@ -7,18 +7,18 @@ test("validateRenderedContractOrRecover clears stale Dream no-buttons state and 
     step0Id: "step_0",
     dreamStepId: "dream",
     dreamExplainerSwitchSelfMenuId: "DREAM_EXPLAINER_MENU_SWITCH_SELF",
-    dreamExplainerRefineMenuId: "DREAM_EXPLAINER_MENU_REFINE",
+    dreamExplainerRefineMenuId: "DREAM_EXPLAINER_MENU_CONFIRM_SINGLE",
     actioncodeRegistry: {
       actions: {
         ACTION_DREAM_REFINE_CONFIRM: { route: "yes" },
       },
       menus: {
-        DREAM_MENU_REFINE: ["ACTION_DREAM_REFINE_CONFIRM"],
+        DREAM_MENU_CONFIRM_SINGLE: ["ACTION_DREAM_REFINE_CONFIRM"],
       },
     },
     defaultMenuByStatus: {
       dream: {
-        valid_output: "DREAM_MENU_REFINE",
+        valid_output: "DREAM_MENU_CONFIRM_SINGLE",
       },
     },
     finalFieldByStepId: {
@@ -30,7 +30,7 @@ test("validateRenderedContractOrRecover clears stale Dream no-buttons state and 
       return menuId === "NO_MENU" ? "" : menuId;
     },
     isConfirmActionCode: (actionCode: string) => actionCode === "ACTION_DREAM_REFINE_CONFIRM",
-    menuHasConfirmAction: (menuId: string) => menuId === "DREAM_MENU_REFINE",
+    menuHasConfirmAction: (menuId: string) => menuId === "DREAM_MENU_CONFIRM_SINGLE",
     inferUiRenderModeForStep: (state: any, stepId: string) =>
       String(state?.__ui_render_mode_by_step?.[stepId] || "").trim() === "no_buttons" ? "no_buttons" : "menu",
     fieldForStep: () => "dream",
@@ -71,7 +71,7 @@ test("validateRenderedContractOrRecover clears stale Dream no-buttons state and 
           action_code: actionCode,
           label: "Bevestigen",
         })) as any,
-        contractId: "dream:valid_output:DREAM_MENU_REFINE",
+        contractId: "dream:valid_output:DREAM_MENU_CONFIRM_SINGLE",
         contractVersion: "test",
         textKeys: [],
       };

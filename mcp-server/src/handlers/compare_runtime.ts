@@ -70,8 +70,6 @@ export type CompareRuntimeState = {
   status: CompareRuntimeStatus;
   presentation: CompareRuntimePresentation;
   resolution: CompareRuntimeResolution;
-  target_field: string;
-  variant: string;
   user_text: string;
   user_normalized_text: string;
   user_items: string[];
@@ -102,8 +100,6 @@ const DEFAULT_COMPARE_RUNTIME: CompareRuntimeState = {
   status: "resolved",
   presentation: "picker",
   resolution: "",
-  target_field: "",
-  variant: "",
   user_text: "",
   user_normalized_text: "",
   user_items: [],
@@ -179,8 +175,6 @@ function normalizeCompareRuntimeRecord(runtimeRaw: unknown): CompareRuntimeState
     status,
     presentation: normalizePresentation(runtime.presentation),
     resolution: normalizeResolution(runtime.resolution),
-    target_field: trimString(runtime.target_field),
-    variant: trimString(runtime.variant),
     user_text: trimString(runtime.user_text),
     user_normalized_text: trimString(runtime.user_normalized_text),
     user_items: normalizeStringArray(runtime.user_items),
@@ -219,11 +213,40 @@ export function readCompareRuntime(raw: unknown): CompareRuntimeState | null {
   return null;
 }
 
+export function hasPendingCompareState(compare: CompareRuntimeState | null | undefined): boolean {
+  return compare?.status === "pending";
+}
+
+export function hasRenderablePendingCompareState(compare: CompareRuntimeState | null | undefined): boolean {
+  if (!hasPendingCompareState(compare)) return false;
+  if (!compare) return false;
+  const current = compare;
+  const feedbackReasonText = trimString(current.feedback_reason_text);
+  if (!feedbackReasonText) return false;
+  if (current.kind === "list_compare") {
+    const userItems = normalizeStringArray(current.user_items);
+    const suggestionItems = normalizeStringArray(current.suggestion_items);
+    if (userItems.length > 0 && suggestionItems.length > 0) return true;
+    const groupedUnits = Array.isArray(current.grouped_units) ? current.grouped_units : [];
+    return groupedUnits.some((entry) => {
+      const unit = toRecord(entry);
+      return (
+        normalizeStringArray(unit.user_items).length > 0 &&
+        normalizeStringArray(unit.suggestion_items).length > 0 &&
+        trimString(unit.feedback_reason_text || current.feedback_reason_text)
+      );
+    });
+  }
+  const userText = trimString(current.user_text || current.user_normalized_text);
+  const suggestionText = trimString(current.suggestion_text);
+  return Boolean(userText && suggestionText);
+}
+
 export function patchCompareRuntime(
   raw: unknown,
   runtimePatch: Partial<CompareRuntimeState> | null
 ): Record<string, unknown> {
-  const next = stripLegacyCompareFields(raw);
+  const next = { ...toRecord(raw) };
   if (!runtimePatch) {
     delete next.compare_runtime;
     return next;
@@ -236,22 +259,10 @@ export function patchCompareRuntime(
   return next;
 }
 
-export function stripLegacyCompareFields(raw: unknown): Record<string, unknown> {
-  const record = toRecord(raw);
-  const next = { ...record };
-  for (const field of Object.keys(next)) {
-    if (field.startsWith("compare_") || field.startsWith("pending_suggestion_")) {
-      delete next[field];
-    }
-  }
-  delete next.feedback_reason_key;
-  return next;
-}
-
 export function attachCompareRuntime(raw: unknown): Record<string, unknown> {
-  const record = toRecord(raw);
+  const record = { ...toRecord(raw) };
   const compare = readCompareRuntime(record);
-  const next = stripLegacyCompareFields(record);
+  const next = { ...record };
   if (!compare) {
     delete next.compare_runtime;
     return next;
@@ -262,8 +273,6 @@ export function attachCompareRuntime(raw: unknown): Record<string, unknown> {
     status: compare.status,
     presentation: compare.presentation,
     resolution: compare.resolution,
-    target_field: compare.target_field,
-    variant: compare.variant,
     user_text: compare.user_text,
     user_normalized_text: compare.user_normalized_text,
     user_items: [...compare.user_items],
@@ -291,7 +300,7 @@ export function attachCompareRuntime(raw: unknown): Record<string, unknown> {
 }
 
 export function clearCompareRuntime(raw: unknown): Record<string, unknown> {
-  const next = stripLegacyCompareFields(raw);
+  const next = { ...toRecord(raw) };
   delete next.compare_runtime;
   return next;
 }

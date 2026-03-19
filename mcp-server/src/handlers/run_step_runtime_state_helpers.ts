@@ -15,6 +15,7 @@ import { productsServicesItemsFromText } from "../shared/productsservices_items.
 import {
   attachCompareRuntime,
   clearCompareRuntime,
+  hasRenderablePendingCompareState,
   readCompareRuntime,
 } from "./compare_runtime.js";
 
@@ -301,21 +302,15 @@ export function createRunStepRuntimeStateHelpers(deps: CreateRunStepRuntimeState
         : null;
     if (!last) return next;
     const compareState = readCompareRuntime(last);
-    const targetField = String(compareState?.target_field || "").trim();
     const currentStep = String((next as any).current_step || "").trim();
     const shouldResetCompareState =
-      targetField === stepId ||
-      (targetField === "" && currentStep === stepId) ||
-      compareState?.status === "pending";
+      currentStep === stepId ||
+      hasRenderablePendingCompareState(compareState);
     if (!shouldResetCompareState) return next;
     const resetLast = {
       ...clearCompareRuntime(last),
       feedback_reason_key: "",
       feedback_reason_text: "",
-      current_value_refinement_pending: "false",
-      current_value_refinement_target_field: "",
-      current_value_refinement_feedback_text: "",
-      current_value_refinement_anchor_value: "",
       proceed_request_intent: "",
       proceed_block_reason_codes: [],
       proceed_block_rule_count: 0,
@@ -648,7 +643,7 @@ export function createRunStepRuntimeStateHelpers(deps: CreateRunStepRuntimeState
       pendingSuggestionIntent && pendingSuggestionAnchor
         ? [
             "",
-            "PENDING SUGGESTION CONTRACT (follow exactly when present)",
+            "PENDING COMPARE FEEDBACK CONTRACT (follow exactly when present)",
             `- intent: ${safe(pendingSuggestionIntent)}`,
             `- anchor: ${safe(pendingSuggestionAnchor)}`,
             `- seed_source: ${safe(pendingSuggestionSeedSource)}`,

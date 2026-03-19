@@ -38,6 +38,7 @@ import { isStageableDreamCandidate } from "../steps/dream_runtime_policy.js";
 import { isStructuredPresentationRecap } from "../handlers/run_step_presentation_recap.js";
 import {
   attachCompareRuntime,
+  hasRenderablePendingCompareState,
   patchCompareRuntime,
   readCompareRuntime,
 } from "../handlers/compare_runtime.js";
@@ -84,7 +85,7 @@ const OFFTOPIC_STEP_LABEL_UI_KEY_BY_STEP: Record<string, string> = {
 };
 
 type DreamRuntimeMode = "self" | "builder_collect" | "builder_scoring" | "builder_refine";
-type DreamSelfViewVariant = "default" | "picker" | "canonical_refine" | "stuck_support";
+type DreamSelfViewVariant = "default" | "picker" | "stuck_support";
 
 function envFlagEnabled(name: string, fallback: boolean): boolean {
   const raw = String(process.env[name] ?? "").trim().toLowerCase();
@@ -204,6 +205,8 @@ function normalizeChoiceLine(value: string): string {
     .trim();
 }
 
+const hasRenderablePendingCompare = hasRenderablePendingCompareState;
+
 function stripStructuredChoiceLinesForPrompt(promptRaw: string, state: CanvasState): string {
   const blockedSet = new Set(
     [
@@ -266,8 +269,7 @@ function shouldEnforceSingleValueConfirmVisibility(params: {
   const activeSpecialist = String((state as any).active_specialist || "").trim();
   if (activeSpecialist === "DreamExplainer") return false;
   if (String((specialist as any).suggest_dreambuilder || "").trim() === "true") return false;
-  const specialistMenuId = parseUiContractMenuForStep((specialist as any).ui_contract_id, stepId);
-  return !specialistMenuId.startsWith("DREAM_EXPLAINER_MENU_");
+  return true;
 }
 
 function shouldClearStaleDreamSelfCompare(params: {
@@ -279,20 +281,17 @@ function shouldClearStaleDreamSelfCompare(params: {
   if (stepId !== "dream") return false;
   if (!shouldEnforceSingleValueConfirmVisibility({ stepId, state, specialist })) return false;
   const compare = readCompareRuntime(specialist);
-  if (compare?.status !== "pending") return false;
-  const targetField = String(compare.target_field || "").trim();
-  if (targetField && targetField !== stepId) return true;
-  const presentation = compare.presentation;
-  const mode = compare.mode;
+  if (!compare) return false;
+  if (compare.status !== "pending") return false;
+  if (!hasRenderablePendingCompare(compare)) return true;
+  const compareState = compare;
+  const mode = compareState.kind === "list_compare" ? "list" : "text";
   const suggestionText = String(
-    compare.suggestion_text || (specialist as any).refined_formulation || ""
+    compareState.suggestion_text || (specialist as any).refined_formulation || ""
   ).trim();
-  if (presentation === "canonical") {
-    return !isRenderableAcceptedValue(stepId, suggestionText);
-  }
   if (mode === "list") return true;
   const userVariant = String(
-    compare.user_normalized_text || compare.user_text || ""
+    compareState.user_text || ""
   ).trim();
   return !(Boolean(userVariant) && isRenderableAcceptedValue(stepId, suggestionText));
 }
@@ -348,22 +347,13 @@ function resolveDreamSelfViewVariant(params: {
   specialist: Record<string, unknown>;
   status: TurnOutputStatus;
   comparePending: boolean;
-  comparePresentation: "picker" | "canonical";
-  currentValueRefinementPending: boolean;
 }): DreamSelfViewVariant {
   if (params.stepId !== "dream") return "default";
   if (dreamRuntimeModeFromState(params.state) !== "self") return "default";
 
   const explicitStuck = String(params.specialist.step_support_state || "").trim().toLowerCase() === "stuck";
   if (explicitStuck) return "stuck_support";
-  if (params.comparePending && params.comparePresentation === "picker") return "picker";
-  if (
-    params.comparePending ||
-    params.currentValueRefinementPending ||
-    params.status === "valid_output"
-  ) {
-    return "canonical_refine";
-  }
+  if (params.comparePending) return "picker";
   return "default";
 }
 
@@ -1411,8 +1401,8 @@ function computeStatus(
 
   if (stepId === "rulesofthegame") {
     const comparePending =
-      readCompareRuntime(specialist)?.status === "pending" ||
-      readCompareRuntime(prev)?.status === "pending";
+      hasRenderablePendingCompare(readCompareRuntime(specialist)) ||
+      hasRenderablePendingCompare(readCompareRuntime(prev));
     const rulesGate = evaluateRulesRuntimeGate({
       acceptedOutput,
       acceptedValue,
@@ -1637,30 +1627,17 @@ function resolveMenuContract(params: {
   if ((renderModeOverride || renderModeForStep(state, stepId)) === "no_buttons") {
     return { menuId: "", actionCodes: [], labels: [], labelKeys: [] };
   }
+  if (hasRenderablePendingCompare(readCompareRuntime(specialist))) {
+    return { menuId: "", actionCodes: [], labels: [], labelKeys: [] };
+  }
   if (stepId === "dream") {
     const dreamMode = dreamRuntimeModeFromState(state);
-    const forcedMenuId =
-      dreamMode === "builder_collect"
-        ? "DREAM_EXPLAINER_MENU_SWITCH_SELF"
-        : dreamMode === "builder_refine"
-          ? "DREAM_EXPLAINER_MENU_REFINE"
-          : "";
-    if (dreamMode === "builder_scoring") {
+    if (
+      dreamMode === "builder_collect" ||
+      dreamMode === "builder_refine" ||
+      dreamMode === "builder_scoring"
+    ) {
       return { menuId: "", actionCodes: [], labels: [], labelKeys: [] };
-    }
-    if (forcedMenuId) {
-      const allActions = Array.isArray(ACTIONCODE_REGISTRY.menus[forcedMenuId])
-        ? ACTIONCODE_REGISTRY.menus[forcedMenuId]
-        : [];
-      if (allActions.length === 0) return { menuId: "", actionCodes: [], labels: [], labelKeys: [] };
-      const actionCodes = allActions.filter((code) => (confirmEligible ? true : !isConfirmActionCode(code)));
-      if (actionCodes.length === 0) return { menuId: "", actionCodes: [], labels: [], labelKeys: [] };
-      const labels = labelsForMenu(forcedMenuId, actionCodes, state);
-      const labelKeys = labelKeysForMenu(forcedMenuId, actionCodes);
-      if (labels.length !== actionCodes.length || labelKeys.length !== actionCodes.length) {
-        return { menuId: "", actionCodes: [], labels: [], labelKeys: [] };
-      }
-      return { menuId: forcedMenuId, actionCodes, labels, labelKeys };
     }
   }
 
@@ -1764,7 +1741,7 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
   }
   const recapRequested = isRecapRequestedSpecialist(specialistForDisplay);
   const compareState = readCompareRuntime(specialistForDisplay);
-  const comparePending = compareState?.status === "pending";
+  const comparePending = hasRenderablePendingCompare(compareState);
   if (isOfftopic && stepId !== "step_0") {
     const field = stepId === "rulesofthegame" ? "rulesofthegame" : stepId;
     const finalField = getFinalFieldForStepId(stepId);
@@ -1972,23 +1949,17 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
 
   const specialistForMenu = specialistForDisplay;
   const prevForMenu = prev;
-  const rawComparePresentation = compareState?.presentation === "canonical" ? "canonical" : "picker";
-  const rawCurrentValueRefinementPending =
-    String((specialistForDisplay as any).current_value_refinement_pending || "").trim() === "true" &&
-    String((specialistForDisplay as any).current_value_refinement_target_field || "").trim() === stepId;
   const dreamSelfViewVariant = resolveDreamSelfViewVariant({
     stepId,
     state,
     specialist: specialistForDisplay,
     status: effectiveStatus,
     comparePending,
-    comparePresentation: rawComparePresentation,
-    currentValueRefinementPending: rawCurrentValueRefinementPending,
   });
   const renderModeOverride =
     dreamSelfViewVariant === "stuck_support"
       ? "no_buttons"
-      : dreamSelfViewVariant === "picker" || dreamSelfViewVariant === "canonical_refine"
+      : dreamSelfViewVariant === "picker"
         ? "menu"
         : undefined;
   const normalizedComparePending =
@@ -2022,20 +1993,7 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     safeLabelKeys = retainedIndices.map((idx) => safeLabelKeys[idx]);
   }
   const compareSelected = String(compareState?.resolution || "").trim();
-  const comparePresentation =
-    dreamSelfViewVariant === "picker"
-      ? "picker"
-      : dreamSelfViewVariant === "stuck_support"
-        ? "canonical"
-        : rawComparePresentation;
-  const currentValueRefinementPending =
-    dreamSelfViewVariant === "stuck_support" ? false : rawCurrentValueRefinementPending;
-  const currentValueRefinementCanonicalValue =
-    currentValueRefinementPending
-      ? String(
-          (specialistForDisplay as any)[stepId] || (specialistForDisplay as any).refined_formulation || ""
-        ).trim()
-      : "";
+  const comparePresentation: "picker" = "picker";
   const showStepIntroChrome =
     stepId === "purpose"
       ? isSemanticPurposeIntroVisibleState({
@@ -2080,11 +2038,6 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
   let effectiveUiStatus: TurnOutputStatus = effectiveStatus;
   let contractId = buildContractId(stepId, effectiveUiStatus, menuId);
   let textKeys = buildContractTextKeys({ stepId, status: effectiveUiStatus, menuId });
-  const pendingCanonicalValue =
-    normalizedComparePending && comparePresentation === "canonical"
-      ? String(compareState?.suggestion_text || specialistForDisplay.refined_formulation || "")
-        .trim()
-      : "";
   const explicitFeedbackReasonForDisplay =
     String((specialistForDisplay as any).feedback_reason_text || "").trim();
   const sanitizedExplicitFeedbackReasonForDisplay = sanitizeFeedbackReasonForDisplay({
@@ -2107,30 +2060,13 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
           rawReason: rawFeedbackReasonForDisplay,
           resolveString: (key, fallback = "") => uiStringFromState(state, key, uiDefaultString(key, fallback)),
         });
-  const rawCurrentValueRefinementFeedbackForDisplay =
-    currentValueRefinementPending
-      ? String((specialistForDisplay as any).current_value_refinement_feedback_text || "").trim()
-      : "";
-  const currentValueRefinementFeedbackForDisplay =
-    currentValueRefinementPending
-      ? formatCompareFeedbackForDisplay({
-          stepId,
-          rawReason: rawCurrentValueRefinementFeedbackForDisplay,
-          resolveString: (key, fallback = "") => uiStringFromState(state, key, uiDefaultString(key, fallback)),
-        })
-      : "";
-  const effectiveFeedbackReasonForDisplay =
-    currentValueRefinementFeedbackForDisplay || feedbackReasonForDisplay;
-  const effectiveRawFeedbackReasonForDisplay =
-    rawCurrentValueRefinementFeedbackForDisplay || rawFeedbackReasonForDisplay;
+  const effectiveFeedbackReasonForDisplay = feedbackReasonForDisplay;
+  const effectiveRawFeedbackReasonForDisplay = rawFeedbackReasonForDisplay;
   const rawMessageForSemanticContracts = String(message || "").trim();
   const singleValueUiCanonicalValue = (() => {
     if (recapRequested) return "";
     if (isOfftopic) return "";
     if (dreamSelfViewVariant === "stuck_support") return "";
-    if (currentValueRefinementPending && currentValueRefinementCanonicalValue) {
-      return currentValueRefinementCanonicalValue;
-    }
     if (
       !normalizedComparePending &&
       effectiveStatus === "valid_output" &&
@@ -2146,14 +2082,9 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
   })();
   const shouldPublishCanonicalSuggestionFeedbackContract =
     Boolean(singleValueUiCanonicalValue) &&
-    (
-      currentValueRefinementPending ||
-      (
-        !normalizedComparePending &&
-        effectiveStatus === "valid_output" &&
-        !shouldUseCurrentValueHeading(stepId, state)
-      )
-    );
+    !normalizedComparePending &&
+    effectiveStatus === "valid_output" &&
+    !shouldUseCurrentValueHeading(stepId, state);
   let messageForDisplay =
     isSemanticInvariantsV1Enabled() &&
     normalizedComparePending &&
@@ -2172,30 +2103,12 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
       message: messageForDisplay,
     });
   }
-  if (normalizedComparePending && comparePresentation === "canonical" && pendingCanonicalValue) {
-    messageForDisplay = singleValueSupportText({
-      message: messageForDisplay,
-      heading: singleValueConfirmHeading(stepId, state),
-      canonicalValue: pendingCanonicalValue,
-      feedbackReasonText: effectiveFeedbackReasonForDisplay,
-      rawFeedbackReasonText: effectiveRawFeedbackReasonForDisplay,
-    });
-  } else if (currentValueRefinementPending && currentValueRefinementCanonicalValue) {
-    messageForDisplay = singleValueSupportText({
-      message: rawMessageForSemanticContracts,
-      heading: autoSuggestHeading(stepId, state),
-      canonicalValue: currentValueRefinementCanonicalValue,
-      feedbackReasonText: effectiveFeedbackReasonForDisplay,
-      rawFeedbackReasonText: effectiveRawFeedbackReasonForDisplay,
-    });
-  }
   const useSingleValueConfirmSsot =
     shouldEnforceConfirmVisibility &&
     Boolean(canonicalAcceptedValue) &&
     effectiveStatus === "valid_output" &&
     !isOfftopic &&
     !normalizedComparePending &&
-    !currentValueRefinementPending &&
     !recapRequested;
   if (useSingleValueConfirmSsot && !shouldPublishCanonicalSuggestionFeedbackContract) {
     const canonicalMessage = singleValueConfirmCanonicalMessage(stepId, state, canonicalAcceptedValue);
@@ -2226,51 +2139,6 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     feedbackReasonText: effectiveFeedbackReasonForDisplay,
     rawFeedbackReasonText: effectiveRawFeedbackReasonForDisplay,
   });
-  const hasRenderableSingleValueContract = Boolean(singleValueUiContent);
-  if (
-    stepId === "dream" &&
-    shouldEnforceConfirmVisibility &&
-    safeActionCodes.some((code) => isConfirmActionCode(code)) &&
-    !hasRenderableSingleValueContract
-  ) {
-    const normalizedStatus: TurnOutputStatus = effectiveStatus === "no_output" ? "no_output" : "incomplete_output";
-    const normalized = resolveMenuContract({
-      stepId,
-      status: normalizedStatus,
-      confirmEligible: false,
-      state,
-      specialist: specialistForDisplay,
-      prev,
-      renderModeOverride,
-    });
-    menuId = normalized.menuId;
-    effectiveUiStatus = normalizedStatus;
-    effectiveConfirmEligible = false;
-    safeActionCodes = normalized.actionCodes;
-    safeLabels = normalized.labels;
-    safeLabelKeys = normalized.labelKeys;
-    contractId = buildContractId(stepId, effectiveUiStatus, menuId);
-    textKeys = buildContractTextKeys({ stepId, status: effectiveUiStatus, menuId });
-    const normalizedHeadline = contractHeadlineForState({
-      state,
-      stepId,
-      stepLabel,
-      companyName,
-      status: normalizedStatus,
-      hasOptions: safeActionCodes.length > 0,
-      strategyStatementCount: statementCount,
-    });
-    const normalizedFallbackPrompt =
-      isSemanticInvariantsV1Enabled() &&
-      (normalizedStatus === "no_output" || normalizedStatus === "incomplete_output") &&
-      !String(normalizedHeadline || "").trim()
-        ? interactiveAskPromptFallback(state, stepId)
-        : "";
-    question =
-      normalizedComparePending && comparePresentation === "picker"
-        ? ""
-        : stripStructuredChoiceLinesForPrompt(normalizedHeadline || normalizedFallbackPrompt, state);
-  }
   const structuredSuggestionsUiContent = buildStructuredSuggestionsUiContent({
     stepId,
     menuId,

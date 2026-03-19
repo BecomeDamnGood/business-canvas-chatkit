@@ -1891,11 +1891,7 @@
       sectionTitleWithoutBusinessKey: "",
       finalField: "step_0_final",
       specialistId: "ValidationAndBusinessName",
-      stepKind: "bootstrap",
-      listSemantics: "none",
-      compareFamily: "none",
-      supportFamily: "none",
-      presentationMode: "bootstrap",
+      uiMode: "no_feedback",
       chooseForMe: null
     },
     dream: {
@@ -1909,16 +1905,12 @@
       sectionTitleWithoutBusinessKey: "",
       finalField: "dream_final",
       specialistId: "Dream",
-      stepKind: "single_value",
-      listSemantics: "none",
-      compareFamily: "single_value",
-      supportFamily: "interactive_step",
-      presentationMode: "interactive",
+      uiMode: "text_compare",
       chooseForMe: {
         routeToken: "__ROUTE__DREAM_PICK_ONE__",
         menuId: "DREAM_MENU_SUGGESTIONS",
         actionCode: "ACTION_DREAM_SUGGESTIONS_PICK_ONE",
-        nextMenuId: "DREAM_MENU_REFINE",
+        nextMenuId: "DREAM_MENU_CONFIRM_SINGLE",
         mode: "suggestions",
         itemKind: "sentence",
         field: "dream"
@@ -1935,11 +1927,7 @@
       sectionTitleWithoutBusinessKey: "sectionTitle.purposeOfFuture",
       finalField: "purpose_final",
       specialistId: "Purpose",
-      stepKind: "single_value",
-      listSemantics: "none",
-      compareFamily: "single_value",
-      supportFamily: "interactive_step",
-      presentationMode: "interactive",
+      uiMode: "text_compare",
       chooseForMe: {
         routeToken: "__ROUTE__PURPOSE_CHOOSE_FOR_ME__",
         menuId: "PURPOSE_MENU_EXAMPLES",
@@ -1961,11 +1949,7 @@
       sectionTitleWithoutBusinessKey: "sectionTitle.bigwhyOfFuture",
       finalField: "bigwhy_final",
       specialistId: "BigWhy",
-      stepKind: "single_value",
-      listSemantics: "none",
-      compareFamily: "single_value",
-      supportFamily: "interactive_step",
-      presentationMode: "interactive",
+      uiMode: "text_compare",
       chooseForMe: {
         routeToken: "__ROUTE__BIGWHY_CHOOSE_FOR_ME__",
         menuId: "BIGWHY_MENU_FROM_GIVE",
@@ -1987,11 +1971,7 @@
       sectionTitleWithoutBusinessKey: "sectionTitle.roleOfFuture",
       finalField: "role_final",
       specialistId: "Role",
-      stepKind: "single_value",
-      listSemantics: "none",
-      compareFamily: "single_value",
-      supportFamily: "interactive_step",
-      presentationMode: "interactive",
+      uiMode: "text_compare",
       chooseForMe: {
         routeToken: "__ROUTE__ROLE_CHOOSE_FOR_ME__",
         menuId: "ROLE_MENU_EXAMPLES",
@@ -2013,11 +1993,7 @@
       sectionTitleWithoutBusinessKey: "sectionTitle.entityOfFuture",
       finalField: "entity_final",
       specialistId: "Entity",
-      stepKind: "single_value",
-      listSemantics: "none",
-      compareFamily: "single_value",
-      supportFamily: "interactive_step",
-      presentationMode: "interactive",
+      uiMode: "text_compare",
       chooseForMe: {
         routeToken: "__ROUTE__ENTITY_CHOOSE_FOR_ME__",
         menuId: "ENTITY_MENU_SUGGESTIONS",
@@ -2039,11 +2015,7 @@
       sectionTitleWithoutBusinessKey: "sectionTitle.strategyOfFuture",
       finalField: "strategy_final",
       specialistId: "Strategy",
-      stepKind: "list_value",
-      listSemantics: "grouped_compare",
-      compareFamily: "grouped_list",
-      supportFamily: "interactive_step",
-      presentationMode: "interactive",
+      uiMode: "list_compare",
       chooseForMe: {
         routeToken: "__ROUTE__STRATEGY_CHOOSE_FOR_ME__",
         menuId: "STRATEGY_MENU_EXAMPLES",
@@ -2065,11 +2037,7 @@
       sectionTitleWithoutBusinessKey: "sectionTitle.targetgroupOfFuture",
       finalField: "targetgroup_final",
       specialistId: "TargetGroup",
-      stepKind: "single_value",
-      listSemantics: "none",
-      compareFamily: "single_value",
-      supportFamily: "interactive_step",
-      presentationMode: "interactive",
+      uiMode: "text_compare",
       chooseForMe: null
     },
     productsservices: {
@@ -2083,11 +2051,7 @@
       sectionTitleWithoutBusinessKey: "sectionTitle.productsservicesOfFuture",
       finalField: "productsservices_final",
       specialistId: "ProductsServices",
-      stepKind: "list_value",
-      listSemantics: "grouped_compare",
-      compareFamily: "grouped_list",
-      supportFamily: "interactive_step",
-      presentationMode: "interactive",
+      uiMode: "list_compare",
       chooseForMe: null
     },
     rulesofthegame: {
@@ -2101,11 +2065,7 @@
       sectionTitleWithoutBusinessKey: "sectionTitle.rulesofthegameOfFuture",
       finalField: "rulesofthegame_final",
       specialistId: "RulesOfTheGame",
-      stepKind: "list_value",
-      listSemantics: "grouped_compare",
-      compareFamily: "grouped_list",
-      supportFamily: "interactive_step",
-      presentationMode: "interactive",
+      uiMode: "list_compare",
       chooseForMe: null
     },
     presentation: {
@@ -2119,11 +2079,7 @@
       sectionTitleWithoutBusinessKey: "",
       finalField: "presentation_brief_final",
       specialistId: "Presentation",
-      stepKind: "presentation",
-      listSemantics: "none",
-      compareFamily: "none",
-      supportFamily: "none",
-      presentationMode: "presentation",
+      uiMode: "terminal",
       chooseForMe: null
     }
   };
@@ -5151,24 +5107,22 @@
 ${String(item || "").trim()}`.trim())
     };
   }
-  function shouldSuppressMainCardForCompare(uiPayloadRaw, uiViewVariantRaw) {
+  function shouldSuppressMainCardForCompare(uiPayloadRaw) {
     const uiPayload = uiPayloadRaw && typeof uiPayloadRaw === "object" ? uiPayloadRaw : {};
     return Boolean(readPendingInteraction(uiPayload));
   }
   function shouldSuppressPromptForCompare(params) {
-    return String(params.uiViewVariant || "").trim() === "text_compare" || params.compareActive === true || params.requireComparePick === true;
+    return params.compareActive === true;
   }
   function shouldShowTextInputForCompare(params) {
     if (params.textSubmitAvailable !== true) return false;
-    if (params.requireComparePick === true) return true;
+    if (params.compareActive === true) return true;
     return !shouldSuppressPromptForCompare({
-      uiViewVariant: params.uiViewVariant,
-      compareActive: params.compareActive,
-      requireComparePick: params.requireComparePick
+      compareActive: params.compareActive
     });
   }
-  function shouldDisableTextInputForCompare(params) {
-    return params.requireComparePick === true;
+  function shouldDisableTextInputForCompare() {
+    return false;
   }
   function shouldRenderPurposeStepIntroVideo(params) {
     if (String(params.currentStep || "").trim() !== "purpose") return false;
@@ -5213,8 +5167,6 @@ ${String(item || "").trim()}`.trim())
     if (kind === "list_compare" && mode !== "list" || kind === "text_compare" && mode !== "text") {
       return null;
     }
-    const variantRaw = String(renderModelRaw.variant || "").trim();
-    const variant = variantRaw === "clarify_dual" || variantRaw === "grouped_list_units" ? variantRaw : "default";
     const allowedActions = Array.isArray(pending.allowed_actions) ? pending.allowed_actions.map((entry) => {
       const action = toRecord3(entry);
       const id = String(action.id || "").trim();
@@ -5254,7 +5206,6 @@ ${String(item || "").trim()}`.trim())
       allowedActions,
       renderModel: {
         mode,
-        variant,
         instruction: String(renderModelRaw.instruction || "").trim(),
         feedbackReasonText: String(renderModelRaw.feedback_reason_text || "").trim(),
         userLabel,
@@ -5263,6 +5214,18 @@ ${String(item || "").trim()}`.trim())
         suggestionText,
         userItems,
         suggestionItems,
+        units: Array.isArray(renderModelRaw.units) ? renderModelRaw.units.map((entry) => {
+          const unit = toRecord3(entry);
+          const normalizedUserItems = normalizeStringArray(unit.user_items);
+          const normalizedSuggestionItems = normalizeStringArray(unit.suggestion_items);
+          const feedbackReasonText = String(unit.feedback_reason_text || "").trim();
+          if (normalizedUserItems.length === 0 && normalizedSuggestionItems.length === 0) return null;
+          return {
+            userItems: normalizedUserItems,
+            suggestionItems: normalizedSuggestionItems,
+            feedbackReasonText
+          };
+        }).filter((entry) => Boolean(entry)) : [],
         retainedHeading: String(renderModelRaw.retained_heading || "").trim(),
         retainedItems: normalizeStringArray(renderModelRaw.retained_items)
       }
@@ -5272,12 +5235,8 @@ ${String(item || "").trim()}`.trim())
     const uiPayload = toRecord3(uiPayloadRaw);
     const dreamBuilderContract = readDreamBuilderContract(uiPayload);
     if (dreamBuilderContract?.phase === "compare" && Boolean(dreamBuilderContract.compare)) return null;
-    const uiViewVariant = String(toRecord3(uiPayload.view).variant || "").trim().toLowerCase();
-    if (uiViewVariant !== "text_compare") return null;
     const pendingInteractionRaw = toRecord3(uiPayload.pending_interaction);
-    if (Object.keys(pendingInteractionRaw).length === 0) {
-      return "ui_pending_interaction_missing_for_compare";
-    }
+    if (Object.keys(pendingInteractionRaw).length === 0) return null;
     return readPendingInteraction(uiPayload) ? null : "ui_pending_interaction_malformed_for_compare";
   }
   function actionDescriptorForRole(resultData, role) {
@@ -5801,7 +5760,6 @@ ${String(item || "").trim()}`.trim())
       return false;
     }
     const mode = pendingInteraction.renderModel.mode;
-    const variant = pendingInteraction.renderModel.variant;
     const feedbackReasonText = pendingInteraction.renderModel.feedbackReasonText;
     const userText = pendingInteraction.renderModel.userText;
     const suggestionText = pendingInteraction.renderModel.suggestionText;
@@ -5820,8 +5778,8 @@ ${String(item || "").trim()}`.trim())
       if (!trimmed) return "";
       return /[:]\s*$/.test(trimmed) ? trimmed : `${trimmed}:`;
     };
-    const userLabel = userLabelFromPayload ? ensureLabelColon(userLabelFromPayload) : variant === "clarify_dual" ? ensureLabelColon(t(lang, "compareHeading")) : ensureLabelColon(t(lang, "compareHeading"));
-    const suggestionLabel = suggestionLabelFromPayload ? ensureLabelColon(suggestionLabelFromPayload) : variant === "clarify_dual" ? ensureLabelColon(t(lang, "compareSuggestionLabel")) : ensureLabelColon(t(lang, "compareSuggestionLabel"));
+    const userLabel = userLabelFromPayload ? ensureLabelColon(userLabelFromPayload) : ensureLabelColon(t(lang, "compareHeading"));
+    const suggestionLabel = suggestionLabelFromPayload ? ensureLabelColon(suggestionLabelFromPayload) : ensureLabelColon(t(lang, "compareSuggestionLabel"));
     const normalizeListItem = (value) => String(value || "").replace(/^\s*(?:[-*•·]\s+|\d+[\.\)]\s+)/, "").trim();
     feedbackEl.innerHTML = "";
     if (feedbackReasonText) {
@@ -6151,13 +6109,13 @@ ${String(item || "").trim()}`.trim())
     const uiViewVariant = String(uiView.variant || "").trim();
     const dreamBuilderContract = readDreamBuilderContract(uiPayload);
     const dreamBuilderPhase = dreamBuilderContract?.phase || "";
-    const isViewModeCompare = uiViewVariant === "text_compare";
     const isViewModeDreamBuilderCollect = uiViewVariant === "dream_builder_collect" || dreamBuilderPhase === "collect";
     const isViewModeDreamBuilderRefine = uiViewVariant === "dream_builder_refine" || dreamBuilderPhase === "refine";
     const isViewModeDreamBuilderScoring = uiViewVariant === "dream_builder_scoring" || dreamBuilderPhase === "scoring";
     const dreamBuilderViewContract = readDreamBuilderViewContract(uiView);
     const uiQuestionText = String(uiPayload.questionText || "").trim();
-    const compareActive = shouldSuppressMainCardForCompare(uiPayload, uiViewVariant);
+    const compareActive = shouldSuppressMainCardForCompare(uiPayload);
+    const isViewModeCompare = compareActive;
     const singleValueContent = compareActive ? null : readSingleValueCardContent(uiPayload);
     const structuredSuggestionsContent = compareActive ? null : decorateStructuredSuggestionItemsForStep({
       stepId: current,
@@ -6523,10 +6481,10 @@ ${String(item || "").trim()}`.trim())
     } else {
       if (statementsPanelEl) statementsPanelEl.style.display = "none";
     }
-    let requireComparePick = false;
+    let comparePanelVisible = false;
     const suppressCompare = isViewModeDreamBuilderScoring;
     if (!suppressCompare) {
-      requireComparePick = renderComparePanel(result, lang);
+      comparePanelVisible = renderComparePanel(result, lang);
     } else {
       const compareWrap = document.getElementById("compareWrap");
       if (compareWrap) compareWrap.style.display = "none";
@@ -6543,9 +6501,7 @@ ${String(item || "").trim()}`.trim())
       promptText = isDreamDirectionView ? "" : promptSource;
     }
     if (shouldSuppressPromptForCompare({
-      uiViewVariant,
-      compareActive,
-      requireComparePick
+      compareActive
     })) {
       promptText = "";
     }
@@ -6555,10 +6511,10 @@ ${String(item || "").trim()}`.trim())
       const hasBodyText = stripInlineText(String(body || "")).trim().length > 0;
       const showPromptDivider = hasPromptText && hasBodyText;
       promptEl.classList.toggle("with-divider", showPromptDivider);
-      promptEl.classList.toggle("choice-pending", requireComparePick);
+      promptEl.classList.toggle("choice-pending", comparePanelVisible);
       renderInlineText(promptEl, promptText || "");
     }
-    if (requireComparePick) {
+    if (comparePanelVisible) {
       const choiceWrap = document.getElementById("choiceWrap");
       if (choiceWrap) {
         choiceWrap.innerHTML = "";
@@ -6572,18 +6528,14 @@ ${String(item || "").trim()}`.trim())
       if (!choiceWrap) return false;
       return choiceWrap.childNodes.length > 0;
     })();
-    const choiceMode = !requireComparePick && (renderedChoiceButtons || hasStructuredActions);
+    const choiceMode = !comparePanelVisible && (renderedChoiceButtons || hasStructuredActions);
     const textSubmitActionCode = actionCodeForRole(result, "text_submit");
     const textSubmitAvailable = textSubmitActionCode.length > 0;
     const showTextSubmit = shouldShowTextInputForCompare({
       textSubmitAvailable,
-      uiViewVariant,
-      compareActive,
-      requireComparePick
+      compareActive
     });
-    const disableTextSubmit = shouldDisableTextInputForCompare({
-      requireComparePick
-    });
+    const disableTextSubmit = shouldDisableTextInputForCompare();
     inputWrap.style.display = showTextSubmit ? "flex" : "none";
     const inputEl2 = document.getElementById("input");
     if (inputEl2) {
@@ -6601,10 +6553,10 @@ ${String(item || "").trim()}`.trim())
       const choiceWrap = document.getElementById("choiceWrap");
       if (choiceWrap) choiceWrap.style.display = "none";
     }
-    const primaryActions = requireComparePick ? [] : surfaceActionsForResult(result, "primary", lang).filter(
+    const primaryActions = comparePanelVisible ? [] : surfaceActionsForResult(result, "primary", lang).filter(
       (action) => action.role !== "start" && action.role !== "score_submit"
     );
-    const auxiliaryActions = requireComparePick ? [] : surfaceActionsForResult(result, "auxiliary", lang);
+    const auxiliaryActions = comparePanelVisible ? [] : surfaceActionsForResult(result, "auxiliary", lang);
     renderActionSurfaceButtons({
       containerId: "primaryActionWrap",
       actions: primaryActions,

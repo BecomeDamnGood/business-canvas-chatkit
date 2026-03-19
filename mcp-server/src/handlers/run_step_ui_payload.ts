@@ -8,9 +8,9 @@ import { DREAM_STEP_ID } from "../steps/dream.js";
 import type { RenderedAction, UiContentPayload } from "../contracts/ui_actions.js";
 import type { TurnOutputStatus } from "../core/turn_policy_renderer.js";
 import { isSingleValueTextPickerState } from "./run_step_compare_picker_contract.js";
+import { readDreamBuilderCompareRuntime } from "./dream_builder_compare_runtime.js";
 
 type CompareMode = "text" | "list";
-type CompareVariant = "default" | "clarify_dual" | "grouped_list_units";
 
 export type CompareCompareFeedbackUiPayload = {
   text: string;
@@ -19,8 +19,8 @@ export type CompareCompareFeedbackUiPayload = {
 export type CompareUiPayload = {
   enabled: boolean;
   mode: CompareMode;
-  variant?: CompareVariant;
   compare_feedback?: CompareCompareFeedbackUiPayload;
+  feedback_reason_text?: string;
   user_text: string;
   suggestion_text: string;
   user_label?: string;
@@ -32,7 +32,6 @@ export type CompareUiPayload = {
 
 export type UiViewVariant =
   | "default"
-  | "text_compare"
   | "dream_builder_collect"
   | "dream_builder_scoring"
   | "dream_builder_refine";
@@ -242,27 +241,13 @@ function normalizeUiContentPayload(raw: unknown): UiContentPayload | undefined {
 function normalizeDreamBuilderCompareContractFromSpecialist(
   specialist: Record<string, unknown>
 ): DreamBuilderCompareContractPayload | undefined {
-  if (String(specialist.__dream_builder_compare_pending || "").trim() !== "true") return undefined;
-  const kindRaw = String(specialist.__dream_builder_compare_kind || "").trim();
-  const kind =
-    kindRaw === "batch_rewrite_compare" || kindRaw === "overlap_merge_compare"
-      ? kindRaw
-      : "";
-  if (!kind) return undefined;
-  const currentItems = Array.isArray(specialist.__dream_builder_compare_current_items)
-    ? (specialist.__dream_builder_compare_current_items as unknown[])
-      .map((value) => String(value || "").trim())
-      .filter(Boolean)
-    : [];
-  const suggestedItems = Array.isArray(specialist.__dream_builder_compare_suggested_items)
-    ? (specialist.__dream_builder_compare_suggested_items as unknown[])
-      .map((value) => String(value || "").trim())
-      .filter(Boolean)
-    : [];
+  const compareRuntime = readDreamBuilderCompareRuntime(specialist);
+  if (!compareRuntime) return undefined;
+  const kind = compareRuntime.kind;
+  const currentItems = compareRuntime.current_items;
+  const suggestedItems = compareRuntime.suggested_items;
   if (currentItems.length === 0 || suggestedItems.length === 0) return undefined;
-  const segments = Array.isArray(specialist.__dream_builder_compare_segments)
-    ? (specialist.__dream_builder_compare_segments as Array<Record<string, unknown>>)
-    : [];
+  const segments = compareRuntime.segments;
   const normalized: DreamBuilderCompareContractPayload = {
     kind,
     current_items: currentItems,
@@ -270,15 +255,11 @@ function normalizeDreamBuilderCompareContractFromSpecialist(
     ...(currentItems.length === 1 ? { current_value: currentItems[0] } : {}),
     ...(suggestedItems.length === 1 ? { suggested_value: suggestedItems[0] } : {}),
   };
-  const rationale = String(specialist.__dream_builder_compare_rationale || "").trim();
-  const currentLabel = String(specialist.__dream_builder_compare_current_label || "").trim();
-  const suggestedLabel = String(specialist.__dream_builder_compare_suggested_label || "").trim();
-  const instruction = String(specialist.__dream_builder_compare_instruction || "").trim();
-  const committedStatements = Array.isArray(specialist.__dream_builder_compare_committed_statements)
-    ? (specialist.__dream_builder_compare_committed_statements as unknown[])
-      .map((value) => String(value || "").trim())
-      .filter(Boolean)
-    : [];
+  const rationale = compareRuntime.rationale;
+  const currentLabel = compareRuntime.current_label;
+  const suggestedLabel = compareRuntime.suggested_label;
+  const instruction = compareRuntime.instruction;
+  const committedStatements = compareRuntime.committed_statements;
   if (rationale) normalized.rationale = rationale;
   if (currentLabel) normalized.current_label = currentLabel;
   if (suggestedLabel) normalized.suggested_label = suggestedLabel;
@@ -678,10 +659,7 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
         dreamRuntimeMode === "builder_refine" ||
         (
           persistedDreamScoreContext &&
-          (
-            contractMenuId === "DREAM_EXPLAINER_MENU_REFINE" ||
-            String((effectiveState as any)?.dream_awaiting_direction || "").trim() === "false"
-          )
+          String((effectiveState as any)?.dream_awaiting_direction || "").trim() === "false"
         )
       );
     const dreamBuilderFlowActive =
@@ -692,12 +670,12 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
         dreamRuntimeMode === "builder_scoring" ||
         forceDreamBuilderRefine ||
         suggestDreamBuilder ||
-        contractMenuId.startsWith("DREAM_EXPLAINER_MENU_")
+        Boolean(readDreamBuilderCompareRuntime(specialist))
       );
     const dreamBuilderCompareActive =
       effectiveStepId === DREAM_STEP_ID &&
       dreamBuilderFlowActive &&
-      String((specialist as Record<string, unknown>).__dream_builder_compare_pending || "").trim() === "true";
+      Boolean(readDreamBuilderCompareRuntime(specialist));
     let viewVariant: UiViewVariant = "default";
     if (
       effectiveStepId === DREAM_STEP_ID &&
@@ -708,7 +686,7 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
       viewVariant = "dream_builder_scoring";
     } else if (dreamBuilderFlowActive) {
       viewVariant =
-        forceDreamBuilderRefine || contractMenuId === "DREAM_EXPLAINER_MENU_REFINE"
+        forceDreamBuilderRefine || dreamRuntimeMode === "builder_refine"
           ? "dream_builder_refine"
           : "dream_builder_collect";
     }

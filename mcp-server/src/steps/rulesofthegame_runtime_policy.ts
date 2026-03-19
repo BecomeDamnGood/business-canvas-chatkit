@@ -244,8 +244,6 @@ export function applyRulesRuntimePolicy(params: {
         status: "pending",
         presentation: "picker",
         resolution: "",
-        target_field: "rulesofthegame",
-        variant: "",
         user_text: userBullets,
         user_normalized_text: userBullets,
         user_items: userItems,

@@ -240,7 +240,7 @@ type MotivationPolicyApplyParams = {
   specialistResult: Record<string, unknown>;
   previousSpecialist: Record<string, unknown>;
   state: CanvasState;
-  requireComparePick: boolean;
+  compareActive: boolean;
 };
 
 type MotivationPolicyApplyResult = {

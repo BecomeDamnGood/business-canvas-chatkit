@@ -14,7 +14,6 @@ export type PendingInteractionAllowedAction = {
 
 export type PendingInteractionCompareRenderModel = {
   mode: "text" | "list";
-  variant: "default" | "clarify_dual" | "grouped_list_units";
   instruction: string;
   feedback_reason_text: string;
   user_label: string;
@@ -23,6 +22,11 @@ export type PendingInteractionCompareRenderModel = {
   suggestion_text: string;
   user_items: string[];
   suggestion_items: string[];
+  units?: Array<{
+    user_items: string[];
+    suggestion_items: string[];
+    feedback_reason_text: string;
+  }>;
   retained_heading: string;
   retained_items: string[];
 };

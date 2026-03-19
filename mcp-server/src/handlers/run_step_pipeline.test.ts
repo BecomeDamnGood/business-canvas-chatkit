@@ -12,7 +12,15 @@ import {
 } from "./run_step_pipeline.js";
 import { createRunStepCompareHelpers } from "./run_step_compare.js";
 import { createRunStepUiPayloadHelpers } from "./run_step_ui_payload.js";
+import { createCompareRuntimeState, readCompareRuntime } from "./compare_runtime.js";
+import { readDreamBuilderCompareRuntime } from "./dream_builder_compare_runtime.js";
 import { ACTIONCODE_REGISTRY } from "../core/actioncode_registry.js";
+
+function pickDreamBuilderCompareCarrier(payload: Record<string, unknown>): Record<string, unknown> {
+  const specialist = ((payload.specialist as Record<string, unknown>) || {}) as Record<string, unknown>;
+  if (readDreamBuilderCompareRuntime(specialist)) return specialist;
+  return (((payload.state as Record<string, unknown>)?.last_specialist_result as Record<string, unknown>) || {}) as Record<string, unknown>;
+}
 
 function buildPipelineUiPayloadHelpers() {
   return createRunStepUiPayloadHelpers({
@@ -245,10 +253,7 @@ function buildStrategyPipelineHarness(params: {
             .map((line) => String(line || "").trim())
             .filter(Boolean);
           nextState.dream_builder_statements = canonicalStatements;
-          if (
-            String((specialistResult as Record<string, unknown>).__dream_builder_compare_pending || "").trim() !== "true" &&
-            canonicalStatements.length >= 20
-          ) {
+          if (!readDreamBuilderCompareRuntime(specialistResult) && canonicalStatements.length >= 20) {
             nextState.dream_scoring_statements = canonicalStatements;
           }
           const scoringPhase = String((specialistResult as Record<string, unknown>).scoring_phase || "").trim() === "true";
@@ -687,7 +692,12 @@ test("resolveCompareSeedUserText anchors feedback on suggestion to the previous 
       submittedUserText: "Dit klinkt nog een beetje saai.",
       userMessage: "Dit klinkt nog een beetje saai.",
       previousSpecialist: {
-        compare_agent_current: "Technische mkb-bedrijven met complexe productontwikkeling.",
+        compare_runtime: createCompareRuntimeState({
+          kind: "text_compare",
+          mode: "text",
+          status: "pending",
+          suggestion_text: "Technische mkb-bedrijven met complexe productontwikkeling.",
+        }),
       },
     }),
     "Technische mkb-bedrijven met complexe productontwikkeling."
@@ -702,7 +712,12 @@ test("resolveCompareSeedUserText keeps direct user content input as seed", () =>
       submittedUserText: "Familiebedrijven met een technische kern.",
       userMessage: "Familiebedrijven met een technische kern.",
       previousSpecialist: {
-        compare_agent_current: "Technische mkb-bedrijven met complexe productontwikkeling.",
+        compare_runtime: createCompareRuntimeState({
+          kind: "text_compare",
+          mode: "text",
+          status: "pending",
+          suggestion_text: "Technische mkb-bedrijven met complexe productontwikkeling.",
+        }),
       },
     }),
     "Familiebedrijven met een technische kern."
@@ -717,7 +732,12 @@ test("resolveCompareSeedUserText returns empty seed for feedback on current valu
       submittedUserText: "Ik vind dit een saaie formulering",
       userMessage: "Ik vind dit een saaie formulering",
       previousSpecialist: {
-        compare_agent_current: "Technische mkb-bedrijven met complexe productontwikkeling.",
+        compare_runtime: createCompareRuntimeState({
+          kind: "text_compare",
+          mode: "text",
+          status: "pending",
+          suggestion_text: "Technische mkb-bedrijven met complexe productontwikkeling.",
+        }),
       },
     }),
     ""
@@ -942,16 +962,16 @@ test("runPostSpecialistPipeline keeps strategy local when a small addition is an
   } as any);
 
   assert.equal(specialistUserMessage, smallAddition);
-  assert.equal(String((payload.specialist as Record<string, unknown>).compare_pending || ""), "false");
-  assert.equal(String((payload.specialist as Record<string, unknown>).__dream_builder_compare_pending || ""), "true");
-  assert.equal(String((payload.specialist as Record<string, unknown>).compare_compare_mode || ""), "grouped_units");
+  const dreamBuilderCompare = readDreamBuilderCompareRuntime((payload.specialist as Record<string, unknown>) || {});
+  assert.equal(Boolean(readCompareRuntime((payload.specialist as Record<string, unknown>) || {})), false);
+  assert.ok(dreamBuilderCompare);
   assert.deepEqual((payload.specialist as Record<string, unknown>).statements, existingStatements);
   assert.equal(String((payload.specialist as Record<string, unknown>).strategy || ""), existingStatements.join("\n"));
   assert.equal(String((payload.specialist as Record<string, unknown>).refined_formulation || ""), existingStatements.join("\n"));
   assert.ok(payload.compareOverride);
   assert.equal(payload.compareOverride?.mode, "list");
-  assert.ok(Array.isArray((payload.specialist as Record<string, unknown>).compare_compare_units));
-  const compareUnits = ((payload.specialist as Record<string, unknown>).compare_compare_units as Array<Record<string, unknown>>) || [];
+  assert.ok(Array.isArray(dreamBuilderCompare?.segments));
+  const compareUnits = (((payload.compareOverride as Record<string, unknown>)?.grouped_units as Array<Record<string, unknown>>) || []);
   assert.equal(compareUnits.length >= 1, true);
 });
 
@@ -1033,11 +1053,9 @@ test("runPostSpecialistPipeline restores Dream Builder canonical statements when
     },
   } as any);
 
-  const specialist = (((payload.specialist as Record<string, unknown>)?.__dream_builder_compare_pending
-    ? (payload.specialist as Record<string, unknown>)
-    : ((payload.state as Record<string, unknown>).last_specialist_result as Record<string, unknown>)) || {}) as Record<string, unknown>;
-  assert.equal(String(specialist.compare_pending || ""), "false");
-  assert.equal(String(specialist.__dream_builder_compare_pending || ""), "true");
+  const specialist = pickDreamBuilderCompareCarrier(payload as Record<string, unknown>);
+  assert.equal(Boolean(readCompareRuntime(specialist)), false);
+  assert.ok(readDreamBuilderCompareRuntime(specialist));
   assert.deepEqual(specialist.statements, existingStatements);
   assert.deepEqual((payload.state as Record<string, unknown>).dream_builder_statements, existingStatements);
   assert.equal(payload.compareOverride, null);
@@ -1134,11 +1152,10 @@ test("runPostSpecialistPipeline recovers Dream Builder compare when a material r
     },
   } as any);
 
-  const specialist = (((payload.specialist as Record<string, unknown>)?.__dream_builder_compare_pending
-    ? (payload.specialist as Record<string, unknown>)
-    : ((payload.state as Record<string, unknown>).last_specialist_result as Record<string, unknown>)) || {}) as Record<string, unknown>;
-  assert.equal(String(specialist.compare_pending || ""), "false");
-  assert.equal(String(specialist.__dream_builder_compare_pending || ""), "true");
+  const specialist = pickDreamBuilderCompareCarrier(payload as Record<string, unknown>);
+  assert.equal(Boolean(readCompareRuntime(specialist)), false);
+  const dreamBuilderCompare = readDreamBuilderCompareRuntime(specialist);
+  assert.ok(dreamBuilderCompare);
   assert.deepEqual(specialist.statements, existingStatements);
   assert.deepEqual((payload.state as Record<string, unknown>).dream_builder_statements, existingStatements);
   assert.equal(payload.compareOverride, null);
@@ -1243,11 +1260,10 @@ test("runPostSpecialistPipeline keeps Dream Builder compare active even when a c
     },
   } as any);
 
-  const specialist = (((payload.specialist as Record<string, unknown>)?.__dream_builder_compare_pending
-    ? (payload.specialist as Record<string, unknown>)
-    : ((payload.state as Record<string, unknown>).last_specialist_result as Record<string, unknown>)) || {}) as Record<string, unknown>;
-  assert.equal(String(specialist.compare_pending || ""), "false");
-  assert.equal(String(specialist.__dream_builder_compare_pending || ""), "true");
+  const specialist = pickDreamBuilderCompareCarrier(payload as Record<string, unknown>);
+  assert.equal(Boolean(readCompareRuntime(specialist)), false);
+  const dreamBuilderCompare = readDreamBuilderCompareRuntime(specialist);
+  assert.ok(dreamBuilderCompare);
   assert.deepEqual(specialist.statements, existingStatements);
   assert.deepEqual((payload.state as Record<string, unknown>).dream_builder_statements, existingStatements);
   assert.equal(payload.compareOverride, null);
@@ -1365,11 +1381,10 @@ test("runPostSpecialistPipeline repairs a near-duplicate Dream Builder append in
     specialistCalls[1]?.startsWith("__ROUTE__DREAM_EXPLAINER_OVERLAP_REPAIR__"),
     true
   );
-  const specialist = (((payload.specialist as Record<string, unknown>)?.__dream_builder_compare_pending
-    ? (payload.specialist as Record<string, unknown>)
-    : ((payload.state as Record<string, unknown>).last_specialist_result as Record<string, unknown>)) || {}) as Record<string, unknown>;
-  assert.equal(String(specialist.compare_pending || ""), "false");
-  assert.equal(String(specialist.__dream_builder_compare_pending || ""), "true");
+  const specialist = pickDreamBuilderCompareCarrier(payload as Record<string, unknown>);
+  assert.equal(Boolean(readCompareRuntime(specialist)), false);
+  const dreamBuilderCompare = readDreamBuilderCompareRuntime(specialist);
+  assert.ok(dreamBuilderCompare);
   assert.deepEqual(specialist.statements, existingStatements);
   assert.deepEqual((payload.state as Record<string, unknown>).dream_builder_statements, existingStatements);
   assert.equal(payload.compareOverride, null);
@@ -1491,9 +1506,7 @@ test("runPostSpecialistPipeline repairs Dream Builder REFINE overlap cases befor
     specialistCalls[1]?.startsWith("__ROUTE__DREAM_EXPLAINER_OVERLAP_REPAIR__"),
     true
   );
-  const specialist = (((payload.specialist as Record<string, unknown>)?.__dream_builder_compare_pending
-    ? (payload.specialist as Record<string, unknown>)
-    : ((payload.state as Record<string, unknown>).last_specialist_result as Record<string, unknown>)) || {}) as Record<string, unknown>;
+  const specialist = pickDreamBuilderCompareCarrier(payload as Record<string, unknown>);
   assert.equal(
     String(specialist.__dream_builder_overlap_existing_statement || ""),
     existingStatements[3]
@@ -1502,8 +1515,9 @@ test("runPostSpecialistPipeline repairs Dream Builder REFINE overlap cases befor
     String(specialist.__dream_builder_overlap_incoming_statement || ""),
     "Betekenisvolle verhalen wordt steeds belangrijker voor mensen. dat willen ze ook delen als ze er trots op zijn"
   );
-  assert.equal(String(specialist.compare_pending || ""), "false");
-  assert.equal(String(specialist.__dream_builder_compare_pending || ""), "true");
+  assert.equal(Boolean(readCompareRuntime(specialist)), false);
+  const dreamBuilderCompare = readDreamBuilderCompareRuntime(specialist);
+  assert.ok(dreamBuilderCompare);
 });
 
 test("runPostSpecialistPipeline repairs a 20th Dream Builder append into overlap merge when the raw user input matches an existing statement more strongly than the appended line does", async () => {
@@ -1634,9 +1648,7 @@ test("runPostSpecialistPipeline repairs a 20th Dream Builder append into overlap
     specialistCalls[1]?.startsWith("__ROUTE__DREAM_EXPLAINER_OVERLAP_REPAIR__"),
     true
   );
-  const specialist = (((payload.specialist as Record<string, unknown>)?.__dream_builder_compare_pending
-    ? (payload.specialist as Record<string, unknown>)
-    : ((payload.state as Record<string, unknown>).last_specialist_result as Record<string, unknown>)) || {}) as Record<string, unknown>;
+  const specialist = pickDreamBuilderCompareCarrier(payload as Record<string, unknown>);
   assert.equal(
     String(specialist.__dream_builder_overlap_existing_statement || ""),
     existingStatements[17]
@@ -1645,7 +1657,7 @@ test("runPostSpecialistPipeline repairs a 20th Dream Builder append into overlap
     String(specialist.__dream_builder_overlap_incoming_statement || ""),
     userMessage
   );
-  assert.equal(String(specialist.__dream_builder_compare_pending || ""), "true");
+  assert.ok(readDreamBuilderCompareRuntime(specialist));
   assert.deepEqual(specialist.statements, existingStatements);
 });
 
@@ -1762,9 +1774,7 @@ test("runPostSpecialistPipeline repairs a semantically overlapping Dream Builder
     specialistCalls[1]?.startsWith("__ROUTE__DREAM_EXPLAINER_OVERLAP_REPAIR__"),
     true
   );
-  const specialist = (((payload.specialist as Record<string, unknown>)?.__dream_builder_compare_pending
-    ? (payload.specialist as Record<string, unknown>)
-    : ((payload.state as Record<string, unknown>).last_specialist_result as Record<string, unknown>)) || {}) as Record<string, unknown>;
+  const specialist = pickDreamBuilderCompareCarrier(payload as Record<string, unknown>);
   assert.equal(
     String(specialist.__dream_builder_overlap_existing_statement || ""),
     existingStatements[4]
@@ -1773,7 +1783,7 @@ test("runPostSpecialistPipeline repairs a semantically overlapping Dream Builder
     String(specialist.__dream_builder_overlap_incoming_statement || ""),
     userMessage
   );
-  assert.equal(String(specialist.__dream_builder_compare_pending || ""), "true");
+  assert.ok(readDreamBuilderCompareRuntime(specialist));
   assert.deepEqual(specialist.statements, existingStatements);
   assert.deepEqual((payload.state as Record<string, unknown>).dream_builder_statements, existingStatements);
 });
@@ -1908,12 +1918,11 @@ test("runPostSpecialistPipeline repairs incomplete multi-wish Dream Builder rewr
     specialistCalls[1]?.startsWith("__ROUTE__DREAM_EXPLAINER_MULTI_REWRITE_REPAIR__"),
     true
   );
-  const specialist = (((payload.specialist as Record<string, unknown>)?.__dream_builder_compare_pending
-    ? (payload.specialist as Record<string, unknown>)
-    : ((payload.state as Record<string, unknown>).last_specialist_result as Record<string, unknown>)) || {}) as Record<string, unknown>;
-  assert.equal(String(specialist.compare_pending || ""), "false");
-  assert.equal(String(specialist.__dream_builder_compare_pending || ""), "true");
-  assert.deepEqual(specialist.__dream_builder_compare_suggested_items, [
+  const specialist = pickDreamBuilderCompareCarrier(payload as Record<string, unknown>);
+  assert.equal(Boolean(readCompareRuntime(specialist)), false);
+  const dreamBuilderCompare = readDreamBuilderCompareRuntime(specialist);
+  assert.ok(dreamBuilderCompare);
+  assert.deepEqual(dreamBuilderCompare.suggested_items, [
     "Over 5 tot 10 jaar zullen meer mensen vooral problemen willen oplossen die voor henzelf en hun omgeving echt betekenisvol zijn.",
     "De behoefte aan helderheid en eenvoud in complexe of verwarrende domeinen zal sterk toenemen.",
     "Er zal meer aandacht zijn voor veilige omgevingen waarin mensen zich gezien en gesteund voelen.",
@@ -2443,9 +2452,10 @@ test("runPostSpecialistPipeline keeps overlapping strategy merge proposals in a 
   } as any);
 
   assert.equal(specialistUserMessage, userAddition);
-  assert.equal(String((payload.specialist as Record<string, unknown>).compare_pending || ""), "true");
-  assert.equal(String((payload.specialist as Record<string, unknown>).compare_compare_mode || ""), "grouped_units");
-  assert.equal(String((payload.specialist as Record<string, unknown>).compare_variant || ""), "grouped_list_units");
+  const compareState = readCompareRuntime((payload.specialist as Record<string, unknown>) || {});
+  assert.equal(String(compareState?.status || ""), "pending");
+  assert.equal(String(compareState?.grouped_mode || ""), "grouped_units");
+  assert.equal(String(compareState?.variant || ""), "grouped_list_units");
   assert.ok(payload.compareOverride);
   assert.deepEqual(payload.compareOverride?.user_items, [
     "Altijd gericht investeren in relevante technologische innovaties die de impact van klantcommunicatie vergroten",
@@ -2853,7 +2863,7 @@ test("runPostSpecialistPipeline exposes a renderable next widget outcome for eve
       actionCode: "ACTION_DREAM_EXPLAINER_REFINE_ADJUST",
       stepId: "dream",
       activeSpecialist: "DreamExplainer",
-      menuId: "DREAM_EXPLAINER_MENU_REFINE",
+      menuId: "DREAM_EXPLAINER_MENU_CONFIRM_SINGLE",
       route: "__ROUTE__DREAM_EXPLAINER_REFINE__",
       dreamRuntimeMode: "builder_refine" as const,
       previousValue: "Mindd droomt van een wereld waarin mensen bewuster kiezen.",
@@ -2862,7 +2872,7 @@ test("runPostSpecialistPipeline exposes a renderable next widget outcome for eve
         message: "I tightened the direction so the next choice stays focused on the broader change.",
         question: "Which broader change should this dream emphasize more clearly?",
         suggest_dreambuilder: "true",
-        ui_contract_id: "dream:incomplete_output:DREAM_EXPLAINER_MENU_REFINE",
+        ui_contract_id: "dream:incomplete_output:DREAM_EXPLAINER_MENU_CONFIRM_SINGLE",
       },
       expectedOutcome: "ask" as const,
       expectedQuestion: "Which broader change should this dream emphasize more clearly?",

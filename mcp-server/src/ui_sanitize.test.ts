@@ -2437,15 +2437,15 @@ test("bundled compare view reads feedback only from pending_interaction and not 
   assert.match(source, /\.cardDesc \.cardFeedbackNote/);
 });
 
-test("bundled compare picker keeps text input visible but inert until a choice is made", () => {
+test("bundled compare picker keeps text input visible and enabled while compare is active", () => {
   const source = fs.readFileSync(new URL("../ui/step-card.bundled.html", import.meta.url), "utf8");
-  assert.match(source, /const disableTextSubmit = shouldDisableTextInputForCompare\(\{/);
+  assert.match(source, /const disableTextSubmit = shouldDisableTextInputForCompare\(\);/);
+  assert.match(source, /function shouldDisableTextInputForCompare\(\) \{\s*return false;\s*\}/);
   assert.match(source, /inputEl2\.disabled = disableTextSubmit;/);
   assert.match(source, /inputEl2\.readOnly = disableTextSubmit;/);
   assert.match(source, /inputEl2\.tabIndex = disableTextSubmit \? -1 : 0;/);
   assert.match(source, /if \(!showTextSubmit \|\| disableTextSubmit\) setSendEnabled\(false\);/);
-  assert.match(source, /if \(input\.disabled === true \|\| input\.readOnly === true\) \{/);
-  assert.match(source, /if \(input\?\.disabled === true \|\| input\?\.readOnly === true\) return;/);
+  assert.match(source, /const showTextSubmit = shouldShowTextInputForCompare\(\{/);
 });
 
 test("bundled runtime retains canonical step continuity for latest render cache", () => {

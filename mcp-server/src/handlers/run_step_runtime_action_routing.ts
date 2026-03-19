@@ -27,9 +27,14 @@ import {
 import {
   attachCompareRuntime,
   clearCompareRuntime,
+  hasRenderablePendingCompareState,
   patchCompareRuntime,
   readCompareRuntime,
 } from "./compare_runtime.js";
+import {
+  clearDreamBuilderCompareRuntime,
+  readDreamBuilderCompareRuntime,
+} from "./dream_builder_compare_runtime.js";
 
 export type RunStepRuntimeActionRoutingOutput<TPayload extends Record<string, unknown>> = {
   response: TPayload | null;
@@ -254,40 +259,20 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
 
   const hasRenderablePendingCompare = (specialist: Record<string, unknown>): boolean => {
     const compareState = readCompareRuntime(specialist);
-    if (compareState?.status !== "pending") return false;
+    if (!compareState) return false;
     const mode = compareState.mode === "list" ? "list" : "text";
-    const stepId = String(compareState.target_field || "").trim();
+    const stepId = String(state.current_step || "").trim();
     const dreamRuntimeMode = action.getDreamRuntimeMode(state);
     const dreamBuilderFlowActive = String(state.current_step || "") === ids.dreamStepId && dreamRuntimeMode !== "self";
     if (dreamBuilderFlowActive && stepId === ids.dreamStepId) return false;
-    const hasExplicitFeedbackReason = Boolean(String(compareState.feedback_reason_text || "").trim());
-    const userText = String(compareState.user_normalized_text || compareState.user_text || "").trim();
+    if (!hasRenderablePendingCompareState(compareState)) return false;
+    if (mode === "list") return true;
     const suggestionText = String(compareState.suggestion_text || specialist.refined_formulation || "").trim();
-    const userItems = [...compareState.user_items];
-    const suggestionItems = [...compareState.suggestion_items];
-    if (mode === "list") {
-      const hasUser = userItems.length > 0 || Boolean(userText);
-      const hasSuggestion = suggestionItems.length > 0 || Boolean(suggestionText);
-      return hasUser && hasSuggestion && hasExplicitFeedbackReason;
-    }
-    if (
-      pendingComparePresentation(specialist) === "picker" &&
-      isSingleValueTextPickerStep(stepId, mode) &&
-      !compareState.user_variant_stepworthy
-    ) {
-      return false;
-    }
-    return Boolean(userText && suggestionText && hasExplicitFeedbackReason);
+    return Boolean(suggestionText && String(compareState.user_normalized_text || compareState.user_text || "").trim());
   };
 
-  const pendingComparePresentation = (specialist: Record<string, unknown>): "picker" | "canonical" =>
-    readCompareRuntime(specialist)?.presentation === "canonical" ? "canonical" : "picker";
-
   const hasPickerPendingCompare = (specialist: Record<string, unknown>): boolean =>
-    pendingComparePresentation(specialist) === "picker" && hasRenderablePendingCompare(specialist);
-
-  const hasCanonicalPendingCompare = (specialist: Record<string, unknown>): boolean =>
-    pendingComparePresentation(specialist) === "canonical" && hasRenderablePendingCompare(specialist);
+    hasRenderablePendingCompare(specialist);
 
   const normalizeAcceptedOutputPendingSpecialist = async (
     specialist: Record<string, unknown>,
@@ -300,25 +285,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     if (dreamBuilderFlowActive && stepId === ids.dreamStepId) {
       return clearDreamBuilderLegacyCompareFields(specialist);
     }
-    const mode = compareState.mode === "list" ? "list" : "text";
-    if (!isSingleValueTextPickerStep(stepId, mode)) return specialist;
-    if (pendingComparePresentation(specialist) !== "picker") return specialist;
-    if (compareState.user_variant_stepworthy) return specialist;
-    const userVariant = String(compareState.user_normalized_text || compareState.user_text || "").trim();
-    const suggestion = String(compareState.suggestion_text || specialist.refined_formulation || "").trim();
-    if (!userVariant || !suggestion) return specialist;
-    const classification = await statePorts.classifyAcceptedOutputUserTurn({
-      model: runtime.model,
-      stepId,
-      userMessage: userVariant,
-      pendingSuggestion: suggestion,
-      pendingUserVariant: userVariant,
-    });
-    return patchCompareRuntime(specialist, {
-      user_variant_semantics: classification.turn_kind,
-      user_variant_stepworthy: classification.user_variant_is_stepworthy,
-      presentation: classification.user_variant_is_stepworthy ? "picker" : "canonical",
-    });
+    return specialist;
   };
 
   const tokenizeIntent = (raw: string): string[] =>
@@ -570,12 +537,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
         specialist: pendingSpecialistSeed,
         stepIdHint: stepId,
       });
-      const canonicalPendingConfirmable = hasCanonicalPendingCompare(pendingSpecialist);
-      if (canonicalPendingConfirmable) {
-        state = statePorts.clearStepInteractiveState(stateWithUi, stepId);
-      } else {
-        writeLastSpecialist(state, pendingSpecialist);
-      }
+      writeLastSpecialist(state, pendingSpecialist);
       const pendingChoice = compare.buildCompareFromPendingSpecialist(
         pendingSpecialist,
         stateWithUi,
@@ -597,42 +559,10 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
             state: stateWithUi,
           },
           pendingSpecialist,
-          { require_compare_pick: true },
+          null,
           [],
           [],
           pendingChoice
-        );
-        return {
-          response: behavior.finalizeResponse(payload),
-          state,
-          userMessage,
-          submittedTextIntent,
-          submittedTextAnchor,
-          acceptedOutputUserTurnClassification,
-          responseUiFlags: null,
-          bigwhyMaxWords: BIGWHY_MAX_WORDS,
-          countWords,
-          pickBigWhyCandidate,
-          buildBigWhyTooLongFeedback,
-        };
-      }
-      if (!canonicalPendingConfirmable && (
-        readCompareRuntime(pendingSpecialist)?.status === "pending" &&
-        pendingComparePresentation(pendingSpecialist) === "canonical" &&
-        hasRenderablePendingCompare(pendingSpecialist)
-      )) {
-        const payload = behavior.attachRegistryPayload(
-          {
-            ok: true,
-            tool: "run_step",
-            current_step_id: String(state.current_step),
-            active_specialist: String((state as Record<string, unknown>).active_specialist || ""),
-            text: behavior.buildTextForWidget({ specialist: pendingSpecialist, state: stateWithUi }),
-            prompt: behavior.pickPrompt(pendingSpecialist),
-            specialist: pendingSpecialist,
-            state: stateWithUi,
-          },
-          pendingSpecialist
         );
         return {
           response: behavior.finalizeResponse(payload),
@@ -903,16 +833,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
       specialist: clearCompareRuntime(specialist),
       stepIdHint: String(state.current_step || ""),
     }),
-    __dream_builder_compare_pending: "false",
-    __dream_builder_compare_kind: "",
-    __dream_builder_compare_current_items: [],
-    __dream_builder_compare_suggested_items: [],
-    __dream_builder_compare_segments: [],
-    __dream_builder_compare_rationale: "",
-    __dream_builder_compare_current_label: "",
-    __dream_builder_compare_suggested_label: "",
-    __dream_builder_compare_retained_heading: "",
-    __dream_builder_compare_instruction: "",
+    ...clearDreamBuilderCompareRuntime(specialist),
   });
   const buildWidgetResponse = async (params: {
     nextState: CanvasState;
@@ -922,8 +843,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     const stateWithUi = await behavior.ensureUiStrings(params.nextState, userMessage);
     const shouldSuspendPendingPicker =
       (!params.compare || params.compare.enabled !== true) &&
-      readCompareRuntime(params.specialist)?.status === "pending" &&
-      pendingComparePresentation(params.specialist) === "picker";
+      readCompareRuntime(params.specialist)?.status === "pending";
     const responseSpecialistBase = shouldSuspendPendingPicker
       ? suspendPendingCompareSpecialist(params.specialist)
       : params.specialist;
@@ -946,7 +866,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
             state: stateWithUi,
           },
           responseSpecialist,
-          { require_compare_pick: true },
+          null,
           [],
           [],
           params.compare
@@ -1117,7 +1037,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
   const dreamBuilderComparePending =
     runtime.inputMode === "widget" &&
     dreamBuilderModeActive &&
-    String(pendingBeforeTurn.__dream_builder_compare_pending || "").trim() === "true";
+    Boolean(readDreamBuilderCompareRuntime(pendingBeforeTurn));
   let hasPendingCompare =
     runtime.compareEnabled &&
     runtime.inputMode === "widget" &&
@@ -1361,8 +1281,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
   }
 
   const hasPickerPendingCompareForTurn =
-    hasPendingCompare &&
-    pendingComparePresentation(pendingBeforeTurn) === "picker";
+    hasPendingCompare;
 
   if (
     hasPickerPendingCompareForTurn &&
@@ -1438,7 +1357,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
         state: stateWithUi,
       },
       pendingSpecialist,
-      { require_compare_pick: true },
+      null,
       [],
       [],
       pendingChoice
