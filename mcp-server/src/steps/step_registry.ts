@@ -90,7 +90,7 @@ export const STEP_REGISTRY_BY_STEP_ID = {
       routeToken: "__ROUTE__DREAM_PICK_ONE__",
       menuId: "DREAM_MENU_SUGGESTIONS",
       actionCode: "ACTION_DREAM_SUGGESTIONS_PICK_ONE",
-      nextMenuId: "DREAM_MENU_CONFIRM_SINGLE",
+      nextMenuId: "DREAM_MENU_NEXT_STEP",
       mode: "suggestions",
       itemKind: "sentence",
       field: "dream",

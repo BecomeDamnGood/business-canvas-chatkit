@@ -285,6 +285,7 @@ export function shouldSuppressMainCardForCompare(
   uiPayloadRaw: Record<string, unknown> | null | undefined
 ): boolean {
   const uiPayload = uiPayloadRaw && typeof uiPayloadRaw === "object" ? uiPayloadRaw : {};
+  if (readDreamBuilderContract(uiPayload)) return false;
   return Boolean(readPendingInteraction(uiPayload));
 }
 
@@ -462,7 +463,7 @@ export function readCompareContractFailureReason(
 ): string | null {
   const uiPayload = toRecord(uiPayloadRaw);
   const dreamBuilderContract = readDreamBuilderContract(uiPayload);
-  if (dreamBuilderContract?.phase === "compare" && Boolean(dreamBuilderContract.compare)) return null;
+  if (dreamBuilderContract) return null;
   const pendingInteractionRaw = toRecord(uiPayload.pending_interaction);
   if (Object.keys(pendingInteractionRaw).length === 0) return null;
   return readPendingInteraction(uiPayload) ? null : "ui_pending_interaction_malformed_for_compare";
@@ -1330,6 +1331,10 @@ function renderComparePanel(resultData: Record<string, unknown>, lang: string): 
     resultData && typeof resultData.ui === "object" && resultData.ui
       ? (resultData.ui as Record<string, unknown>)
       : {};
+  if (readDreamBuilderContract(uiPayload)) {
+    (wrap as HTMLElement).style.display = "none";
+    return false;
+  }
   const pendingInteraction = readPendingInteraction(uiPayload);
   if (!pendingInteraction) {
     (wrap as HTMLElement).style.display = "none";
@@ -2234,14 +2239,7 @@ export function render(overrideToolOutput?: unknown): void {
     if (statementsPanelEl) statementsPanelEl.style.display = "none";
   }
 
-  let comparePanelVisible = false;
-  const suppressCompare = isViewModeDreamBuilderScoring;
-  if (!suppressCompare) {
-    comparePanelVisible = renderComparePanel(result, lang);
-  } else {
-    const compareWrap = document.getElementById("compareWrap");
-    if (compareWrap) compareWrap.style.display = "none";
-  }
+  const comparePanelVisible = renderComparePanel(result, lang);
 
   let choicesArr: Choice[] = [];
   let promptText = isDreamDirectionView ? "" : promptSource;

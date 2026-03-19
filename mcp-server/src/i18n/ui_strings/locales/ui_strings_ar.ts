@@ -2,7 +2,7 @@ import { UI_STRINGS_SOURCE_EN } from "../../ui_strings_defaults.js";
 
 export const UI_STRINGS_LOCALE_AR: Record<string, string> = {
     ...UI_STRINGS_SOURCE_EN,
-    "menuLabel.DREAM_EXPLAINER_MENU_CONFIRM_SINGLE.ACTION_DREAM_EXPLAINER_REFINE_ADJUST": "حسّن هذه الصياغة",
+    "menuLabel.DREAM_EXPLAINER_MENU_NEXT_STEP.ACTION_DREAM_EXPLAINER_REFINE_ADJUST": "حسّن هذه الصياغة",
     "menuLabel.DREAM_MENU_INTRO.ACTION_DREAM_INTRO_EXPLAIN_MORE": "أخبرني المزيد عن سبب أهمية الحلم",
     "menuLabel.PURPOSE_MENU_INTRO.ACTION_PURPOSE_INTRO_EXPLAIN_MORE": "اشرح أكثر لماذا نحتاج إلى الغاية.",
     "menuLabel.PURPOSE_MENU_POST_ASK.ACTION_PURPOSE_INTRO_EXPLAIN_MORE": "اشرح أكثر لماذا نحتاج إلى الغاية.",

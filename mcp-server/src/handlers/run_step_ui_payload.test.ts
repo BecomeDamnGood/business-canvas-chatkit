@@ -85,7 +85,7 @@ test("attachRegistryPayload marks short canonical dream-builder coaching text as
       } as any,
     },
     {
-      ui_contract_id: "dream:ASK:DREAM_MENU_CONFIRM_SINGLE:v1",
+      ui_contract_id: "dream:ASK:DREAM_MENU_NEXT_STEP:v1",
       suggest_dreambuilder: "false",
       __canonical_text: "Dat is een goed beginpunt.",
       message: "Dat is een goed beginpunt.",
@@ -695,7 +695,7 @@ test("attachRegistryPayload keeps Dream single-value ui.content when stale canon
       } as any,
     },
     {
-      ui_contract_id: "dream:ASK:DREAM_MENU_CONFIRM_SINGLE:v1",
+      ui_contract_id: "dream:ASK:DREAM_MENU_NEXT_STEP:v1",
       compare_runtime: compareRuntime({
         kind: "text_compare",
         mode: "text",
@@ -750,7 +750,7 @@ test("attachRegistryPayload keeps Dream single-value ui.content available while 
       } as any,
     },
     {
-      ui_contract_id: "dream:ASK:DREAM_MENU_CONFIRM_SINGLE:v1",
+      ui_contract_id: "dream:ASK:DREAM_MENU_NEXT_STEP:v1",
       compare_runtime: compareRuntime({
         kind: "text_compare",
         mode: "text",
@@ -806,7 +806,7 @@ test("attachRegistryPayload does not publish Dream compare payloads when overrid
       } as any,
     },
     {
-      ui_contract_id: "dream:ASK:DREAM_MENU_CONFIRM_SINGLE:v1",
+      ui_contract_id: "dream:ASK:DREAM_MENU_NEXT_STEP:v1",
       compare_runtime: compareRuntime({
         kind: "text_compare",
         mode: "text",
@@ -896,7 +896,7 @@ test("attachRegistryPayload ignores explicit single-value compare contracts that
       } as any,
     },
     {
-      ui_contract_id: "dream:ASK:DREAM_MENU_CONFIRM_SINGLE:v1",
+      ui_contract_id: "dream:ASK:DREAM_MENU_NEXT_STEP:v1",
       compare_runtime: compareRuntime({
         kind: "text_compare",
         mode: "text",

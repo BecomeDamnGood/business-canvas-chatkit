@@ -756,7 +756,7 @@ test("buildTextForWidget removes monolithic dream summary paragraph when stateme
   ];
   const output = helpers.buildTextForWidget({
     specialist: {
-      ui_contract_id: "dream:ASK:DREAM_EXPLAINER_MENU_CONFIRM_SINGLE:v1",
+      ui_contract_id: "dream:ASK:DREAM_EXPLAINER_MENU_NEXT_STEP:v1",
       suggest_dreambuilder: "true",
       message: [
         "Ga verder met de Droom-oefening.",
@@ -787,7 +787,7 @@ test("buildTextForWidget removes duplicate dream summary paragraph using canonic
   ];
   const output = helpers.buildTextForWidget({
     specialist: {
-      ui_contract_id: "dream:ASK:DREAM_EXPLAINER_MENU_CONFIRM_SINGLE:v1",
+      ui_contract_id: "dream:ASK:DREAM_EXPLAINER_MENU_NEXT_STEP:v1",
       suggest_dreambuilder: "true",
       message: [
         "People will have more opportunities to improve their lives and feel valued for their contributions. Positive impact and meaningful work will be increasingly valued in society. Individuals will have greater freedom in how they use their time and make choices. People will take greater pride in their work and its contribution to the world. Businesses will increasingly reflect the values and identities of their founders.",
@@ -831,7 +831,7 @@ test("buildTextForWidget removes duplicate dream summary paragraph in builder ru
   ];
   const output = helpers.buildTextForWidget({
     specialist: {
-      ui_contract_id: "dream:ASK:DREAM_MENU_CONFIRM_SINGLE:v1",
+      ui_contract_id: "dream:ASK:DREAM_MENU_NEXT_STEP:v1",
       suggest_dreambuilder: "false",
       message: [
         "Ga verder met de Droom-oefening.",
@@ -867,7 +867,7 @@ test("buildTextForWidget drops dream narrative paragraph when it only repeats ca
   ];
   const output = helpers.buildTextForWidget({
     specialist: {
-      ui_contract_id: "dream:ASK:DREAM_MENU_CONFIRM_SINGLE:v1",
+      ui_contract_id: "dream:ASK:DREAM_MENU_NEXT_STEP:v1",
       suggest_dreambuilder: "false",
       message: statements.join(" "),
       refined_formulation: "",
@@ -899,7 +899,7 @@ test("buildTextForWidget drops paraphrased dream narrative summary when canonica
   ];
   const output = helpers.buildTextForWidget({
     specialist: {
-      ui_contract_id: "dream:ASK:DREAM_MENU_CONFIRM_SINGLE:v1",
+      ui_contract_id: "dream:ASK:DREAM_MENU_NEXT_STEP:v1",
       suggest_dreambuilder: "false",
       message: [
         "Mensen zullen vaker betekenis zoeken in werk dat positief doorwerkt in hun omgeving.",
@@ -937,7 +937,7 @@ test("buildTextForWidget keeps short dream-builder support sentence while droppi
   ];
   const output = helpers.buildTextForWidget({
     specialist: {
-      ui_contract_id: "dream:ASK:DREAM_MENU_CONFIRM_SINGLE:v1",
+      ui_contract_id: "dream:ASK:DREAM_MENU_NEXT_STEP:v1",
       suggest_dreambuilder: "false",
       message: [
         "Dat is een goed beginpunt.",
@@ -967,7 +967,7 @@ test("buildTextForWidget keeps recap body exclusive when refined append is suppr
   const canonical = "Mindd droomt van een wereld waarin mensen met vertrouwen complexe keuzes maken.";
   const output = helpers.buildTextForWidget({
     specialist: {
-      ui_contract_id: "dream:valid_output:DREAM_MENU_CONFIRM_SINGLE:v1",
+      ui_contract_id: "dream:valid_output:DREAM_MENU_NEXT_STEP:v1",
       wants_recap: true,
       __suppress_refined_append: "true",
       message: [
@@ -997,7 +997,7 @@ test("buildTextForWidget does not append refined dream text when it semantically
   ];
   const output = helpers.buildTextForWidget({
     specialist: {
-      ui_contract_id: "dream:ASK:DREAM_MENU_CONFIRM_SINGLE:v1",
+      ui_contract_id: "dream:ASK:DREAM_MENU_NEXT_STEP:v1",
       suggest_dreambuilder: "false",
       message: "Dat is een sterk startpunt.",
       refined_formulation: statements.join(" "),
@@ -1029,7 +1029,7 @@ test("buildTextForWidget keeps dream-builder rendering canonical-only and skips 
   ];
   const output = helpers.buildTextForWidget({
     specialist: {
-      ui_contract_id: "dream:ASK:DREAM_MENU_CONFIRM_SINGLE:v1",
+      ui_contract_id: "dream:ASK:DREAM_MENU_NEXT_STEP:v1",
       suggest_dreambuilder: "false",
       message: "Ga verder met de Droom-oefening.",
       refined_formulation: "We bouwen een toekomst met meer humane AI-keuzes.",
@@ -1056,7 +1056,7 @@ test("buildTextForWidget includes canonical pending compare suggestion text when
     "Mindd droomt van een wereld waarin mensen dankzij AI beter geinformeerde keuzes maken en meer rust ervaren bij aankopen.";
   const output = helpers.buildTextForWidget({
     specialist: {
-      ui_contract_id: "dream:ASK:DREAM_MENU_CONFIRM_SINGLE:v1",
+      ui_contract_id: "dream:ASK:DREAM_MENU_NEXT_STEP:v1",
       message: "Dat is een interessant uitgangspunt.",
       compare_runtime: createCompareRuntimeState({
         kind: "text_compare",
@@ -1188,7 +1188,7 @@ test("buildTextForWidget keeps Dream single-value body visible even when stale c
 
   const output = helpers.buildTextForWidget({
     specialist: {
-      ui_contract_id: "dream:ASK:DREAM_MENU_CONFIRM_SINGLE:v1",
+      ui_contract_id: "dream:ASK:DREAM_MENU_NEXT_STEP:v1",
       message: [
         "Je voorstel is te algemeen voor een droom.",
         "",
@@ -1230,7 +1230,7 @@ test("buildTextForWidget suppresses Dream standalone body while an active compar
 
   const output = helpers.buildTextForWidget({
     specialist: {
-      ui_contract_id: "dream:ASK:DREAM_MENU_CONFIRM_SINGLE:v1",
+      ui_contract_id: "dream:ASK:DREAM_MENU_NEXT_STEP:v1",
       message: [
         "Ik heb je input herschreven naar een droom.",
         "",
@@ -1286,7 +1286,7 @@ test("finalizeResponse keeps Dream self compare actions when builder compare is 
     active_specialist: "Dream",
     started: "true",
     last_specialist_result: {
-      ui_contract_id: "dream:ASK:DREAM_MENU_CONFIRM_SINGLE:v1",
+      ui_contract_id: "dream:ASK:DREAM_MENU_NEXT_STEP:v1",
       compare_runtime: createCompareRuntimeState({
         kind: "text_compare",
         mode: "text",
@@ -1308,7 +1308,7 @@ test("finalizeResponse keeps Dream self compare actions when builder compare is 
     text: "",
     prompt: "Kies welke formulering het beste past.",
     specialist: {
-      ui_contract_id: "dream:ASK:DREAM_MENU_CONFIRM_SINGLE:v1",
+      ui_contract_id: "dream:ASK:DREAM_MENU_NEXT_STEP:v1",
     },
     state: state as any,
     ui: {

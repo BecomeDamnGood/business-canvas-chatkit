@@ -749,12 +749,12 @@ test("runStepRuntimeActionRoutingLayer does not pretransition special-route-owne
     ACTION_DREAM_SUGGESTIONS_PICK_ONE: {
       step_id: "dream",
       from_menu_ids: ["DREAM_MENU_SUGGESTIONS"],
-      to_menu_id: "DREAM_MENU_CONFIRM_SINGLE",
+      to_menu_id: "DREAM_MENU_NEXT_STEP",
     },
   };
   params.action.resolveActionCodeTransition = () => ({
     targetStepId: "dream",
-    targetMenuId: "DREAM_MENU_CONFIRM_SINGLE",
+    targetMenuId: "DREAM_MENU_NEXT_STEP",
     renderMode: "menu" as const,
   });
   params.action.shouldPretransitionActionCode = (actionCode: string) =>

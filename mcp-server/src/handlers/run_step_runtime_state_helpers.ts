@@ -609,11 +609,6 @@ export function createRunStepRuntimeStateHelpers(deps: CreateRunStepRuntimeState
         ? ({ ...(state.last_specialist_result as Record<string, unknown>) })
         : {};
     const compareState = readCompareRuntime(lastRaw);
-    const pendingSuggestionIntent = String(compareState?.pending_text_intent || "").trim();
-    const pendingSuggestionAnchor = String(compareState?.pending_text_anchor || "").trim();
-    const pendingSuggestionSeedSource = String(compareState?.pending_text_seed_source || "").trim();
-    const pendingSuggestionFeedbackText = String(compareState?.pending_text_feedback_text || "").trim();
-    const pendingSuggestionPresentationMode = String(compareState?.pending_text_presentation_mode || "").trim();
     const proceedRequestIntent = String(lastRaw.proceed_request_intent || "").trim();
     const proceedBlockReasonCodes = Array.isArray(lastRaw.proceed_block_reason_codes)
       ? (lastRaw.proceed_block_reason_codes as unknown[]).map((value) => String(value || "").trim()).filter(Boolean)
@@ -639,24 +634,6 @@ export function createRunStepRuntimeStateHelpers(deps: CreateRunStepRuntimeState
         : Object.entries(finals)
             .map(([k, v]) => `- ${k}: ${safe(v)}`)
             .join("\n");
-    const pendingSuggestionContractLines =
-      pendingSuggestionIntent && pendingSuggestionAnchor
-        ? [
-            "",
-            "PENDING COMPARE FEEDBACK CONTRACT (follow exactly when present)",
-            `- intent: ${safe(pendingSuggestionIntent)}`,
-            `- anchor: ${safe(pendingSuggestionAnchor)}`,
-            `- seed_source: ${safe(pendingSuggestionSeedSource)}`,
-            `- presentation_mode: ${safe(pendingSuggestionPresentationMode)}`,
-            pendingSuggestionFeedbackText
-              ? `- feedback_text: ${safe(pendingSuggestionFeedbackText)}`
-              : "- feedback_text: (none)",
-            "- If intent is feedback_on_suggestion or reject_suggestion_explicit with anchor suggestion, rewrite the previous suggestion itself.",
-            "- If intent is feedback_on_current_value with anchor current_value, rewrite the current accepted wording itself.",
-            "- Stay on step content. Do not switch to coaching, motivation, process explanation, or meta-step framing.",
-            "- Return the next candidate wording for the same step field.",
-          ].join("\n")
-        : "";
     const proceedRequestContractLines =
       proceedRequestIntent === "next_step"
         ? [
@@ -711,7 +688,6 @@ RECAP RULE: Only include in a recap the finals listed above. Do not add placehol
 STATE META (do not output this section)
 - intro_shown_for_step: ${safe((state as any).intro_shown_for_step)}
 - intro_shown_session: ${safe((state as any).intro_shown_session)}
-${pendingSuggestionContractLines}
 ${proceedRequestContractLines}
 ${stuckSupportLines}
 - last_specialist_result_json: ${safe(last)}`;

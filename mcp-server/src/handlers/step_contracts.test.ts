@@ -355,15 +355,15 @@ test("dream follow-up menus keep exactly one exercise button with the original m
       expectedLabel: "Do a small exercise that helps to define your dream.",
     },
     {
-      menuId: "DREAM_MENU_CONFIRM_SINGLE",
-      contractId: "dream::valid_output::DREAM_MENU_CONFIRM_SINGLE",
+      menuId: "DREAM_MENU_NEXT_STEP",
+      contractId: "dream::valid_output::DREAM_MENU_NEXT_STEP",
       actionCodes: ["ACTION_DREAM_REFINE_CONFIRM", "ACTION_DREAM_REFINE_START_EXERCISE"],
       labelKeys: [
-        "menuLabel.DREAM_MENU_CONFIRM_SINGLE.ACTION_DREAM_REFINE_CONFIRM",
-        "menuLabel.DREAM_MENU_CONFIRM_SINGLE.ACTION_DREAM_REFINE_START_EXERCISE",
+        "menuLabel.DREAM_MENU_NEXT_STEP.ACTION_DREAM_REFINE_CONFIRM",
+        "menuLabel.DREAM_MENU_NEXT_STEP.ACTION_DREAM_REFINE_START_EXERCISE",
       ],
       expectedActionCode: "ACTION_DREAM_REFINE_START_EXERCISE",
-      expectedLabelKey: "menuLabel.DREAM_MENU_CONFIRM_SINGLE.ACTION_DREAM_REFINE_START_EXERCISE",
+      expectedLabelKey: "menuLabel.DREAM_MENU_NEXT_STEP.ACTION_DREAM_REFINE_START_EXERCISE",
       expectedLabel: "Do a small exercise that helps to define your dream.",
     },
   ] as const;
@@ -443,7 +443,7 @@ test("dream canonical refine recovers missing menu actions from the final contra
         view: {
           mode: "interactive",
         },
-        contract_id: "dream::valid_output::DREAM_MENU_CONFIRM_SINGLE",
+        contract_id: "dream::valid_output::DREAM_MENU_NEXT_STEP",
         content: {
           kind: "single_value",
           heading: "Op basis van je input stel ik de volgende droom voor",
@@ -453,10 +453,10 @@ test("dream canonical refine recovers missing menu actions from the final contra
     } as any,
     {
       applyUiClientActionContract: () => {},
-      parseMenuFromContractIdForStep: () => "DREAM_MENU_CONFIRM_SINGLE",
+      parseMenuFromContractIdForStep: () => "DREAM_MENU_NEXT_STEP",
       labelKeysForMenuActionCodes: () => [
-        "menuLabel.DREAM_MENU_CONFIRM_SINGLE.ACTION_DREAM_REFINE_CONFIRM",
-        "menuLabel.DREAM_MENU_CONFIRM_SINGLE.ACTION_DREAM_REFINE_START_EXERCISE",
+        "menuLabel.DREAM_MENU_NEXT_STEP.ACTION_DREAM_REFINE_CONFIRM",
+        "menuLabel.DREAM_MENU_NEXT_STEP.ACTION_DREAM_REFINE_START_EXERCISE",
       ],
       onUiParityError: () => {},
       attachRegistryPayload: (payload) => payload,
@@ -474,10 +474,10 @@ test("dream canonical refine recovers missing menu actions from the final contra
     validateUiPayloadContractParity(
       response as any,
       {
-        parseMenuFromContractIdForStep: () => "DREAM_MENU_CONFIRM_SINGLE",
+        parseMenuFromContractIdForStep: () => "DREAM_MENU_NEXT_STEP",
         labelKeysForMenuActionCodes: () => [
-          "menuLabel.DREAM_MENU_CONFIRM_SINGLE.ACTION_DREAM_REFINE_CONFIRM",
-          "menuLabel.DREAM_MENU_CONFIRM_SINGLE.ACTION_DREAM_REFINE_START_EXERCISE",
+          "menuLabel.DREAM_MENU_NEXT_STEP.ACTION_DREAM_REFINE_CONFIRM",
+          "menuLabel.DREAM_MENU_NEXT_STEP.ACTION_DREAM_REFINE_START_EXERCISE",
         ],
       }
     ),

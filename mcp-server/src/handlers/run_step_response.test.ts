@@ -85,6 +85,7 @@ test("finalizeResponse logs compare render decisions with compare and prompt fie
             mode: "list",
             status: "pending",
             presentation: "picker",
+            feedback_reason_text: "Deze keuze maakt de strategie concreter.",
             user_label: "Zo heb ik je input geinterpreteerd:",
             suggestion_label: "Dit zou mijn suggestie zijn:",
             user_items: ["Punt 1", "Punt 2", "Punt 3"],
@@ -103,6 +104,7 @@ test("finalizeResponse logs compare render decisions with compare and prompt fie
           render_model: {
             mode: "list",
             variant: "grouped_list_units",
+            feedback_reason_text: "Deze keuze maakt de strategie concreter.",
             user_label: "Zo heb ik je input geinterpreteerd:",
             suggestion_label: "Dit zou mijn suggestie zijn:",
             instruction: "Klik alsjeblieft wat het beste bij je past.",
@@ -122,7 +124,6 @@ test("finalizeResponse logs compare render decisions with compare and prompt fie
 
   assert.ok(event);
   assert.equal(event.step_id, "strategy");
-  assert.equal(event.ui_view_variant, "");
   assert.equal(event.prompt_text, "Waar focus je nog meer op binnen je strategie?");
   assert.equal(event.prompt_present, "true");
   assert.equal(event.question_text, "");
@@ -143,11 +144,9 @@ test("finalizeResponse logs compare render decisions with compare and prompt fie
   assert.equal(stepViewed.analytics_schema, "bsc_app_usage_v1");
   assert.equal(stepViewed.step_id, "strategy");
   assert.equal(stepViewed.compare_enabled, "true");
-  assert.equal(stepViewed.ui_view_variant, "");
 
   assert.ok(compareShown);
   assert.equal(compareShown.pending_interaction_kind, "list_compare");
-  assert.equal(compareShown.pending_interaction_target_field, "");
 });
 
 test("finalizeResponse logs compare analytics from pending_interaction when legacy shadows are absent", () => {
@@ -179,8 +178,9 @@ test("finalizeResponse logs compare analytics from pending_interaction when lega
             mode: "list",
             status: "pending",
             presentation: "picker",
-            variant: "grouped_list_units",
-            target_field: "strategy",
+            feedback_reason_text: "Deze keuze maakt de strategie concreter.",
+            user_items: ["Punt 1", "Punt 2"],
+            suggestion_items: ["Punt A"],
           }),
         },
       } as any,
@@ -195,6 +195,7 @@ test("finalizeResponse logs compare analytics from pending_interaction when lega
           render_model: {
             mode: "list",
             variant: "grouped_list_units",
+            feedback_reason_text: "Kies wat het beste past.",
             user_label: "Jouw input",
             suggestion_label: "Mijn suggestie",
             user_items: ["Punt 1", "Punt 2"],
@@ -274,7 +275,6 @@ test("finalizeResponse emits session start and compare selection analytics witho
 
   assert.ok(compareSelected);
   assert.equal(compareSelected.selection, "suggestion");
-  assert.equal(compareSelected.pending_interaction_target_field, "productsservices");
   assert.equal(compareSelected.pending_interaction_kind, "list_compare");
   assert.equal(compareSelected.message, undefined);
 });

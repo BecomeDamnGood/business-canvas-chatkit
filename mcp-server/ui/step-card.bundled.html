@@ -1910,7 +1910,7 @@
         routeToken: "__ROUTE__DREAM_PICK_ONE__",
         menuId: "DREAM_MENU_SUGGESTIONS",
         actionCode: "ACTION_DREAM_SUGGESTIONS_PICK_ONE",
-        nextMenuId: "DREAM_MENU_CONFIRM_SINGLE",
+        nextMenuId: "DREAM_MENU_NEXT_STEP",
         mode: "suggestions",
         itemKind: "sentence",
         field: "dream"
@@ -5109,6 +5109,7 @@ ${String(item || "").trim()}`.trim())
   }
   function shouldSuppressMainCardForCompare(uiPayloadRaw) {
     const uiPayload = uiPayloadRaw && typeof uiPayloadRaw === "object" ? uiPayloadRaw : {};
+    if (readDreamBuilderContract(uiPayload)) return false;
     return Boolean(readPendingInteraction(uiPayload));
   }
   function shouldSuppressPromptForCompare(params) {
@@ -5234,7 +5235,7 @@ ${String(item || "").trim()}`.trim())
   function readCompareContractFailureReason(uiPayloadRaw) {
     const uiPayload = toRecord3(uiPayloadRaw);
     const dreamBuilderContract = readDreamBuilderContract(uiPayload);
-    if (dreamBuilderContract?.phase === "compare" && Boolean(dreamBuilderContract.compare)) return null;
+    if (dreamBuilderContract) return null;
     const pendingInteractionRaw = toRecord3(uiPayload.pending_interaction);
     if (Object.keys(pendingInteractionRaw).length === 0) return null;
     return readPendingInteraction(uiPayload) ? null : "ui_pending_interaction_malformed_for_compare";
@@ -5754,6 +5755,10 @@ ${String(item || "").trim()}`.trim())
       return false;
     }
     const uiPayload = resultData && typeof resultData.ui === "object" && resultData.ui ? resultData.ui : {};
+    if (readDreamBuilderContract(uiPayload)) {
+      wrap.style.display = "none";
+      return false;
+    }
     const pendingInteraction = readPendingInteraction(uiPayload);
     if (!pendingInteraction) {
       wrap.style.display = "none";
@@ -6481,14 +6486,7 @@ ${String(item || "").trim()}`.trim())
     } else {
       if (statementsPanelEl) statementsPanelEl.style.display = "none";
     }
-    let comparePanelVisible = false;
-    const suppressCompare = isViewModeDreamBuilderScoring;
-    if (!suppressCompare) {
-      comparePanelVisible = renderComparePanel(result, lang);
-    } else {
-      const compareWrap = document.getElementById("compareWrap");
-      if (compareWrap) compareWrap.style.display = "none";
-    }
+    const comparePanelVisible = renderComparePanel(result, lang);
     let choicesArr = [];
     let promptText = isDreamDirectionView ? "" : promptSource;
     const shouldStripStructuredPrompt = isViewModeCompare || !hasStructuredActions;

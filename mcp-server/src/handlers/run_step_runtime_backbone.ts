@@ -45,7 +45,7 @@ type TurnLlmCallMeta = {
 export const WIDGET_ESCAPE_MENU_SUFFIX = "_MENU_ESCAPE";
 export const DREAM_EXPLAINER_ESCAPE_MENU_ID = "DREAM_EXPLAINER_MENU_ESCAPE";
 export const DREAM_EXPLAINER_SWITCH_SELF_MENU_ID = "DREAM_EXPLAINER_MENU_SWITCH_SELF";
-export const DREAM_EXPLAINER_REFINE_MENU_ID = "DREAM_EXPLAINER_MENU_CONFIRM_SINGLE";
+export const DREAM_EXPLAINER_REFINE_MENU_ID = "DREAM_EXPLAINER_MENU_NEXT_STEP";
 
 export type DreamRuntimeMode = "self" | "builder_collect" | "builder_scoring" | "builder_refine";
 

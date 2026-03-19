@@ -217,21 +217,19 @@ test("buildSpecialistContextBlock whitelists last_specialist_result payload", ()
   assert.equal(parsed.action, "REFINE");
   assert.equal(parsed.targetgroup, "B2B software scale-ups");
   assert.deepEqual(parsed.statements, ["Segment 1", "Segment 2"]);
-  assert.deepEqual(parsed.compare_runtime, createCompareRuntimeState({
+  assert.deepEqual(parsed.compare_runtime, {
     kind: "text_compare",
     mode: "text",
     status: "pending",
+    presentation: "picker",
+    feedback_reason_text: "",
     pending_text_intent: "feedback_on_suggestion",
     pending_text_anchor: "suggestion",
-    pending_text_seed_source: "previous_suggestion",
-    pending_text_feedback_text: "Dit klinkt nog te algemeen.",
-    pending_text_presentation_mode: "canonical",
-  }));
+  });
   assert.equal(Object.prototype.hasOwnProperty.call(parsed, "debug_payload"), false);
   assert.equal(Object.prototype.hasOwnProperty.call(parsed, "ui_contract"), false);
   assert.equal(Object.prototype.hasOwnProperty.call(parsed, "scratchpad"), false);
-  assert.match(block, /PENDING COMPARE FEEDBACK CONTRACT/i);
-  assert.match(block, /rewrite the previous suggestion itself/i);
+  assert.doesNotMatch(block, /PENDING COMPARE FEEDBACK CONTRACT/i);
 });
 
 test("buildSpecialistContextBlock exposes current-turn stuck support classification for core steps", () => {

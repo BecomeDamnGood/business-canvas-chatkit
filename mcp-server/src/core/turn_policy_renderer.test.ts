@@ -2164,7 +2164,7 @@ test("dream valid output keeps confirm available when staged canonical Dream sti
 
   assert.equal(rendered.status, "valid_output");
   assert.equal(rendered.confirmEligible, true);
-  assert.equal(rendered.contractId, "dream:valid_output:DREAM_MENU_CONFIRM_SINGLE");
+  assert.equal(rendered.contractId, "dream:valid_output:DREAM_MENU_NEXT_STEP");
   assert.equal(rendered.uiActionCodes.includes("ACTION_DREAM_REFINE_CONFIRM"), true);
 });
 
@@ -2281,7 +2281,7 @@ test("dream self drops stale refine confirm when no renderable dream content rem
   (state as any).active_specialist = "Dream";
   (state as any).business_name = "Mindd";
   (state as any).__ui_phase_by_step = {
-    dream: "dream:valid_output:DREAM_MENU_CONFIRM_SINGLE",
+    dream: "dream:valid_output:DREAM_MENU_NEXT_STEP",
   };
   (state as any).provisional_by_step = {
     dream: "Dit gaat over dat mensen het beu zijn om verkeerd voorgelicht te worden",
@@ -2309,7 +2309,7 @@ test("dream self drops stale refine confirm when no renderable dream content rem
       is_offtopic: false,
     },
     previousSpecialist: {
-      ui_contract_id: "dream:valid_output:DREAM_MENU_CONFIRM_SINGLE:v1",
+      ui_contract_id: "dream:valid_output:DREAM_MENU_NEXT_STEP:v1",
     },
   });
 

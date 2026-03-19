@@ -13,7 +13,6 @@ export type DreamRuntimePolicyApplyResult = {
   requiresRepair: boolean;
   repairSeed: string;
   canStage: boolean;
-  suppressCompare: boolean;
 };
 
 const TECHNOLOGY_FIRST_PATTERN =
@@ -132,16 +131,12 @@ export function applyDreamRuntimePolicy(params: {
     sourceValue,
     currentValue,
   });
-  const suppressCompare =
-    candidateViolationCodes.length > 0 && !candidateShapeValid;
-
   const nextSpecialist: Record<string, unknown> = {
     ...specialist,
     __dream_policy_violation_codes: effectiveViolations,
     __dream_policy_can_stage: canStage ? "true" : "false",
     __dream_policy_requires_repair: requiresRepair ? "true" : "false",
     __dream_policy_repair_seed: repairSeed,
-    __dream_policy_skip_compare: suppressCompare ? "true" : "false",
   };
 
   return {
@@ -152,6 +147,5 @@ export function applyDreamRuntimePolicy(params: {
     requiresRepair,
     repairSeed,
     canStage,
-    suppressCompare,
   };
 }

@@ -119,6 +119,22 @@ test("shouldSuppressMainCardForCompare ignores stale compare payloads when Dream
   );
 });
 
+test("shouldSuppressMainCardForCompare ignores ordinary compare payloads when Dream Builder owns the screen", () => {
+  assert.equal(
+    shouldSuppressMainCardForCompare({
+      ...buildPendingCompareUiPayload(),
+      dream_builder_contract: {
+        version: "2026-03-17.dream_builder_contract.v2",
+        phase: "scoring",
+        statements: ["One"],
+        statements_visible: true,
+        question: "Welke statements horen bij elkaar?",
+      },
+    }),
+    false
+  );
+});
+
 test("shouldSuppressMainCardForCompare keeps the main card enabled for non-picker payloads", () => {
   assert.equal(
     shouldSuppressMainCardForCompare(
@@ -248,6 +264,25 @@ test("readCompareContractFailureReason rejects malformed pending_interaction pay
       },
     }),
     "ui_pending_interaction_malformed_for_compare"
+  );
+});
+
+test("readCompareContractFailureReason ignores ordinary compare payload issues while Dream Builder owns the screen", () => {
+  assert.equal(
+    readCompareContractFailureReason({
+      dream_builder_contract: {
+        version: "2026-03-17.dream_builder_contract.v2",
+        phase: "scoring",
+        statements: ["One"],
+        statements_visible: true,
+        question: "Welke statements horen bij elkaar?",
+      },
+      pending_interaction: {
+        kind: "text_compare",
+        status: "pending",
+      },
+    }),
+    null
   );
 });
 

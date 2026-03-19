@@ -185,7 +185,6 @@ function emitUsageAnalyticsEvents(
   const decisionContext = createLogContext(response, state);
   const sessionTurnIndex = numericTurnIndex(state.__session_turn_index);
   const uiViewMode = trimmedString(uiView.mode).toLowerCase();
-  const uiViewVariant = trimmedString(uiView.variant).toLowerCase();
   const comparePending = hasRenderablePendingCompareState(compareState);
   const compareEnabled =
     pendingInteractionIsCompare(uiPendingInteraction) ||
@@ -200,7 +199,6 @@ function emitUsageAnalyticsEvents(
     analytics_schema: "bsc_app_usage_v1",
     session_turn_index: sessionTurnIndex,
     ui_view_mode: uiViewMode,
-    ui_view_variant: uiViewVariant,
   };
 
   if (sessionTurnIndex === 1) {
@@ -250,7 +248,6 @@ function buildUiRenderDecisionLogDetails(
     pendingInteractionIsCompare(uiPendingInteraction) || comparePending;
   return {
     ui_view_mode: trimmedString(uiView.mode).toLowerCase(),
-    ui_view_variant: trimmedString(uiView.variant).toLowerCase(),
     prompt_text: promptText,
     prompt_present: promptText ? "true" : "false",
     prompt_len: promptText.length,
@@ -260,7 +257,6 @@ function buildUiRenderDecisionLogDetails(
     compare_enabled: compareEnabled ? "true" : "false",
     pending_interaction_status: comparePending ? "pending" : compareEnabled ? "resolved" : "inactive",
     pending_interaction_kind: compareModeForLogs(uiPendingInteraction, specialist),
-    pending_interaction_resolution: trimmedString(compareState?.resolution).toLowerCase(),
     pending_interaction_user_option_label: trimmedString(
       asLogRecord(uiPendingInteraction.render_model).user_label || compareState?.user_label
     ),

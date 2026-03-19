@@ -1685,7 +1685,6 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
     const dreamRuntimeModeForCompare = deps.getDreamRuntimeMode(nextState);
     const dreamBuilderFlowActiveForCompare =
       currentStepForCompare === deps.dreamStepId && dreamRuntimeModeForCompare !== "self";
-    const suppressCompareForAutoSuggest = autoSuggestApplied;
     const isCurrentTurnOfftopic = isTrueFlag(specialistResult?.is_offtopic);
     const eligibleForCompareTurn = deps.isCompareEligibleContext(
       currentStepForCompare,
@@ -1708,11 +1707,9 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
     const wordingIntentEligible = isCompareIntentEligible(asRecord(specialistResult));
     const skipCompareForTurn =
       submittedTextIntent === "feedback_on_current_value" ||
-      String((specialistResult as Record<string, unknown>).__dream_policy_skip_compare || "").trim() === "true" ||
       String((specialistResult as Record<string, unknown>).__business_list_turn_preclassified || "").trim() === "true";
     if (
       params.compareEnabled &&
-      !suppressCompareForAutoSuggest &&
       params.inputMode === "widget" &&
       wordingIntentEligible &&
       eligibleForCompareTurn &&
@@ -1765,7 +1762,6 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
       params.compareEnabled &&
       !dreamBuilderFlowActiveForCompare &&
       params.inputMode === "widget" &&
-      !suppressCompareForAutoSuggest &&
       wordingIntentEligible
     ) {
       const pendingEligible = deps.isCompareEligibleContext(
