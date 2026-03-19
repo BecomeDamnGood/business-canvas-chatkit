@@ -447,6 +447,7 @@ async function main() {
         contract_id: "dream:interactive:refine",
         view: {
           mode: "interactive",
+          variant: "text_compare",
         },
         feedback_contract: {
           kind: "single_value_compare",
@@ -468,7 +469,7 @@ async function main() {
   assert.equal(compareOk.ok, true, "compare_smoke_ok: compare payload should finalize successfully");
   assert.equal(
     String(compareOk?.ui?.pending_interaction?.kind || ""),
-    "wording_choice",
+    "text_compare",
     "compare_smoke_ok: pending_interaction must own compare visibility"
   );
 
@@ -488,6 +489,7 @@ async function main() {
         contract_id: "dream:interactive:refine",
         view: {
           mode: "interactive",
+          variant: "text_compare",
         },
         feedback_contract: {
           kind: "single_value_compare",
