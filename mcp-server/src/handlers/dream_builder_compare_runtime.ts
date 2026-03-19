@@ -26,7 +26,6 @@ export type DreamBuilderCompareRuntimeState = {
   rationale: string;
   current_label: string;
   suggested_label: string;
-  retained_heading: string;
   instruction: string;
   committed_statements: string[];
 };
@@ -57,7 +56,6 @@ function normalizeDreamBuilderCompareRuntimeRecord(
     rationale: trimString(record.rationale),
     current_label: trimString(record.current_label),
     suggested_label: trimString(record.suggested_label),
-    retained_heading: trimString(record.retained_heading),
     instruction: trimString(record.instruction),
     committed_statements: normalizeStringArray(record.committed_statements),
   };
@@ -77,7 +75,6 @@ export function createDreamBuilderCompareRuntimeState(
     rationale: trimString(raw.rationale),
     current_label: trimString(raw.current_label),
     suggested_label: trimString(raw.suggested_label),
-    retained_heading: trimString(raw.retained_heading),
     instruction: trimString(raw.instruction),
     committed_statements: normalizeStringArray(raw.committed_statements),
   };

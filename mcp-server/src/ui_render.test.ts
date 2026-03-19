@@ -405,10 +405,10 @@ test("resolveActionCodeForStateKey falls back to action contract when lean state
   assert.equal(resolveActionCodeForStateKey(result, {}, "ui_action_start"), "ACTION_START");
 });
 
-test("resolveActionCodeForStateKey falls back to legacy state keys when no contract role is available", () => {
+test("resolveActionCodeForStateKey does not fall back to state keys when the contract omits an action", () => {
   assert.equal(
     resolveActionCodeForStateKey({}, { ui_action_dream_switch_to_self: "__ROUTE__DREAM_SWITCH_TO_SELF__" }, "ui_action_dream_switch_to_self"),
-    "__ROUTE__DREAM_SWITCH_TO_SELF__"
+    ""
   );
 });
 

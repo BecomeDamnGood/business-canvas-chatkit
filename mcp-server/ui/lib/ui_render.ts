@@ -527,13 +527,13 @@ export function resolveActionCodeForStateKey(
   stateRaw: Record<string, unknown> | null | undefined,
   stateKey: string
 ): string {
-  const state = toRecord(stateRaw);
+  void stateRaw;
   const role = actionRoleForStateKey(stateKey);
   if (role) {
     const actionCodeFromContract = actionCodeForRole(resultData, role);
     if (actionCodeFromContract) return actionCodeFromContract;
   }
-  return String(state[stateKey] || "").trim();
+  return "";
 }
 
 export function resolveActionPayloadModeForStateKey(
@@ -541,14 +541,14 @@ export function resolveActionPayloadModeForStateKey(
   stateRaw: Record<string, unknown> | null | undefined,
   stateKey: string
 ): string {
-  const state = toRecord(stateRaw);
+  void stateRaw;
   const role = actionRoleForStateKey(stateKey);
   if (role) {
     const payloadMode = String(actionDescriptorForRole(resultData, role)?.payloadMode || "").trim().toLowerCase();
     if (payloadMode) return payloadMode;
   }
-  const fallbackStateKey = ACTION_PAYLOAD_MODE_STATE_KEY_BY_STATE_KEY[String(stateKey || "").trim()];
-  return fallbackStateKey ? String(state[fallbackStateKey] || "").trim().toLowerCase() : "";
+  void ACTION_PAYLOAD_MODE_STATE_KEY_BY_STATE_KEY;
+  return "";
 }
 
 function defaultSurfaceForActionRole(role: string): string {

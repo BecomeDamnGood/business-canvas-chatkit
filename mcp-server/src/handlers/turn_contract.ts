@@ -452,7 +452,6 @@ function validatePendingInteractionCompareInvariant(response: RunStepContractRes
 
 function hasRenderableResponseContent(response: RunStepContractResponse): boolean {
   const uiPayload = toRecord(response.ui);
-  const uiPrompt = toRecord(uiPayload.prompt);
   const uiView = toRecord(uiPayload.view);
   const uiContent = toRecord(uiPayload.content);
   const uiPendingInteraction = toRecord(uiPayload.pending_interaction);
@@ -462,7 +461,13 @@ function hasRenderableResponseContent(response: RunStepContractResponse): boolea
     response.state && typeof response.state === "object"
       ? (response.state as Record<string, unknown>)
       : {};
-  const hasActions = Array.isArray(actionContract.actions) && actionContract.actions.length > 0;
+  const hasVisibleActionSurface =
+    Array.isArray(actionContract.actions) &&
+    actionContract.actions.some((entry) => {
+      const action = toRecord(entry);
+      const surface = String(action.surface || "").trim().toLowerCase();
+      return surface !== "text_input" && surface !== "compare_pick";
+    });
   const viewVariant = String(uiView.variant || "").trim();
   const hasDreamBuilderStatements =
     (
@@ -477,15 +482,7 @@ function hasRenderableResponseContent(response: RunStepContractResponse): boolea
       Array.isArray(stateRecord.dream_builder_statements) &&
       (stateRecord.dream_builder_statements as unknown[]).length > 0
     );
-  const prompt = String(response.prompt || "").trim();
-  const body =
-    String(response.text || "").trim() ||
-    String(uiPrompt.body || "").trim() ||
-    String(specialist.message || "").trim() ||
-    String(specialist.refined_formulation || "").trim();
-  const question =
-    String(uiPayload.questionText || "").trim() ||
-    String(specialist.question || "").trim();
+  const hasDreamBuilderCompare = hasDreamBuilderCompareSource(uiPayload);
   const uiContentKind = String(uiContent.kind || "").trim();
   const hasStructuredContent =
     (
@@ -510,14 +507,49 @@ function hasRenderableResponseContent(response: RunStepContractResponse): boolea
     (pendingKind === "text_compare" || pendingKind === "list_compare") &&
     String(uiPendingInteraction.status || "").trim().toLowerCase() === "pending";
   return (
-    hasActions ||
+    hasVisibleActionSurface ||
+    hasDreamBuilderCompare ||
     hasDreamBuilderStatements ||
     hasStructuredContent ||
-    hasPendingCompare ||
-    Boolean(prompt) ||
-    Boolean(body) ||
-    Boolean(question)
+    hasPendingCompare
   );
+}
+
+function synchronizeComparePickActionsFromOwner(response: RunStepContractResponse): void {
+  const state =
+    response.state && typeof response.state === "object"
+      ? (response.state as Record<string, unknown>)
+      : {};
+  if (!response.state || typeof response.state !== "object") {
+    response.state = state as CanvasState;
+  }
+  const ui = toRecord(response.ui);
+  const ordinaryCompareActive = Boolean(buildPendingInteractionRenderModel(response));
+  const dreamBuilderCompareActive = hasDreamBuilderCompareSource(ui);
+  const comparePending = ordinaryCompareActive || dreamBuilderCompareActive;
+
+  if (comparePending) {
+    state.ui_action_compare_pick_user = "ACTION_COMPARE_PICK_USER";
+    state.ui_action_compare_pick_suggestion = "ACTION_COMPARE_PICK_SUGGESTION";
+    return;
+  }
+
+  delete state.ui_action_compare_pick_user;
+  delete state.ui_action_compare_pick_suggestion;
+}
+
+function validateInteractiveRenderableContentInvariant(
+  response: RunStepContractResponse
+): string | null {
+  const state = toRecord(response.state);
+  const ui = toRecord(response.ui);
+  const view = toRecord(ui.view);
+  const mode = String(view.mode || "").trim().toLowerCase();
+  const currentStep = String(response.current_step_id || state.current_step || STEP_0_ID).trim() || STEP_0_ID;
+  if (currentStep === STEP_0_ID) return null;
+  if (mode !== "interactive") return null;
+  if (hasRenderableResponseContent(response)) return null;
+  return "ui_interactive_content_absent";
 }
 
 function hasStartAction(response: RunStepContractResponse, state: Record<string, unknown>): boolean {
@@ -1034,6 +1066,8 @@ function repairUiPayloadContractParity(
   ui.action_codes = expectedActionCodes;
   response.ui = ui;
   ensureUnifiedUiActionContract(response, deps);
+  synchronizeComparePickActionsFromOwner(response);
+  ensureUnifiedUiActionContract(response, deps);
   ensurePendingInteractionContract(response);
   applyDeterministicUiActionRenderPolicy(response);
   delete ui.action_codes;
@@ -1151,6 +1185,11 @@ export function finalizeResponseContractInternals<T extends RunStepContractRespo
     parseMenuFromContractIdForStep: options.parseMenuFromContractIdForStep,
     labelKeysForMenuActionCodes: options.labelKeysForMenuActionCodes,
   });
+  synchronizeComparePickActionsFromOwner(finalResponse);
+  ensureUnifiedUiActionContract(finalResponse, {
+    parseMenuFromContractIdForStep: options.parseMenuFromContractIdForStep,
+    labelKeysForMenuActionCodes: options.labelKeysForMenuActionCodes,
+  });
   const finalUi = toRecord(finalResponse.ui);
   delete finalUi.actions;
   delete finalUi.action_codes;
@@ -1194,6 +1233,11 @@ export function finalizeResponseContractInternals<T extends RunStepContractRespo
     if (pendingInteractionViolation) {
       options.onUiParityError();
       return buildContractFailurePayload(finalResponse, pendingInteractionViolation) as T;
+    }
+    const interactiveContentViolation = validateInteractiveRenderableContentInvariant(finalResponse);
+    if (interactiveContentViolation) {
+      options.onUiParityError();
+      return buildContractFailurePayload(finalResponse, interactiveContentViolation) as T;
     }
   }
   (finalResponse as Record<string, unknown>).__canonical_view_decision = canonicalViewDecision;

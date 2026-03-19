@@ -678,7 +678,6 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
 
   function clearedResolvedCompareTransientFields(): Record<string, unknown> {
     return {
-      feedback_reason_key: "",
       feedback_reason_text: "",
       feedback_mode: "none",
     };
@@ -1527,7 +1526,6 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
           ...clearDreamBuilderCompareRuntime(clearCompareRuntime(specialistResult)),
           ...clearedResolvedCompareTransientFields(),
           message,
-          feedback_reason_key: "",
           feedback_reason_text: rationale,
           ...(targetField ? { [targetField]: committedText } : {}),
           statements: baseItems,
@@ -1541,7 +1539,6 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
           rationale,
           current_label: currentLabel,
           suggested_label: suggestedLabel,
-          retained_heading: retainedHeading,
           instruction,
         }
       )
@@ -1591,7 +1588,6 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
           ...clearDreamBuilderCompareRuntime(clearCompareRuntime(specialistResult)),
           ...clearedResolvedCompareTransientFields(),
           message,
-          feedback_reason_key: "",
           feedback_reason_text: rationale,
           ...(targetField ? { [targetField]: committedText } : {}),
           statements: baseItems,
@@ -1605,7 +1601,6 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
           rationale,
           current_label: currentLabel,
           suggested_label: suggestedLabel,
-          retained_heading: retainedHeading,
           instruction,
         }
       )
@@ -2399,7 +2394,6 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
     let enriched: Record<string, unknown> = patchCompareRuntime({
       ...specialistResult,
       message: pendingMessage,
-      feedback_reason_key: "",
       feedback_mode: effectiveFeedbackMode,
     }, {
       kind: mode === "list" ? "list_compare" : "text_compare",
@@ -2420,17 +2414,9 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
       grouped_cursor: comparePlan ? "0" : "",
       grouped_units: comparePlan?.units || [],
       grouped_segments: comparePlan?.segments || [],
-      user_variant_semantics: acceptedOutputUserTurnClassification?.turn_kind || "",
-      user_variant_stepworthy: Boolean(
-        acceptedOutputUserTurnClassification?.user_variant_is_stepworthy
-      ),
-      feedback_reason_key: "",
       feedback_reason_text: effectiveFeedbackReason,
       pending_text_intent: submittedIntent,
       pending_text_anchor: submittedAnchor,
-      pending_text_seed_source: pendingSuggestionSeedSource,
-      pending_text_feedback_text:
-        submittedAnchor === "suggestion" && feedbackText ? stripMarkupPreserveLines(feedbackText) : "",
       pending_text_presentation_mode: presentation,
     });
     if (comparePlan) {

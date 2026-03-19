@@ -1,6 +1,6 @@
 import { UI_STRINGS_DEFAULT } from "../i18n/ui_strings_defaults.js";
 import {
-  getChooseForMeRegistryEntryForMenu,
+  getChooseForMeRegistryEntry,
   type StepRegistryChooseForMeItemKind,
 } from "../steps/step_registry.js";
 
@@ -103,12 +103,13 @@ function extractExplicitItems(
 
 export function deriveStructuredSuggestionsContent(params: {
   stepId: string;
-  menuId: string;
+  menuId?: string;
   message: string;
   uiStrings?: Record<string, unknown> | null;
   specialist?: Record<string, unknown> | null;
 }): StructuredSuggestionsContent | null {
-  const entry = getChooseForMeRegistryEntryForMenu(params.stepId, params.menuId);
+  void params.menuId;
+  const entry = getChooseForMeRegistryEntry(params.stepId);
   if (!entry) return null;
   const itemKind = entry.chooseForMe.itemKind;
   const itemStyle: StructuredSuggestionsItemStyle = itemKind === "multiline_list" ? "blocks" : "bullets";

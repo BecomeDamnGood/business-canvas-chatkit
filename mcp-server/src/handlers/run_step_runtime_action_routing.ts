@@ -473,7 +473,6 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
       proceed_request_intent: "next_step",
       proceed_block_reason_codes: blockCodes,
       proceed_block_rule_count: gate.count,
-      feedback_reason_key: "",
       feedback_reason_text: "",
     };
   };
@@ -1103,16 +1102,6 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
       const nextPending = patchCompareRuntime(pendingBeforeTurn, {
         pending_text_intent: pendingIntentResolution.intent,
         pending_text_anchor: pendingIntentResolution.anchor,
-        pending_text_seed_source:
-          pendingIntentResolution.anchor === "suggestion" &&
-          (
-            pendingIntentResolution.intent === "feedback_on_suggestion" ||
-            pendingIntentResolution.intent === "reject_suggestion_explicit"
-          )
-            ? "previous_suggestion"
-            : "user_input",
-        pending_text_feedback_text:
-          pendingIntentResolution.anchor === "suggestion" ? pendingFeedbackText : "",
         pending_text_presentation_mode:
           pendingIntentResolution.anchor === "suggestion" &&
           (

@@ -202,7 +202,6 @@ export function createRunStepStep0DisplayHelpers(deps: RunStepStep0DisplayDeps) 
       action: "ASK",
       message: hasMessage ? cleanedMessage : deps.step0CardDescForState(state),
       question: deps.step0QuestionForState(state),
-      feedback_reason_key: "",
       feedback_reason_text: "",
       step_0: "",
       is_offtopic: true,
@@ -243,7 +242,6 @@ export function createRunStepStep0DisplayHelpers(deps: RunStepStep0DisplayDeps) 
           question: deps.step0ReadinessQuestion(state, parsed),
           business_name: parsed.name || "TBD",
           step_0: step0FinalRaw,
-          feedback_reason_key: "",
           feedback_reason_text: "",
           is_offtopic: true,
         };
@@ -290,7 +288,6 @@ export function createRunStepStep0DisplayHelpers(deps: RunStepStep0DisplayDeps) 
         next.question = deps.step0ReadinessQuestion(state, parsedEdit);
         next.business_name = parsedEdit.name || "TBD";
         next.step_0 = candidateStep0;
-        next.feedback_reason_key = "";
         next.feedback_reason_text = "";
         if (!String(next.message || "").trim()) {
           next.message = deps.step0CardDescForState(state);
@@ -303,7 +300,6 @@ export function createRunStepStep0DisplayHelpers(deps: RunStepStep0DisplayDeps) 
       next.question = deps.step0ReadinessQuestion(state, parsedFromState);
       next.business_name = parsedFromState.name || "TBD";
       next.step_0 = step0FinalRaw;
-      next.feedback_reason_key = "";
       next.feedback_reason_text = "";
       applyStep0InteractionMetadata(next, "step0_ready");
       return next;

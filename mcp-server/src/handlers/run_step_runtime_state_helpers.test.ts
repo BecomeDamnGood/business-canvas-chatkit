@@ -201,8 +201,6 @@ test("buildSpecialistContextBlock whitelists last_specialist_result payload", ()
         status: "pending",
         pending_text_intent: "feedback_on_suggestion",
         pending_text_anchor: "suggestion",
-        pending_text_seed_source: "previous_suggestion",
-        pending_text_feedback_text: "Dit klinkt nog te algemeen.",
         pending_text_presentation_mode: "canonical",
       }),
       debug_payload: { giant: "blob" },

@@ -83,14 +83,9 @@ export type CompareRuntimeState = {
   grouped_cursor: string;
   grouped_units: unknown[];
   grouped_segments: unknown[];
-  user_variant_semantics: string;
-  user_variant_stepworthy: boolean;
-  feedback_reason_key: string;
   feedback_reason_text: string;
   pending_text_intent: string;
   pending_text_anchor: string;
-  pending_text_seed_source: string;
-  pending_text_feedback_text: string;
   pending_text_presentation_mode: string;
 };
 
@@ -113,14 +108,9 @@ const DEFAULT_COMPARE_RUNTIME: CompareRuntimeState = {
   grouped_cursor: "",
   grouped_units: [],
   grouped_segments: [],
-  user_variant_semantics: "",
-  user_variant_stepworthy: false,
-  feedback_reason_key: "",
   feedback_reason_text: "",
   pending_text_intent: "",
   pending_text_anchor: "",
-  pending_text_seed_source: "",
-  pending_text_feedback_text: "",
   pending_text_presentation_mode: "",
 };
 
@@ -159,10 +149,6 @@ function normalizeGroupedMode(raw: unknown): CompareRuntimeGroupedMode {
   return trimString(raw) === "grouped_units" ? "grouped_units" : "";
 }
 
-function normalizeStepworthy(raw: unknown): boolean {
-  return trimString(raw).toLowerCase() === "true";
-}
-
 function normalizeCompareRuntimeRecord(runtimeRaw: unknown): CompareRuntimeState | null {
   const runtime = toRecord(runtimeRaw);
   if (Object.keys(runtime).length === 0) return null;
@@ -188,14 +174,9 @@ function normalizeCompareRuntimeRecord(runtimeRaw: unknown): CompareRuntimeState
     grouped_cursor: trimString(runtime.grouped_cursor),
     grouped_units: Array.isArray(runtime.grouped_units) ? runtime.grouped_units : [],
     grouped_segments: Array.isArray(runtime.grouped_segments) ? runtime.grouped_segments : [],
-    user_variant_semantics: trimString(runtime.user_variant_semantics),
-    user_variant_stepworthy: normalizeStepworthy(runtime.user_variant_stepworthy),
-    feedback_reason_key: trimString(runtime.feedback_reason_key),
     feedback_reason_text: trimString(runtime.feedback_reason_text),
     pending_text_intent: trimString(runtime.pending_text_intent),
     pending_text_anchor: trimString(runtime.pending_text_anchor),
-    pending_text_seed_source: trimString(runtime.pending_text_seed_source),
-    pending_text_feedback_text: trimString(runtime.pending_text_feedback_text),
     pending_text_presentation_mode: trimString(runtime.pending_text_presentation_mode),
   };
 }
@@ -286,14 +267,9 @@ export function attachCompareRuntime(raw: unknown): Record<string, unknown> {
     grouped_cursor: compare.grouped_cursor,
     grouped_units: Array.isArray(compare.grouped_units) ? [...compare.grouped_units] : [],
     grouped_segments: Array.isArray(compare.grouped_segments) ? [...compare.grouped_segments] : [],
-    user_variant_semantics: compare.user_variant_semantics,
-    user_variant_stepworthy: compare.user_variant_stepworthy,
-    feedback_reason_key: compare.feedback_reason_key,
     feedback_reason_text: compare.feedback_reason_text,
     pending_text_intent: compare.pending_text_intent,
     pending_text_anchor: compare.pending_text_anchor,
-    pending_text_seed_source: compare.pending_text_seed_source,
-    pending_text_feedback_text: compare.pending_text_feedback_text,
     pending_text_presentation_mode: compare.pending_text_presentation_mode,
   };
   return next;

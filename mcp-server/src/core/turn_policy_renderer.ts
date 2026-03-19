@@ -44,7 +44,6 @@ import {
 } from "../handlers/compare_runtime.js";
 import {
   formatStepSectionTitle,
-  getChooseForMeRegistryEntryForMenu,
   hasGroupedCompareListSemantics,
   isSingleValueCompareStep,
   STEP_REGISTRY_ORDER,
@@ -283,17 +282,7 @@ function shouldClearStaleDreamSelfCompare(params: {
   const compare = readCompareRuntime(specialist);
   if (!compare) return false;
   if (compare.status !== "pending") return false;
-  if (!hasRenderablePendingCompare(compare)) return true;
-  const compareState = compare;
-  const mode = compareState.kind === "list_compare" ? "list" : "text";
-  const suggestionText = String(
-    compareState.suggestion_text || (specialist as any).refined_formulation || ""
-  ).trim();
-  if (mode === "list") return true;
-  const userVariant = String(
-    compareState.user_text || ""
-  ).trim();
-  return !(Boolean(userVariant) && isRenderableAcceptedValue(stepId, suggestionText));
+  return !hasRenderablePendingCompare(compare);
 }
 
 function hasSingleValueStructuredContent(stepId: string): boolean {
@@ -725,11 +714,8 @@ function buildStructuredSuggestionsUiContent(params: {
   message: string;
   specialist?: Record<string, unknown> | null;
 }): UiStructuredSuggestionsContent | undefined {
-  const chooseForMeEntry = getChooseForMeRegistryEntryForMenu(params.stepId, params.menuId);
-  if (!chooseForMeEntry) return undefined;
   const content = deriveStructuredSuggestionsContent({
     stepId: params.stepId,
-    menuId: params.menuId,
     message: params.message,
     uiStrings: params.state.ui_strings as Record<string, unknown> | undefined,
     specialist: params.specialist || null,

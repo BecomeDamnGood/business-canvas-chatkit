@@ -15,7 +15,7 @@ import { looksLikeExamplesFramingLine } from "./run_step_value_shape.js";
 import { isSingleValueTextPickerState } from "./run_step_compare_picker_contract.js";
 import { hasRenderablePendingCompareState, readCompareRuntime } from "./compare_runtime.js";
 import { readDreamBuilderCompareRuntime } from "./dream_builder_compare_runtime.js";
-import { hasGroupedCompareListSemantics } from "../steps/step_registry.js";
+import { getChooseForMeRegistryEntry, hasGroupedCompareListSemantics } from "../steps/step_registry.js";
 
 export type RunStepRuntimeInputMode = "widget" | "chat";
 
@@ -110,8 +110,6 @@ function stripChoiceInstructionNoise(value: string): string {
   return kept.join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
-import { getChooseForMeRegistryEntryForMenu } from "../steps/step_registry.js";
-
 function stripMarkupPreserveLines(value: string): string {
   return String(value || "")
     .replace(/\r/g, "\n")
@@ -141,7 +139,8 @@ const STRUCTURED_SUGGESTION_STEP_LABEL_FALLBACKS: Record<string, string> = {
 };
 
 function structuredSuggestionMenuConfigFor(contractStepId: string, menuId: string): StructuredSuggestionMenuConfig | null {
-  const entry = getChooseForMeRegistryEntryForMenu(contractStepId, menuId);
+  void menuId;
+  const entry = getChooseForMeRegistryEntry(contractStepId);
   if (!entry) return null;
   return {
     stepId: entry.stepId,
@@ -1365,12 +1364,6 @@ export function createRunStepRuntimeFinalizeLayer<TPayload extends Record<string
     const dreamStepId = response.getDreamStepId();
     const dreamExplainerSpecialist = response.getDreamExplainerSpecialist();
     const isDreamStep = currentStep === dreamStepId;
-    const dreamBuilderComparePending =
-      isDreamStep && Boolean(readDreamBuilderCompareRuntime(lastSpecialist));
-    const compareState = readCompareRuntime(lastSpecialist);
-    const comparePending =
-      hasRenderablePendingCompareState(compareState) ||
-      dreamBuilderComparePending;
     const isDreamExplainer = activeSpecialist === dreamExplainerSpecialist;
     const isDreamSpecialist = isDreamStep && !isDreamExplainer;
     const dreamBuilderModeActive =
@@ -1413,14 +1406,8 @@ export function createRunStepRuntimeFinalizeLayer<TPayload extends Record<string
       "ui_action_score_submit",
       scoreSubmitAvailable ? "ACTION_DREAM_EXPLAINER_SUBMIT_SCORES" : ""
     );
-    setStateAction(
-      "ui_action_compare_pick_user",
-      interactiveSession && comparePending ? "ACTION_COMPARE_PICK_USER" : ""
-    );
-    setStateAction(
-      "ui_action_compare_pick_suggestion",
-      interactiveSession && comparePending ? "ACTION_COMPARE_PICK_SUGGESTION" : ""
-    );
+    delete stateRef.ui_action_compare_pick_user;
+    delete stateRef.ui_action_compare_pick_suggestion;
     setStateAction(
       "ui_action_dream_start_exercise",
       interactiveSession &&

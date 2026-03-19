@@ -1,6 +1,5 @@
 import { appendSessionTokenLog, sessionTokenFileLoggingEnabled } from "../core/session_token_log.js";
 import type { CanvasState } from "../core/state.js";
-import { hasRenderablePendingCompareState, readCompareRuntime } from "./compare_runtime.js";
 import { finalizeResponseContractInternals } from "./turn_contract.js";
 
 export type StructuredLogSeverity = "info" | "warn" | "error";
@@ -152,15 +151,12 @@ function dreamBuilderContractIsCompare(dreamBuilderContract: Record<string, unkn
 
 function compareModeForLogs(
   pendingInteraction: Record<string, unknown>,
-  specialist: Record<string, unknown>,
   dreamBuilderContract?: Record<string, unknown>
 ): string {
   if (dreamBuilderContractIsCompare(asLogRecord(dreamBuilderContract))) {
     return "list_compare";
   }
-  return trimmedString(
-    pendingInteraction.kind || readCompareRuntime(specialist)?.kind
-  ).toLowerCase();
+  return trimmedString(pendingInteraction.kind).toLowerCase();
 }
 
 function numericTurnIndex(value: unknown): number {
@@ -177,24 +173,13 @@ function emitUsageAnalyticsEvents(
   const uiView = asLogRecord(ui.view);
   const uiPendingInteraction = pendingInteractionRecord(ui);
   const uiDreamBuilderContract = asLogRecord(ui.dream_builder_contract);
-  const specialist =
-    Object.keys(asLogRecord(state.last_specialist_result)).length > 0
-      ? asLogRecord(state.last_specialist_result)
-      : asLogRecord(response.specialist);
-  const compareState = readCompareRuntime(specialist);
   const decisionContext = createLogContext(response, state);
   const sessionTurnIndex = numericTurnIndex(state.__session_turn_index);
   const uiViewMode = trimmedString(uiView.mode).toLowerCase();
-  const comparePending = hasRenderablePendingCompareState(compareState);
   const compareEnabled =
     pendingInteractionIsCompare(uiPendingInteraction) ||
-    dreamBuilderContractIsCompare(uiDreamBuilderContract) ||
-    comparePending;
-  const compareMode = compareModeForLogs(
-    uiPendingInteraction,
-    specialist,
-    uiDreamBuilderContract
-  );
+    dreamBuilderContractIsCompare(uiDreamBuilderContract);
+  const compareMode = compareModeForLogs(uiPendingInteraction, uiDreamBuilderContract);
   const analyticsBase = {
     analytics_schema: "bsc_app_usage_v1",
     session_turn_index: sessionTurnIndex,
@@ -218,15 +203,6 @@ function emitUsageAnalyticsEvents(
       pending_interaction_kind: compareMode,
     });
   }
-
-  const compareSelected = trimmedString(compareState?.resolution).toLowerCase();
-  if (compareSelected === "user" || compareSelected === "suggestion") {
-    logStructuredEvent("info", "app_usage_compare_selected", decisionContext, {
-      ...analyticsBase,
-      pending_interaction_kind: compareMode,
-      selection: compareSelected,
-    });
-  }
 }
 
 function buildUiRenderDecisionLogDetails(
@@ -236,16 +212,14 @@ function buildUiRenderDecisionLogDetails(
   const ui = asLogRecord(response.ui);
   const uiView = asLogRecord(ui.view);
   const uiPendingInteraction = pendingInteractionRecord(ui);
-  const specialist =
-    Object.keys(asLogRecord(state.last_specialist_result)).length > 0
-      ? asLogRecord(state.last_specialist_result)
-      : asLogRecord(response.specialist);
-  const compareState = readCompareRuntime(specialist);
+  const uiDreamBuilderContract = asLogRecord(ui.dream_builder_contract);
+  const renderModel = asLogRecord(uiPendingInteraction.render_model);
   const promptText = trimmedString(response.prompt);
   const questionText = trimmedString(ui.questionText);
-  const comparePending = hasRenderablePendingCompareState(compareState);
   const compareEnabled =
-    pendingInteractionIsCompare(uiPendingInteraction) || comparePending;
+    pendingInteractionIsCompare(uiPendingInteraction) ||
+    dreamBuilderContractIsCompare(uiDreamBuilderContract);
+  const pendingStatus = trimmedString(uiPendingInteraction.status).toLowerCase();
   return {
     ui_view_mode: trimmedString(uiView.mode).toLowerCase(),
     prompt_text: promptText,
@@ -255,21 +229,13 @@ function buildUiRenderDecisionLogDetails(
     question_present: questionText ? "true" : "false",
     question_len: questionText.length,
     compare_enabled: compareEnabled ? "true" : "false",
-    pending_interaction_status: comparePending ? "pending" : compareEnabled ? "resolved" : "inactive",
-    pending_interaction_kind: compareModeForLogs(uiPendingInteraction, specialist),
-    pending_interaction_user_option_label: trimmedString(
-      asLogRecord(uiPendingInteraction.render_model).user_label || compareState?.user_label
-    ),
-    pending_interaction_suggestion_option_label: trimmedString(
-      asLogRecord(uiPendingInteraction.render_model).suggestion_label || compareState?.suggestion_label
-    ),
-    pending_interaction_instruction: trimmedString(asLogRecord(uiPendingInteraction.render_model).instruction),
-    pending_interaction_user_option_items_count: stringArrayLength(
-      asLogRecord(uiPendingInteraction.render_model).user_items || compareState?.user_items
-    ),
-    pending_interaction_suggestion_option_items_count: stringArrayLength(
-      asLogRecord(uiPendingInteraction.render_model).suggestion_items || compareState?.suggestion_items
-    ),
+    pending_interaction_status: compareEnabled ? pendingStatus || "resolved" : "inactive",
+    pending_interaction_kind: compareModeForLogs(uiPendingInteraction, uiDreamBuilderContract),
+    pending_interaction_user_option_label: trimmedString(renderModel.user_label),
+    pending_interaction_suggestion_option_label: trimmedString(renderModel.suggestion_label),
+    pending_interaction_instruction: trimmedString(renderModel.instruction),
+    pending_interaction_user_option_items_count: stringArrayLength(renderModel.user_items),
+    pending_interaction_suggestion_option_items_count: stringArrayLength(renderModel.suggestion_items),
   };
 }
 

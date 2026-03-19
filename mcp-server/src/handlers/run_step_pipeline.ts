@@ -574,8 +574,6 @@ function stateWithCurrentValueFeedbackContext(
     }, {
       pending_text_intent: "feedback_on_current_value",
       pending_text_anchor: "current_value",
-      pending_text_seed_source: "current_value",
-      pending_text_feedback_text: feedbackText,
       pending_text_presentation_mode: "",
     }),
   };

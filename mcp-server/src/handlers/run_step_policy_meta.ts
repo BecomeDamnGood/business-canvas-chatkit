@@ -803,7 +803,6 @@ export function createRunStepPolicyMetaHelpers(deps: RunStepPolicyMetaDeps) {
         message: buildBenProfileMessage(params.state),
         __suppress_refined_append: "true",
         __offtopic_meta_passthrough: "true",
-        feedback_reason_key: "",
         feedback_reason_text: "",
       };
     }
@@ -830,7 +829,6 @@ export function createRunStepPolicyMetaHelpers(deps: RunStepPolicyMetaDeps) {
       action: "ASK",
       message,
       __offtopic_meta_passthrough: "false",
-      feedback_reason_key: "",
       feedback_reason_text: "",
     } as Record<string, unknown>);
 

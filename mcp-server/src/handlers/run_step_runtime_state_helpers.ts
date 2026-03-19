@@ -309,7 +309,6 @@ export function createRunStepRuntimeStateHelpers(deps: CreateRunStepRuntimeState
     if (!shouldResetCompareState) return next;
     const resetLast = {
       ...clearCompareRuntime(last),
-      feedback_reason_key: "",
       feedback_reason_text: "",
       proceed_request_intent: "",
       proceed_block_reason_codes: [],

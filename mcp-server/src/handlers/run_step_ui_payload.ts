@@ -62,7 +62,6 @@ type DreamBuilderCompareContractPayload = {
   suggested_value?: string;
   current_items?: string[];
   suggested_items?: string[];
-  retained_heading?: string;
   retained_items?: string[];
   instruction?: string;
   committed_statements?: string[];

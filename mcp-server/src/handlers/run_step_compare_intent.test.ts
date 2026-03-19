@@ -3243,9 +3243,6 @@ test("applyComparePickSelection clears stale compare feedback context after sugg
           suggestion_text: chosen,
           pending_text_intent: "feedback_on_current_value",
           pending_text_anchor: "current_value",
-          pending_text_seed_source: "current_value",
-          pending_text_feedback_text:
-            "Alleen 'bedrijven in de retailsector' is te algemeen; een extra kenmerk zoals teamtype maakt het bruikbaarder.",
         },
         feedback_reason_text:
           "Alleen 'bedrijven in de retailsector' is te algemeen; een extra kenmerk zoals teamtype maakt het bruikbaarder.",
@@ -3393,7 +3390,6 @@ test("applyComparePickSelection replaces generic user-pick feedback with the fal
         target_field: "purpose",
         user_normalized_text: userValue,
         suggestion_text: suggestionValue,
-        feedback_reason_key: "generic",
         feedback_reason_text: "Ik denk dat ik begrijp wat je bedoelt.",
       },
     } as any,

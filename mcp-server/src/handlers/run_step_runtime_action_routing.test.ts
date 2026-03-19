@@ -1410,7 +1410,7 @@ test("runStepRuntimeActionRoutingLayer clears pending compare choice for feedbac
   assert.equal(compareResolutionValue(specialist), "");
   assert.equal(comparePendingIntentValue(specialist), "feedback_on_suggestion");
   assert.equal(comparePendingAnchorValue(specialist), "suggestion");
-  assert.equal(comparePendingSeedSourceValue(specialist), "previous_suggestion");
+  assert.equal(comparePendingSeedSourceValue(specialist), "");
 });
 
 test("runStepRuntimeActionRoutingLayer does not implicit-accept suggestion when user explicitly rejects it", async () => {

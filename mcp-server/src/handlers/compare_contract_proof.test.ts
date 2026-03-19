@@ -401,7 +401,7 @@ const fixtures: Fixture[] = [
     },
     expected: {
       ok: true,
-      visible_card: "empty",
+      visible_card: "compare",
       error_type: "",
       reason_code: "",
     },
@@ -494,11 +494,11 @@ test("GitHub reference pack preserves compare visibility behavior at the widget 
     },
     {
       name: "malformed_compare_server_heals",
-      visible_card: "empty",
-      prompt_hidden: false,
-      allowed_roles: [],
-      user_label: "",
-      suggestion_label: "",
+      visible_card: "compare",
+      prompt_hidden: true,
+      allowed_roles: ["compare_pick_user", "compare_pick_suggestion"],
+      user_label: "This is your input:",
+      suggestion_label: "This would be my suggestion:",
     },
   ]);
 });

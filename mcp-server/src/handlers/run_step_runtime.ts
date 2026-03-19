@@ -392,7 +392,6 @@ function sanitizeEscapeInWidget(specialist: unknown): Record<string, unknown> {
   }
   Object.assign(safe, clearCompareRuntime(safe));
   safe.feedback_mode = "none";
-  safe.feedback_reason_key = "";
   safe.feedback_reason_text = "";
   return safe;
 }

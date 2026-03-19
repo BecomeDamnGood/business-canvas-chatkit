@@ -1050,7 +1050,7 @@ test("buildTextForWidget keeps dream-builder rendering canonical-only and skips 
   assert.equal(output, "Ga verder met de Droom-oefening.");
 });
 
-test("buildTextForWidget includes canonical pending compare suggestion text when compare is pending", () => {
+test("buildTextForWidget does not synthesize canonical compare suggestion text from raw compare runtime alone", () => {
   const helpers = buildTextHelpers(() => "");
   const suggestion =
     "Mindd droomt van een wereld waarin mensen dankzij AI beter geinformeerde keuzes maken en meer rust ervaren bij aankopen.";
@@ -1078,11 +1078,11 @@ test("buildTextForWidget includes canonical pending compare suggestion text when
   });
 
   assert.match(output, /Dat is een interessant uitgangspunt\./);
-  assert.match(output, /Dit zou mijn suggestie zijn:/);
-  assert.equal((output.match(/Mindd droomt van een wereld/g) || []).length, 1);
+  assert.doesNotMatch(output, /Dit zou mijn suggestie zijn:/);
+  assert.doesNotMatch(output, /Mindd droomt van een wereld/g);
 });
 
-test("buildTextForWidget keeps canonical pending compare suggestion visible across single-value confirm steps", () => {
+test("buildTextForWidget does not surface canonical compare suggestion text across single-value confirm steps from raw compare runtime alone", () => {
   const helpers = buildTextHelpers(() => "");
   const scenarios = [
     {
@@ -1119,11 +1119,11 @@ test("buildTextForWidget keeps canonical pending compare suggestion visible acro
       } as any,
     });
     assert.match(output, /Heldere richting helpt je keuzes verscherpen\./);
-    assert.match(output, new RegExp(scenario.suggestion.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    assert.doesNotMatch(output, new RegExp(scenario.suggestion.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   }
 });
 
-test("buildTextForWidget suppresses standalone body text for single-value compare picker states", () => {
+test("buildTextForWidget keeps standalone body text when only raw compare runtime is present for single-value picker states", () => {
   const helpers = buildTextHelpers((stepId) => {
     if (stepId === "purpose") {
       return [
@@ -1172,7 +1172,9 @@ test("buildTextForWidget suppresses standalone body text for single-value compar
       } as any,
     });
 
-    assert.equal(output, "");
+    assert.match(output, /Ik heb het herschreven zodat het specifieker wordt\./);
+    assert.match(output, /JE HUIDIGE PURPOSE VOOR MINDD IS/);
+    assert.match(output, /Mindd bestaat om mensen helderheid te geven in complexe beslissingen\./);
   }
 });
 
@@ -1218,7 +1220,7 @@ test("buildTextForWidget keeps Dream single-value body visible even when stale c
   assert.match(output, /Mindd droomt van een wereld waarin ondernemers rust ervaren in hun keuzes\./);
 });
 
-test("buildTextForWidget suppresses Dream standalone body while an active compare compare is present", () => {
+test("buildTextForWidget keeps Dream standalone body when only raw compare runtime is present", () => {
   const helpers = buildTextHelpers((stepId) => {
     if (stepId !== "dream") return "";
     return [
@@ -1255,7 +1257,9 @@ test("buildTextForWidget suppresses Dream standalone body while an active compar
     } as any,
   });
 
-  assert.equal(output, "");
+  assert.match(output, /Ik heb je input herschreven naar een droom\./);
+  assert.match(output, /JE HUIDIGE DROOM VOOR MINDD IS/);
+  assert.match(output, /Mindd droomt van een wereld waarin ondernemers rust ervaren in hun keuzes\./);
 });
 
 test("buildTextForWidget strips raw HTML tags from user-facing text", () => {
@@ -1279,7 +1283,7 @@ test("buildTextForWidget strips raw HTML tags from user-facing text", () => {
   assert.match(output, /Doelgroep blijft zichtbaar\./);
 });
 
-test("finalizeResponse keeps Dream self compare actions when builder compare is not active", () => {
+test("finalizeResponse no longer persists Dream self compare actions in state when builder compare is not active", () => {
   const helpers = buildFinalizeLayer();
   const state = {
     current_step: "dream",
@@ -1319,8 +1323,8 @@ test("finalizeResponse keeps Dream self compare actions when builder compare is 
   });
 
   const finalState = (response.state || {}) as Record<string, unknown>;
-  assert.equal(String(finalState.ui_action_compare_pick_user || ""), "ACTION_COMPARE_PICK_USER");
-  assert.equal(String(finalState.ui_action_compare_pick_suggestion || ""), "ACTION_COMPARE_PICK_SUGGESTION");
+  assert.equal(String(finalState.ui_action_compare_pick_user || ""), "");
+  assert.equal(String(finalState.ui_action_compare_pick_suggestion || ""), "");
 });
 
 test("buildTextForWidget keeps single-value confirm fallback text stable without duplicating canonical output", () => {

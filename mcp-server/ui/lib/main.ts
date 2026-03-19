@@ -153,18 +153,13 @@ import { getIsLoading, setSessionStarted, setSessionWelcomeShown } from "./ui_st
     if (!role) return "";
     const descriptor = actionDescriptorFromLatestContract(role);
     if (descriptor?.actionCode) return descriptor.actionCode;
-    const state = latestWidgetState();
-    return String(state[stateKey] || "").trim();
+    return "";
   }
   function actionPayloadModeFromState(stateKey) {
     const role = actionRoleForStateKey(stateKey);
     if (role) {
       const descriptor = actionDescriptorFromLatestContract(role);
       if (descriptor?.payloadMode) return descriptor.payloadMode;
-    }
-    const state = latestWidgetState();
-    if (String(stateKey || "").trim() === "ui_action_text_submit") {
-      return String(state.ui_action_text_submit_payload_mode || "").trim().toLowerCase();
     }
     return "";
   }

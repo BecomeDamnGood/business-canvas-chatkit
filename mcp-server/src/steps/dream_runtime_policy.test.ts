@@ -30,7 +30,6 @@ test("dream runtime policy adds explicit rationale when source Dream is technolo
 
   assert.equal(result.canStage, true);
   assert.deepEqual(result.sourceViolationCodes, ["technology_first", "execution_first"]);
-  assert.equal(String(result.specialist.feedback_reason_key || ""), "");
   assert.equal(String(result.specialist.feedback_reason_text || ""), "");
 });
 

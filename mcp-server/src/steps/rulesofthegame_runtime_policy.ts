@@ -257,17 +257,11 @@ export function applyRulesRuntimePolicy(params: {
         grouped_cursor: "",
         grouped_units: [],
         grouped_segments: [],
-        user_variant_semantics: "",
-        user_variant_stepworthy: false,
-        feedback_reason_key: "",
         feedback_reason_text: rationale,
         pending_text_intent: "",
         pending_text_anchor: "",
-        pending_text_seed_source: "",
-        pending_text_feedback_text: "",
         pending_text_presentation_mode: "",
       },
-      feedback_reason_key: "",
       __rules_policy_applied: "true",
     });
 
@@ -289,7 +283,6 @@ export function applyRulesRuntimePolicy(params: {
     statements: finalItems,
     refined_formulation: bullets,
     rulesofthegame: bullets,
-    feedback_reason_key: "",
     feedback_reason_text: "",
     __rules_policy_applied: "true",
   };

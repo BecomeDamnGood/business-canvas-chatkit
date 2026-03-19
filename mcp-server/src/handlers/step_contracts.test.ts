@@ -677,8 +677,6 @@ test("final response derives compare pending interaction directly from specialis
       state: {
         started: "true",
         current_step: "dream",
-        ui_action_compare_pick_user: "ACTION_COMPARE_PICK_USER",
-        ui_action_compare_pick_suggestion: "ACTION_COMPARE_PICK_SUGGESTION",
       } as any,
       ui: {
         view: {
@@ -702,6 +700,51 @@ test("final response derives compare pending interaction directly from specialis
   assert.equal(String(pending.kind || ""), "text_compare");
   assert.equal(String(renderModel.user_text || ""), userInput);
   assert.equal(String(renderModel.suggestion_text || ""), canonical);
+  assert.equal(String((response.state as any).ui_action_compare_pick_user || ""), "ACTION_COMPARE_PICK_USER");
+  assert.equal(
+    String((response.state as any).ui_action_compare_pick_suggestion || ""),
+    "ACTION_COMPARE_PICK_SUGGESTION"
+  );
+});
+
+test("interactive responses fail closed when only a text submit action remains and no renderable content exists", () => {
+  const response = finalizeResponseContractInternals(
+    {
+      ok: true,
+      current_step_id: "dream",
+      active_specialist: "Dream",
+      text: "",
+      prompt: "",
+      specialist: {
+        action: "ASK",
+        message: "",
+        question: "",
+        refined_formulation: "",
+        dream: "",
+      },
+      state: {
+        started: "true",
+        current_step: "dream",
+        active_specialist: "Dream",
+      } as any,
+      ui: {
+        view: {
+          mode: "interactive",
+        },
+      },
+    } as any,
+    {
+      applyUiClientActionContract: () => {},
+      parseMenuFromContractIdForStep: () => "",
+      labelKeysForMenuActionCodes: () => [],
+      onUiParityError: () => {},
+      attachRegistryPayload: (payload) => payload,
+    }
+  );
+
+  assert.equal(response.ok, false);
+  assert.equal(String((response.error as Record<string, unknown> | undefined)?.type || ""), "contract_warning");
+  assert.equal(String(((response.state as any) || {}).reason_code || ""), "ui_interactive_content_absent");
 });
 
 test("pending interaction derives list_compare from compare list feedback", () => {
@@ -837,7 +880,7 @@ test("pending interaction derives grouped list compare into list_compare render 
   );
 });
 
-test("compare contracts self-heal when pending interaction actions are missing", () => {
+test("compare contracts self-heal missing compare actions from the active owner", () => {
   const response = finalizeResponseContractInternals(
     {
       ok: true,
@@ -879,7 +922,12 @@ test("compare contracts self-heal when pending interaction actions are missing",
   assert.equal(response.ok, true);
   assert.equal(String((response.error as Record<string, unknown> | undefined)?.type || ""), "");
   assert.equal(String((((response.ui as any) || {}).view || {}).variant || ""), "");
-  assert.equal(String((((response.ui as any) || {}).pending_interaction || {}).kind || ""), "");
+  assert.equal(String((((response.ui as any) || {}).pending_interaction || {}).kind || ""), "text_compare");
+  assert.equal(String(((response.state as any) || {}).ui_action_compare_pick_user || ""), "ACTION_COMPARE_PICK_USER");
+  assert.equal(
+    String(((response.state as any) || {}).ui_action_compare_pick_suggestion || ""),
+    "ACTION_COMPARE_PICK_SUGGESTION"
+  );
 });
 
 test("dream compare contracts fail closed when generic card content is still present", () => {
