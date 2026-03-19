@@ -15,7 +15,7 @@ type Fixture = {
 };
 
 function finalizeFixture(response: Record<string, unknown>): Record<string, unknown> {
-  return finalizeResponseContractInternals(response as any, {
+  return finalizeResponseContractInternals(JSON.parse(JSON.stringify(response)) as any, {
     applyUiClientActionContract: () => {},
     parseMenuFromContractIdForStep: () => "",
     labelKeysForMenuActionCodes: () => [],
@@ -41,7 +41,6 @@ function extractProof(result: Record<string, unknown>): Record<string, unknown> 
   const view = toRecord(ui.view);
   const pending = toRecord(ui.pending_interaction);
   const renderModel = toRecord(pending.render_model);
-  const feedback = toRecord(ui.feedback_contract);
   const content = toRecord(ui.content);
   const compareFailureReason = readCompareContractFailureReason(ui);
   const wordingChoiceActive = shouldSuppressMainCardForWordingChoice(ui, String(view.variant || ""));
@@ -50,7 +49,7 @@ function extractProof(result: Record<string, unknown>): Record<string, unknown> 
       ? "contract_failure"
       : wordingChoiceActive
         ? "compare"
-        : Object.keys(content).length > 0 || String(feedback.kind || "").trim() === "single_value_canonical_suggestion"
+        : Object.keys(content).length > 0
           ? "semantic"
           : "empty";
 
@@ -78,6 +77,8 @@ function extractProof(result: Record<string, unknown>): Record<string, unknown> 
     suggestion_text: String(renderModel.suggestion_text || ""),
     user_items: normalizeStringArray(renderModel.user_items),
     suggestion_items: normalizeStringArray(renderModel.suggestion_items),
+    has_feedback_contract: Object.prototype.hasOwnProperty.call(ui, "feedback_contract"),
+    has_wording_choice: Object.prototype.hasOwnProperty.call(ui, "wording_choice"),
   };
 }
 
@@ -98,7 +99,7 @@ const fixtures: Fixture[] = [
       },
       ui: {
         contract_id: "dream:interactive:refine",
-        view: { mode: "interactive" },
+        view: { mode: "interactive", variant: "text_compare" },
         feedback_contract: {
           kind: "single_value_compare",
           mode: "text",
@@ -111,10 +112,11 @@ const fixtures: Fixture[] = [
     expected: {
       visible_card: "compare",
       main_card_suppressed: true,
-      pending_kind: "wording_choice",
+      pending_kind: "text_compare",
       allowed_roles: ["wording_pick_user", "wording_pick_suggestion"],
       user_label: "This is your input:",
       suggestion_label: "This would be my suggestion:",
+      view_variant: "text_compare",
     },
   },
   {
@@ -137,7 +139,7 @@ const fixtures: Fixture[] = [
       },
       ui: {
         contract_id: "dream:interactive:refine",
-        view: { mode: "interactive", variant: "wording_choice" },
+        view: { mode: "interactive", variant: "text_compare" },
         feedback_contract: {
           kind: "single_value_compare",
           mode: "text",
@@ -155,6 +157,7 @@ const fixtures: Fixture[] = [
       user_label: "Dit is jouw input:",
       suggestion_label: "Dit zou mijn suggestie zijn:",
       user_text: "Dit gaat over dat mensen het beu zijn om verkeerd voorgelicht te worden.",
+      pending_kind: "text_compare",
     },
   },
   {
@@ -190,7 +193,7 @@ const fixtures: Fixture[] = [
     },
     expected: {
       visible_card: "compare",
-      pending_kind: "wording_choice",
+      pending_kind: "list_compare",
       user_label: "Keep both statements",
       suggestion_label: "Merge into one statement",
       user_items: ["Statement one", "Statement two"],
@@ -227,7 +230,7 @@ const fixtures: Fixture[] = [
     },
     expected: {
       visible_card: "compare",
-      pending_kind: "wording_choice",
+      pending_kind: "list_compare",
       user_items: ["Operational simplicity"],
       suggestion_items: ["Operational focus"],
     },
@@ -264,6 +267,7 @@ const fixtures: Fixture[] = [
       visible_card: "compare",
       user_label: "Your input",
       suggestion_label: "My suggestion",
+      pending_kind: "text_compare",
     },
   },
   {
@@ -292,6 +296,8 @@ const fixtures: Fixture[] = [
       visible_card: "semantic",
       main_card_suppressed: false,
       pending_kind: "",
+      has_feedback_contract: false,
+      has_wording_choice: false,
     },
   },
   {
@@ -321,6 +327,8 @@ const fixtures: Fixture[] = [
       visible_card: "semantic",
       main_card_suppressed: false,
       pending_kind: "",
+      has_feedback_contract: false,
+      has_wording_choice: false,
     },
   },
   {
@@ -337,7 +345,7 @@ const fixtures: Fixture[] = [
       },
       ui: {
         contract_id: "dream:interactive:refine",
-        view: { mode: "interactive" },
+        view: { mode: "interactive", variant: "text_compare" },
         feedback_contract: {
           kind: "single_value_compare",
           mode: "text",
@@ -360,6 +368,8 @@ for (const fixture of fixtures) {
   test(`compare golden fixture: ${fixture.name}`, () => {
     const finalized = finalizeFixture(fixture.response);
     const proof = extractProof(finalized);
+    assert.equal(proof.has_feedback_contract, false, `${fixture.name}: feedback_contract leaked`);
+    assert.equal(proof.has_wording_choice, false, `${fixture.name}: wording_choice leaked`);
     for (const [key, expectedValue] of Object.entries(fixture.expected)) {
       assert.deepEqual(proof[key], expectedValue, `${fixture.name}: ${key}`);
     }

@@ -1,9 +1,6 @@
 import type { RenderedAction, UiContentPayload } from "../contracts/ui_actions.js";
 import type { CanvasState } from "../core/state.js";
-import type {
-  UiViewPayload,
-  WordingChoiceUiPayload,
-} from "./run_step_runtime_action_helpers.js";
+import type { UiViewPayload } from "./run_step_runtime_action_helpers.js";
 
 export type PendingInteractionAllowedAction = {
   id: string;
@@ -33,7 +30,7 @@ export type PendingInteractionWordingChoiceRenderModel = {
 export type PendingInteractionPayload = {
   version: string;
   id: string;
-  kind: "wording_choice";
+  kind: "text_compare" | "list_compare";
   status: "pending";
   source: "server_contract";
   response_contract_id: string;
@@ -62,8 +59,8 @@ export type RunStepBase = {
     text_keys?: string[];
     view?: UiViewPayload;
     flags: Record<string, boolean | string>;
-    wording_choice?: WordingChoiceUiPayload;
     pending_interaction?: PendingInteractionPayload;
+    dream_builder_contract?: Record<string, unknown>;
   };
   presentation_assets?: {
     pdf_url: string;

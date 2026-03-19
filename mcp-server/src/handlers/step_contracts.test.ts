@@ -531,7 +531,7 @@ test("dream builder interactive variants suppress the start-exercise action once
   );
 });
 
-test("feedback contract derives the single-value compare family from wording-choice text", () => {
+test("pending interaction derives text_compare from wording-choice text", () => {
   const response = finalizeResponseContractInternals(
     {
       ok: true,
@@ -548,7 +548,7 @@ test("feedback contract derives the single-value compare family from wording-cho
       ui: {
         view: {
           mode: "interactive",
-          variant: "wording_choice",
+          variant: "text_compare",
         },
         wording_choice: {
           enabled: true,
@@ -571,19 +571,24 @@ test("feedback contract derives the single-value compare family from wording-cho
     }
   );
 
-  const feedbackContract = (((response.ui || {}) as Record<string, unknown>).feedback_contract || {}) as Record<string, unknown>;
-  assert.equal(String(feedbackContract.kind || ""), "single_value_compare");
-  assert.equal(String(feedbackContract.rationale || ""), "Je huidige formulering blijft te beschrijvend en nog niet richtinggevend genoeg.");
-  assert.equal(String(feedbackContract.current_label || ""), "Your input");
-  assert.equal(String(feedbackContract.suggested_label || ""), "My suggestion");
-  assert.equal(String(feedbackContract.current_value || ""), "Wij zijn er om mooie merken te bouwen.");
+  const ui = ((response.ui || {}) as Record<string, unknown>);
+  const pending = ((ui.pending_interaction || {}) as Record<string, unknown>);
+  const renderModel = ((pending.render_model || {}) as Record<string, unknown>);
+  assert.equal(String(ui.view && (ui.view as Record<string, unknown>).variant || ""), "text_compare");
+  assert.equal("feedback_contract" in ui, false);
+  assert.equal("wording_choice" in ui, false);
+  assert.equal(String(pending.kind || ""), "text_compare");
+  assert.equal(String(renderModel.feedback_reason_text || ""), "Je huidige formulering blijft te beschrijvend en nog niet richtinggevend genoeg.");
+  assert.equal(String(renderModel.user_label || ""), "Your input");
+  assert.equal(String(renderModel.suggestion_label || ""), "My suggestion");
+  assert.equal(String(renderModel.user_text || ""), "Wij zijn er om mooie merken te bouwen.");
   assert.equal(
-    String(feedbackContract.suggested_value || ""),
+    String(renderModel.suggestion_text || ""),
     "Wij bestaan om merken te bouwen die zichtbaar het leven van mensen verbeteren."
   );
 });
 
-test("final response feedback contract backfills current_value from specialist wording-choice state when legacy user_text is blank", () => {
+test("final response pending interaction backfills user_text from specialist wording-choice state when legacy user_text is blank", () => {
   const userInput = "Dit gaat over dat mensen het beu zijn om verkeerd voorgelicht te worden.";
   const canonical =
     "Mindd droomt van een wereld waarin mensen zich zeker voelen omdat ze eerlijk geinformeerd worden.";
@@ -607,7 +612,7 @@ test("final response feedback contract backfills current_value from specialist w
       ui: {
         view: {
           mode: "interactive",
-          variant: "wording_choice",
+          variant: "text_compare",
         },
         wording_choice: {
           enabled: true,
@@ -631,13 +636,14 @@ test("final response feedback contract backfills current_value from specialist w
     }
   );
 
-  const feedbackContract = (((response.ui || {}) as Record<string, unknown>).feedback_contract || {}) as Record<string, unknown>;
-  assert.equal(String(feedbackContract.kind || ""), "single_value_compare");
-  assert.equal(String(feedbackContract.current_value || ""), userInput);
-  assert.equal(String(feedbackContract.suggested_value || ""), canonical);
+  const pending = ((((response.ui || {}) as Record<string, unknown>).pending_interaction || {}) as Record<string, unknown>);
+  const renderModel = ((pending.render_model || {}) as Record<string, unknown>);
+  assert.equal(String(pending.kind || ""), "text_compare");
+  assert.equal(String(renderModel.user_text || ""), userInput);
+  assert.equal(String(renderModel.suggestion_text || ""), canonical);
 });
 
-test("final response repairs explicit single-value compare contracts that are missing current_value", () => {
+test("final response repairs explicit single-value compare contracts into pending interaction when current_value is missing", () => {
   const userInput = "Dit gaat over dat mensen het beu zijn om verkeerd voorgelicht te worden.";
   const canonical =
     "Mindd droomt van een wereld waarin mensen zich zeker voelen omdat ze eerlijk geinformeerd worden.";
@@ -661,7 +667,7 @@ test("final response repairs explicit single-value compare contracts that are mi
       ui: {
         view: {
           mode: "interactive",
-          variant: "wording_choice",
+          variant: "text_compare",
         },
         feedback_contract: {
           version: "2026-03-16.feedback_contract.v1",
@@ -686,13 +692,16 @@ test("final response repairs explicit single-value compare contracts that are mi
     }
   );
 
-  const feedbackContract = (((response.ui || {}) as Record<string, unknown>).feedback_contract || {}) as Record<string, unknown>;
-  assert.equal(String(feedbackContract.kind || ""), "single_value_compare");
-  assert.equal(String(feedbackContract.current_value || ""), userInput);
-  assert.equal(String(feedbackContract.suggested_value || ""), canonical);
+  const ui = ((response.ui || {}) as Record<string, unknown>);
+  const pending = ((ui.pending_interaction || {}) as Record<string, unknown>);
+  const renderModel = ((pending.render_model || {}) as Record<string, unknown>);
+  assert.equal("feedback_contract" in ui, false);
+  assert.equal(String(pending.kind || ""), "text_compare");
+  assert.equal(String(renderModel.user_text || ""), userInput);
+  assert.equal(String(renderModel.suggestion_text || ""), canonical);
 });
 
-test("feedback contract keeps the canonical single-value suggestion family when the server publishes it explicitly", () => {
+test("legacy canonical single-value suggestions migrate into ui.content before compare shadows are stripped", () => {
   const response = finalizeResponseContractInternals(
     {
       ok: true,
@@ -726,20 +735,22 @@ test("feedback contract keeps the canonical single-value suggestion family when 
     }
   );
 
-  const feedbackContract = (((response.ui || {}) as Record<string, unknown>).feedback_contract || {}) as Record<string, unknown>;
-  assert.equal(String(feedbackContract.kind || ""), "single_value_canonical_suggestion");
+  const ui = ((response.ui || {}) as Record<string, unknown>);
+  const content = ((ui.content || {}) as Record<string, unknown>);
+  assert.equal("feedback_contract" in ui, false);
+  assert.equal(String(content.kind || ""), "single_value");
   assert.equal(
-    String(feedbackContract.heading || ""),
+    String(content.heading || ""),
     "OP BASIS VAN JE INPUT STEL IK DE VOLGENDE BESTAANSREDEN VOOR"
   );
   assert.equal(
-    String(feedbackContract.suggested_value || ""),
+    String(content.canonical_text || ""),
     "Wij bestaan om mensen op een positieve manier te inspireren om hun volledige potentieel te ontdekken."
   );
-  assert.equal(String(feedbackContract.rationale || ""), "Je huidige formulering blijft nog te algemeen.");
+  assert.equal(String(content.feedback_reason_text || ""), "Je huidige formulering blijft nog te algemeen.");
 });
 
-test("feedback contract derives the list edit family from wording-choice list feedback", () => {
+test("pending interaction derives list_compare from wording-choice list feedback", () => {
   const response = finalizeResponseContractInternals(
     {
       ok: true,
@@ -756,7 +767,7 @@ test("feedback contract derives the list edit family from wording-choice list fe
       ui: {
         view: {
           mode: "interactive",
-          variant: "wording_choice",
+          variant: "text_compare",
         },
         flags: {
           require_wording_pick: true,
@@ -782,15 +793,18 @@ test("feedback contract derives the list edit family from wording-choice list fe
     }
   );
 
-  const feedbackContract = (((response.ui || {}) as Record<string, unknown>).feedback_contract || {}) as Record<string, unknown>;
-  assert.equal(String(feedbackContract.kind || ""), "list_edit_compare");
-  assert.equal(String(feedbackContract.rationale || ""), "Ik heb de servicebenaming specifieker gemaakt.");
-  assert.deepEqual(feedbackContract.current_items, ["AI flows", "Production support"]);
-  assert.deepEqual(feedbackContract.suggested_items, ["AI-driven flows", "Production guidance"]);
-  assert.equal(String(feedbackContract.instruction || ""), "Choose the version that fits best for the remaining difference.");
+  const ui = ((response.ui || {}) as Record<string, unknown>);
+  const pending = ((ui.pending_interaction || {}) as Record<string, unknown>);
+  const renderModel = ((pending.render_model || {}) as Record<string, unknown>);
+  assert.equal("feedback_contract" in ui, false);
+  assert.equal(String(pending.kind || ""), "list_compare");
+  assert.equal(String(renderModel.feedback_reason_text || ""), "Ik heb de servicebenaming specifieker gemaakt.");
+  assert.deepEqual(renderModel.user_items, ["AI flows", "Production support"]);
+  assert.deepEqual(renderModel.suggestion_items, ["AI-driven flows", "Production guidance"]);
+  assert.equal(String(renderModel.instruction || ""), "Choose the version that fits best for the remaining difference.");
 });
 
-test("feedback contract derives the grouped list compare family from grouped list wording feedback", () => {
+test("pending interaction derives grouped list compare into list_compare render model", () => {
   const response = finalizeResponseContractInternals(
     {
       ok: true,
@@ -807,7 +821,7 @@ test("feedback contract derives the grouped list compare family from grouped lis
       ui: {
         view: {
           mode: "interactive",
-          variant: "wording_choice",
+          variant: "text_compare",
         },
         flags: {
           require_wording_pick: true,
@@ -845,25 +859,28 @@ test("feedback contract derives the grouped list compare family from grouped lis
     }
   );
 
-  const feedbackContract = (((response.ui || {}) as Record<string, unknown>).feedback_contract || {}) as Record<string, unknown>;
-  assert.equal(String(feedbackContract.kind || ""), "grouped_list_compare");
+  const ui = ((response.ui || {}) as Record<string, unknown>);
+  const pending = ((ui.pending_interaction || {}) as Record<string, unknown>);
+  const renderModel = ((pending.render_model || {}) as Record<string, unknown>);
+  assert.equal("feedback_contract" in ui, false);
+  assert.equal(String(pending.kind || ""), "list_compare");
   assert.equal(
-    String(feedbackContract.rationale || ""),
+    String(renderModel.feedback_reason_text || ""),
     "Je hebt al iets soortgelijks gezegd, dus een samengevoegde regel houdt je lijst scherper."
   );
-  assert.deepEqual(feedbackContract.current_items, [
+  assert.deepEqual(renderModel.user_items, [
     "Meer mensen zoeken werk dat impact heeft.",
     "Werk moet zichtbaar iets goeds doen voor anderen.",
   ]);
-  assert.deepEqual(feedbackContract.suggested_items, [
+  assert.deepEqual(renderModel.suggestion_items, [
     "Meer mensen zoeken werk dat zichtbaar impact heeft op het leven van anderen.",
   ]);
-  assert.equal(String(feedbackContract.retained_heading || ""), "These points already stay in the final list:");
-  assert.deepEqual(feedbackContract.retained_items, [
+  assert.equal(String(renderModel.retained_heading || ""), "These points already stay in the final list:");
+  assert.deepEqual(renderModel.retained_items, [
     "Er zal meer behoefte zijn aan bedrijven die blijvende waarde nalaten.",
   ]);
   assert.equal(
-    String(feedbackContract.instruction || ""),
+    String(renderModel.instruction || ""),
     "Choose the version that fits best for the remaining difference."
   );
 });
@@ -884,7 +901,7 @@ test("compare contracts fail closed when pending interaction actions are missing
         contract_id: "purpose:interactive:refine",
         view: {
           mode: "interactive",
-          variant: "wording_choice",
+          variant: "text_compare",
         },
         feedback_contract: {
           kind: "single_value_compare",
@@ -927,7 +944,7 @@ test("dream compare contracts fail closed when generic card content is still pre
         contract_id: "dream:interactive:refine",
         view: {
           mode: "interactive",
-          variant: "wording_choice",
+          variant: "text_compare",
         },
         content: {
           kind: "single_value",
@@ -957,7 +974,7 @@ test("dream compare contracts fail closed when generic card content is still pre
   assert.equal(String(((response.state as any) || {}).reason_code || ""), "dream_compare_generic_card_content_present");
 });
 
-test("final response publishes a single server-owned pending interaction for wording choice", () => {
+test("final response publishes a single server-owned pending interaction for compare picks", () => {
   const response = finalizeResponseContractInternals(
     {
       ok: true,
@@ -992,7 +1009,7 @@ test("final response publishes a single server-owned pending interaction for wor
         contract_id: "dream:interactive:refine",
         view: {
           mode: "interactive",
-          variant: "wording_choice",
+          variant: "text_compare",
         },
         feedback_contract: {
           kind: "single_value_compare",
@@ -1015,8 +1032,11 @@ test("final response publishes a single server-owned pending interaction for wor
     }
   );
 
-  const pending = (((response.ui || {}) as Record<string, unknown>).pending_interaction || {}) as Record<string, unknown>;
-  assert.equal(String(pending.kind || ""), "wording_choice");
+  const ui = ((response.ui || {}) as Record<string, unknown>);
+  const pending = ((ui.pending_interaction || {}) as Record<string, unknown>);
+  assert.equal("feedback_contract" in ui, false);
+  assert.equal("wording_choice" in ui, false);
+  assert.equal(String(pending.kind || ""), "text_compare");
   assert.equal(String(pending.status || ""), "pending");
   assert.deepEqual(
     ((pending.allowed_actions || []) as Array<Record<string, unknown>>).map((action) => String(action.id || "")),
@@ -1029,7 +1049,7 @@ test("final response publishes a single server-owned pending interaction for wor
   );
 });
 
-test("feedback compare contract keeps wording pick actions and default labels even without wording_choice view variant", () => {
+test("feedback compare contract keeps wording pick actions and default labels even without explicit compare view variant", () => {
   const response = finalizeResponseContractInternals(
     {
       ok: true,
@@ -1073,9 +1093,12 @@ test("feedback compare contract keeps wording pick actions and default labels ev
     : [];
   assert.deepEqual(roles, ["wording_pick_user", "wording_pick_suggestion"]);
 
-  const pending = (((response.ui || {}) as Record<string, unknown>).pending_interaction || {}) as Record<string, unknown>;
+  const ui = ((response.ui || {}) as Record<string, unknown>);
+  const view = ((ui.view || {}) as Record<string, unknown>);
+  const pending = ((ui.pending_interaction || {}) as Record<string, unknown>);
   const renderModel = (pending.render_model || {}) as Record<string, unknown>;
-  assert.equal(String(pending.kind || ""), "wording_choice");
+  assert.equal(String(view.variant || ""), "text_compare");
+  assert.equal(String(pending.kind || ""), "text_compare");
   assert.equal(String(renderModel.user_label || ""), "This is your input:");
   assert.equal(String(renderModel.suggestion_label || ""), "This would be my suggestion:");
 });

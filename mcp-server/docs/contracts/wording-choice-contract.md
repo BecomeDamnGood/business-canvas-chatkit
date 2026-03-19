@@ -1,30 +1,32 @@
-# Wording Choice Contract
+# Compare Contract
 
-This contract governs A/B wording selection when both user and suggestion variants are available.
+This contract governs compare selection when both user and suggestion variants are available.
 
 ## Trigger
 
-- Wording choice mode is active when specialist payload exposes pending wording choice fields:
+- Compare mode is active when specialist payload exposes pending wording choice fields:
 - `wording_choice_pending="true"`
 - `wording_choice_user_*` and suggestion counterpart present
 - Runtime trigger rule:
-- If suggestion differs from user input in wording/content/order, show wording-choice panel.
-- Exception: do **not** show wording-choice panel only when the difference is strictly spelling/surface correction and the sentence/list content is otherwise identical.
+- If suggestion differs from user input in wording/content/order, show the compare panel.
+- Exception: do **not** show the compare panel only when the difference is strictly spelling/surface correction and the sentence/list content is otherwise identical.
 - This rule applies to all eligible steps and both text/list modes.
 
 ## UI Behavior
 
-- Show comparison panel (text mode or list mode).
-- Compare payload exposes a dedicated `compare_feedback.text` field for the agent reason shown above the two compare cards.
-- The compare panel must only render when `compare_feedback.text` contains a valid, content-specific reason for this exact rewrite.
+- Show comparison panel in one of two public kinds:
+- `ui.pending_interaction.kind="text_compare"`
+- `ui.pending_interaction.kind="list_compare"`
+- The compare payload exposes `feedback_reason_text` inside `pending_interaction.render_model`.
+- The compare panel must only render when `feedback_reason_text` contains a valid, content-specific reason for this exact rewrite.
 - Block standard confirm/proceed actions until a pick is made.
 - View priority is strict:
-- DreamBuilder scoring view overrides wording-choice.
-- Outside scoring, wording-choice overrides standard menu buttons.
+- DreamBuilder scoring view overrides compare.
+- Outside scoring, compare overrides standard menu buttons.
 - Accepted pick actions:
 - `ACTION_WORDING_PICK_USER`
 - `ACTION_WORDING_PICK_SUGGESTION`
-- Wording-choice UI never overrides menu routing; menu transitions stay actioncode + contract-state driven.
+- Compare UI never overrides menu routing; menu transitions stay actioncode + contract-state driven.
 
 ## State Update Rules
 
@@ -48,8 +50,9 @@ On pick:
 
 ## Guardrails
 
-- Step 0 never enters wording-choice mode.
-- DreamBuilder collect and refine contexts allow wording-choice panel.
-- DreamBuilder scoring context does not allow wording-choice panel.
-- Off-topic turns do not show wording-choice panel.
+- Step 0 never enters compare mode.
+- Dream self mode uses the same public `text_compare` contract as the other single-value steps.
+- DreamBuilder collect and refine contexts keep ownership in `dream_builder_contract`.
+- DreamBuilder scoring context does not allow `ui.pending_interaction`.
+- Off-topic turns do not show compare.
 - Reordered list items are treated as a meaningful difference (panel must be shown).

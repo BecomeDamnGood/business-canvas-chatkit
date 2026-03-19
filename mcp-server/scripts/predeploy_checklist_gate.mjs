@@ -15,8 +15,17 @@ const lines = content.split(/\r?\n/);
 const checklistLines = lines.filter((line) => /^- \[[ xX]\]/.test(line.trim()));
 const unchecked = checklistLines.filter((line) => /^- \[ \]/.test(line.trim()));
 
-const requiredSections = Array.from({ length: 12 }, (_, i) => `## ${i})`);
+const requiredSections = Array.from({ length: 13 }, (_, i) => `## ${i})`);
 const missingSections = requiredSections.filter((needle) => !content.includes(needle));
+const requiredCompareNeedles = [
+  "text_compare",
+  "list_compare",
+  "compare_pick",
+  "build-ui.mjs",
+  "runtime-smoke.mjs",
+  "contract-purity-check.mjs",
+];
+const missingCompareNeedles = requiredCompareNeedles.filter((needle) => !content.includes(needle));
 
 if (checklistLines.length === 0) {
   console.error("[checklist_gate] no checklist items found");
@@ -26,6 +35,12 @@ if (checklistLines.length === 0) {
 if (missingSections.length > 0) {
   console.error("[checklist_gate] missing sections:");
   for (const section of missingSections) console.error(`- ${section}`);
+  process.exit(1);
+}
+
+if (missingCompareNeedles.length > 0) {
+  console.error("[checklist_gate] compare-contract checklist items missing:");
+  for (const needle of missingCompareNeedles) console.error(`- ${needle}`);
   process.exit(1);
 }
 

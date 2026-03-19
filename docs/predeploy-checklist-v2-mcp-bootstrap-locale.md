@@ -59,6 +59,7 @@ Alle items zijn `pass/fail`.
 - [x] Resolver kiest richest-valid-first; freshness wordt alleen als tiebreaker gebruikt als beide kandidaten freshness hebben, en `meta.widget_result` behoudt prioriteit.
 - [x] `needs_hydration` heeft precies 1 definitie en wordt gedeeld door render + scheduler.
 - [x] `computeHydrationState` bevat geen redundante `needs_hydration` condities (één eenduidige definitie).
+- [x] Compare-contract release gebruikt alleen `ui.pending_interaction.kind = text_compare|list_compare` en nooit het legacy publieke kind `wording_choice`.
 
 ## 7) Waiting/Recovery UX
 
@@ -81,9 +82,11 @@ Alle items zijn `pass/fail`.
 ## 9) Build/Artifact Parity
 
 - [x] Bron en deploy artifacts zijn sync (`ui/lib/*` ↔ bundled html ↔ `dist/ui/*`).
+- [x] `node scripts/build-ui.mjs` is uitgevoerd na elke publieke compare-contract rename voordat smoke/deploy doorgaat.
 - [x] Deploy gebruikt de juiste platformstring (`linux/amd64` indien amd64 vereist).
 - [x] UI resource URI versie (`?v=...`) matcht uitgerolde versie.
 - [x] CI faalt op parity mismatch.
+- [x] Bundled widget bevat `text_compare`, `list_compare` en `compare_pick`, en bevat geen legacy publieke `wording_choice` string meer.
 
 ## 10) Verplichte E2E Scenarios (staging)
 
@@ -94,6 +97,14 @@ Alle items zijn `pass/fail`.
 - [x] Inconsistente inputstate (`ui_strings_status=ready` + lege map) wordt correct gerepareerd naar waiting.
 - [x] Staging smoke-test meet elapsed time van app-open tot CTA zichtbaar; grenswaarde is `<= 3s`.
 - [x] E2E NL-assertie: eerste zichtbare frame van widget bevat NL-tekst (geen EN flashscreen).
+- [x] `runtime-smoke.mjs` faalt zichtbaar wanneer server nieuwe compare-kinds uitstuurt maar de bundle nog legacy compare-strings verwacht.
+
+## 12) Compare Contract Reset
+
+- [x] `contract-purity-check.mjs` blokkeert legacy publieke compare-strings (`wording_choice`, oude feedback kinds) in server/widget renderpaden.
+- [x] `predeploy_checklist_gate.mjs` bewaakt expliciet de compare-contract reset items in deze checklist.
+- [x] `dream` self mode gebruikt hetzelfde publieke compare-contract als `purpose`, `bigwhy`, `role`, `entity` en `targetgroup`.
+- [x] `dream_explainer` blijft exclusief eigenaar van `dream_builder_contract` compare/scoring.
 
 ## 11) Go/No-Go
 

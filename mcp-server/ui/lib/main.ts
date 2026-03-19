@@ -79,7 +79,7 @@ import { getIsLoading, setSessionStarted, setSessionWelcomeShown } from "./ui_st
     const pending = ui && typeof ui.pending_interaction === "object" ? ui.pending_interaction : {};
     const kind = String(pending.kind || "").trim().toLowerCase();
     const status = String(pending.status || "").trim().toLowerCase();
-    if (kind !== "wording_choice" || status !== "pending") return null;
+    if ((kind !== "text_compare" && kind !== "list_compare") || status !== "pending") return null;
     const allowedActions = Array.isArray(pending.allowed_actions) ? pending.allowed_actions : [];
     return {
       id: String(pending.id || "").trim(),

@@ -41,7 +41,7 @@ type UiActionSurface =
   | "choice"
   | "primary"
   | "text_input"
-  | "wording_choice"
+  | "compare_pick"
   | "auxiliary";
 
 type PendingInteractionAllowedAction = {
@@ -132,7 +132,7 @@ const UI_ACTION_SURFACES = new Set<UiActionSurface>([
   "choice",
   "primary",
   "text_input",
-  "wording_choice",
+  "compare_pick",
   "auxiliary",
 ]);
 
@@ -181,23 +181,32 @@ function ensureUnifiedUiFeedbackContract(response: RunStepContractResponse): voi
   response.ui = ui;
 }
 
-function stripLegacyUiWordingChoice(response: RunStepContractResponse): void {
+function stripLegacyUiCompareShadows(response: RunStepContractResponse): void {
   const ui = toRecord(response.ui);
-  const feedback = toRecord(ui.feedback_contract);
-  const dreamBuilder = toRecord(ui.dream_builder_contract);
-  const feedbackKind = String(feedback.kind || "").trim();
-  const currentStepId = String(response.current_step_id || toRecord(response.state).current_step || "").trim();
-  const dreamBuilderCompareActive =
-    String(dreamBuilder.phase || "").trim() === "compare" &&
-    (
-      String(toRecord(dreamBuilder.compare).kind || "").trim() === "batch_rewrite_compare" ||
-      String(toRecord(dreamBuilder.compare).kind || "").trim() === "overlap_merge_compare"
-    );
-  const dreamBuilderContractPresent = currentStepId === "dream" && Object.keys(dreamBuilder).length > 0;
-  if (!UI_FEEDBACK_KINDS.has(feedbackKind as UiFeedbackKind) && !dreamBuilderCompareActive && !dreamBuilderContractPresent) {
-    return;
-  }
+  if (Object.keys(ui).length === 0) return;
   delete ui.wording_choice;
+  delete ui.feedback_contract;
+  response.ui = ui;
+}
+
+function migrateLegacyCanonicalSuggestionToContent(response: RunStepContractResponse): void {
+  const ui = toRecord(response.ui);
+  const content = toRecord(ui.content);
+  const feedback = toRecord(ui.feedback_contract);
+  if (Object.keys(content).length > 0) return;
+  if (String(feedback.kind || "").trim() !== "single_value_canonical_suggestion") return;
+  const heading = String(feedback.heading || "").trim();
+  const canonicalText = String(feedback.suggested_value || "").trim();
+  const feedbackReasonText = String(feedback.rationale || "").trim();
+  const supportText = String(feedback.support_text || "").trim();
+  if (!heading && !canonicalText && !feedbackReasonText && !supportText) return;
+  ui.content = {
+    kind: "single_value",
+    ...(heading ? { heading } : {}),
+    ...(canonicalText ? { canonical_text: canonicalText } : {}),
+    ...(supportText ? { support_text: supportText } : {}),
+    ...(feedbackReasonText ? { feedback_reason_text: feedbackReasonText } : {}),
+  };
   response.ui = ui;
 }
 
@@ -205,7 +214,7 @@ function defaultSurfaceForRole(role: UiActionRole): UiActionSurface {
   if (role === "start") return "primary";
   if (role === "text_submit") return "text_input";
   if (role === "score_submit") return "primary";
-  if (role === "wording_pick_user" || role === "wording_pick_suggestion") return "wording_choice";
+  if (role === "wording_pick_user" || role === "wording_pick_suggestion") return "compare_pick";
   if (role === "dream_start_exercise") return "choice";
   if (role === "dream_switch_to_self") return "auxiliary";
   return "choice";
@@ -332,6 +341,7 @@ function wordingChoicePendingInteractionId(params: {
 
 function ensurePendingInteractionContract(response: RunStepContractResponse): void {
   const ui = toRecord(response.ui);
+  const view = toRecord(ui.view);
   const actionContract = toRecord(ui.action_contract);
   const actions = Array.isArray(actionContract.actions) ? (actionContract.actions as Array<Record<string, unknown>>) : [];
   const userPickAction = normalizePendingInteractionAllowedAction(
@@ -347,6 +357,7 @@ function ensurePendingInteractionContract(response: RunStepContractResponse): vo
   const lastSpecialist = toRecord(state.last_specialist_result);
   if (!userPickAction || !suggestionPickAction || !renderModel) {
     delete ui.pending_interaction;
+    ui.view = view;
     delete state.__pending_interaction_id;
     if (Object.keys(lastSpecialist).length > 0 && Object.prototype.hasOwnProperty.call(lastSpecialist, "pending_interaction_id")) {
       delete lastSpecialist.pending_interaction_id;
@@ -368,13 +379,15 @@ function ensurePendingInteractionContract(response: RunStepContractResponse): vo
   ui.pending_interaction = {
     version: "2026-03-18.pending_interaction.v1",
     id: interactionId,
-    kind: "wording_choice",
+    kind: renderModel.mode === "list" ? "list_compare" : "text_compare",
     status: "pending",
     source: "server_contract",
     response_contract_id: contractId,
     allowed_actions: [userPickAction, suggestionPickAction],
     render_model: renderModel,
   };
+  view.variant = "text_compare";
+  ui.view = view;
   state.__pending_interaction_id = interactionId;
   if (Object.keys(lastSpecialist).length > 0) {
     lastSpecialist.pending_interaction_id = interactionId;
@@ -396,23 +409,15 @@ function hasDreamBuilderCompareSource(ui: Record<string, unknown>): boolean {
   );
 }
 
-function hasLegacyCompareCompatSource(response: RunStepContractResponse): boolean {
+function hasActiveNormalCompareSource(response: RunStepContractResponse): boolean {
   const ui = toRecord(response.ui);
-  const synthesized = synthesizeUiFeedbackContractFromWordingChoice(ui.wording_choice, ui.flags, response.specialist);
-  return isCompareFeedbackKind(toRecord(synthesized).kind);
-}
-
-function hasActiveCompareSource(response: RunStepContractResponse): boolean {
-  const ui = toRecord(response.ui);
-  return (
-    isCompareFeedbackKind(toRecord(ui.feedback_contract).kind) ||
-    hasDreamBuilderCompareSource(ui) ||
-    hasLegacyCompareCompatSource(response)
-  );
+  const view = toRecord(ui.view);
+  return String(view.variant || "").trim().toLowerCase() === "text_compare";
 }
 
 function validatePendingInteractionCompareInvariant(response: RunStepContractResponse): string | null {
-  if (!hasActiveCompareSource(response)) return null;
+  if (hasDreamBuilderCompareSource(toRecord(response.ui))) return null;
+  if (!hasActiveNormalCompareSource(response)) return null;
 
   const ui = toRecord(response.ui);
   const state = toRecord(response.state);
@@ -421,8 +426,9 @@ function validatePendingInteractionCompareInvariant(response: RunStepContractRes
     return "ui_pending_interaction_missing_for_compare";
   }
 
+  const pendingKind = String(pending.kind || "").trim();
   if (
-    String(pending.kind || "").trim() !== "wording_choice" ||
+    (pendingKind !== "text_compare" && pendingKind !== "list_compare") ||
     String(pending.status || "").trim() !== "pending"
   ) {
     return "ui_pending_interaction_malformed_for_compare";
@@ -452,6 +458,12 @@ function validatePendingInteractionCompareInvariant(response: RunStepContractRes
   }
 
   const actualMode = String(actualRenderModel.mode || "").trim().toLowerCase() === "list" ? "list" : "text";
+  if (
+    (actualMode === "list" && pendingKind !== "list_compare") ||
+    (actualMode === "text" && pendingKind !== "text_compare")
+  ) {
+    return "ui_pending_interaction_malformed_for_compare";
+  }
   const actualUserItems = normalizeStringArray(actualRenderModel.user_items);
   const actualSuggestionItems = normalizeStringArray(actualRenderModel.suggestion_items);
   const actualUserText = String(actualRenderModel.user_text || "").trim();
@@ -502,7 +514,7 @@ function validatePendingInteractionCompareInvariant(response: RunStepContractRes
   const stepId = String(response.current_step_id || state.current_step || "").trim();
   if (stepId === "dream") {
     const content = toRecord(ui.content);
-    if (Object.keys(content).length > 0 || String(toRecord(ui.feedback_contract).kind || "").trim() === "single_value_canonical_suggestion") {
+    if (Object.keys(content).length > 0) {
       return "dream_compare_generic_card_content_present";
     }
   }
@@ -680,7 +692,7 @@ function buildStateActionDescriptor(
       actionCode,
       label: uiLabelForKey(state, "wordingChoice.chooseVersion"),
       labelKey: "wordingChoice.chooseVersion",
-      surface: "wording_choice",
+      surface: "compare_pick",
       intent: { type: "WORDING_PICK", choice: "user" },
       primary: false,
     };
@@ -692,7 +704,7 @@ function buildStateActionDescriptor(
       actionCode,
       label: uiLabelForKey(state, "wordingChoice.chooseVersion"),
       labelKey: "wordingChoice.chooseVersion",
-      surface: "wording_choice",
+      surface: "compare_pick",
       intent: { type: "WORDING_PICK", choice: "suggestion" },
       primary: false,
     };
@@ -876,7 +888,7 @@ function applyDeterministicUiActionRenderPolicy(response: RunStepContractRespons
   const feedbackKind = String(toRecord(ui.feedback_contract).kind || "").trim();
   const feedbackCompareActive = isCompareFeedbackKind(feedbackKind);
   const wordingChoiceSurfaceActive =
-    variant === "wording_choice" || dreamBuilderCompareActive || feedbackCompareActive;
+    variant === "text_compare" || dreamBuilderCompareActive || feedbackCompareActive;
   if (mode === "prestart") {
     allowedRoles.add("start");
   } else if (mode === "interactive") {
@@ -1114,10 +1126,12 @@ function shouldEnforceDreamSingleValueActionLiveness(response: RunStepContractRe
     variant === "dream_builder_collect" ||
     variant === "dream_builder_refine" ||
     variant === "dream_builder_scoring" ||
-    variant === "wording_choice"
+    variant === "text_compare"
   ) {
     return false;
   }
+  const content = toRecord(ui.content);
+  if (String(content.kind || "").trim() === "single_value") return true;
   const feedback = toRecord(ui.feedback_contract);
   return String(feedback.kind || "").trim() === "single_value_canonical_suggestion";
 }
@@ -1211,7 +1225,6 @@ export function finalizeResponseContractInternals<T extends RunStepContractRespo
     labelKeysForMenuActionCodes: options.labelKeysForMenuActionCodes,
   });
   ensureUnifiedUiFeedbackContract(finalResponse);
-  stripLegacyUiWordingChoice(finalResponse);
   const finalUi = toRecord(finalResponse.ui);
   delete finalUi.actions;
   delete finalUi.action_codes;
@@ -1257,6 +1270,8 @@ export function finalizeResponseContractInternals<T extends RunStepContractRespo
       return buildContractFailurePayload(finalResponse, pendingInteractionViolation) as T;
     }
   }
+  migrateLegacyCanonicalSuggestionToContent(finalResponse);
+  stripLegacyUiCompareShadows(finalResponse);
   (finalResponse as Record<string, unknown>).__canonical_view_decision = canonicalViewDecision;
 
   return finalResponse as T;

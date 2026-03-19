@@ -1,14 +1,16 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
+import fs from "node:fs";
 import { performance } from "node:perf_hooks";
-import { dirname } from "node:path";
+import path, { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const port = String(process.env.SMOKE_PORT || process.env.PORT || "8787").trim() || "8787";
 const baseUrl = `http://127.0.0.1:${port}`;
 const serverCwd = dirname(fileURLToPath(new URL("../server.ts", import.meta.url)));
 const readyTimeoutMs = Number(process.env.SMOKE_READY_TIMEOUT_MS || 30000);
+const bundlePath = path.resolve(serverCwd, "ui/step-card.bundled.html");
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -112,6 +114,12 @@ async function callRunStep(body) {
 
 async function main() {
   const startedAt = performance.now();
+  const bundledHtml = fs.readFileSync(bundlePath, "utf8");
+  assert.equal(bundledHtml.includes("text_compare"), true, "bundle mist text_compare support");
+  assert.equal(bundledHtml.includes("list_compare"), true, "bundle mist list_compare support");
+  assert.equal(bundledHtml.includes("compare_pick"), true, "bundle mist compare_pick surface support");
+  assert.equal(bundledHtml.includes('"wording_choice"'), false, "bundle bevat nog legacy wording_choice public string");
+
   const server = spawn("node", ["--loader", "ts-node/esm", "server.ts"], {
     cwd: serverCwd,
     env: {
@@ -209,6 +217,7 @@ async function main() {
           status: "PASS",
           duration_ms: durationMs,
           checks: {
+            bundle_compare_kinds: "ok",
             server_start: "ok",
             ready: "ok",
             step0: "ok",

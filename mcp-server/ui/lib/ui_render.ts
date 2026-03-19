@@ -52,30 +52,6 @@ function toRecord(value: unknown): Record<string, unknown> {
     : {};
 }
 
-type FeedbackContractKind =
-  | "single_value_compare"
-  | "single_value_canonical_suggestion"
-  | "grouped_list_compare"
-  | "list_edit_compare"
-  | "list_duplicate_merge_compare";
-
-type NormalizedFeedbackContract = {
-  kind: FeedbackContractKind;
-  mode: "text" | "list";
-  rationale: string;
-  heading: string;
-  supportText: string;
-  currentLabel: string;
-  suggestedLabel: string;
-  currentValue: string;
-  suggestedValue: string;
-  currentItems: string[];
-  suggestedItems: string[];
-  retainedHeading: string;
-  retainedItems: string[];
-  instruction: string;
-};
-
 type DreamBuilderContractPhase = "collect" | "compare" | "scoring" | "refine";
 
 type NormalizedDreamBuilderCompareContract = {
@@ -112,7 +88,7 @@ type NormalizedDreamBuilderContract = {
 
 type NormalizedPendingInteraction = {
   id: string;
-  kind: "wording_choice";
+  kind: "text_compare" | "list_compare";
   status: "pending";
   allowedActions: Array<{
     id: string;
@@ -146,20 +122,6 @@ function normalizeStringArray(raw: unknown): string[] {
     .filter(Boolean);
 }
 
-function normalizeFeedbackContractKind(raw: unknown): FeedbackContractKind | "" {
-  const kind = String(raw || "").trim();
-  if (
-    kind === "single_value_compare" ||
-    kind === "single_value_canonical_suggestion" ||
-    kind === "grouped_list_compare" ||
-    kind === "list_edit_compare" ||
-    kind === "list_duplicate_merge_compare"
-  ) {
-    return kind;
-  }
-  return "";
-}
-
 function normalizeDreamBuilderContractPhase(raw: unknown): DreamBuilderContractPhase | "" {
   const phase = String(raw || "").trim();
   if (phase === "collect" || phase === "compare" || phase === "scoring" || phase === "refine") {
@@ -168,31 +130,6 @@ function normalizeDreamBuilderContractPhase(raw: unknown): DreamBuilderContractP
   return "";
 }
 
-export function readFeedbackContract(
-  uiPayloadRaw: Record<string, unknown> | null | undefined
-): NormalizedFeedbackContract | null {
-  const uiPayload = toRecord(uiPayloadRaw);
-  const feedback = toRecord(uiPayload.feedback_contract);
-  const kind = normalizeFeedbackContractKind(feedback.kind);
-  if (!kind) return null;
-  const mode = String(feedback.mode || "").trim().toLowerCase() === "list" ? "list" : "text";
-  return {
-    kind,
-    mode,
-    rationale: String(feedback.rationale || "").trim(),
-    heading: String(feedback.heading || "").trim(),
-    supportText: String(feedback.support_text || "").trim(),
-    currentLabel: String(feedback.current_label || "").trim(),
-    suggestedLabel: String(feedback.suggested_label || "").trim(),
-    currentValue: String(feedback.current_value || "").trim(),
-    suggestedValue: String(feedback.suggested_value || "").trim(),
-    currentItems: normalizeStringArray(feedback.current_items),
-    suggestedItems: normalizeStringArray(feedback.suggested_items),
-    retainedHeading: String(feedback.retained_heading || "").trim(),
-    retainedItems: normalizeStringArray(feedback.retained_items),
-    instruction: String(feedback.instruction || "").trim(),
-  };
-}
 
 export function readDreamBuilderContract(
   uiPayloadRaw: Record<string, unknown> | null | undefined
@@ -277,21 +214,6 @@ function readSingleValueCardContent(uiPayload: Record<string, unknown>): {
   supportText?: string;
   feedbackReasonText?: string;
 } | null {
-  const feedbackContract = readFeedbackContract(uiPayload);
-  if (feedbackContract?.kind === "single_value_canonical_suggestion") {
-    if (
-      !feedbackContract.heading &&
-      !feedbackContract.suggestedValue &&
-      !feedbackContract.rationale
-    ) {
-      return null;
-    }
-    return {
-      ...(feedbackContract.heading ? { heading: feedbackContract.heading } : {}),
-      ...(feedbackContract.suggestedValue ? { canonicalText: feedbackContract.suggestedValue } : {}),
-      ...(feedbackContract.rationale ? { feedbackReasonText: feedbackContract.rationale } : {}),
-    };
-  }
   const content = toRecord(uiPayload.content);
   if (String(content.kind || "").trim() !== "single_value") return null;
   const heading = String(content.heading || "").trim();
@@ -370,7 +292,7 @@ export function shouldSuppressPromptForWordingChoice(params: {
   requireWordingPick?: boolean;
 }): boolean {
   return (
-    String(params.uiViewVariant || "").trim() === "wording_choice" ||
+    String(params.uiViewVariant || "").trim() === "text_compare" ||
     params.wordingChoiceActive === true ||
     params.requireWordingPick === true
   );
@@ -447,10 +369,9 @@ function actionContractActionsForResult(resultData: Record<string, unknown>): Ar
       .map((entry) => toRecord(entry))
       .filter((entry) => String(entry.action_code || "").trim().length > 0);
   }
-  const legacyActions = Array.isArray(uiPayload.actions) ? (uiPayload.actions as unknown[]) : [];
-  if (legacyActions.length > 0) {
+  if (Array.isArray(uiPayload.actions) && uiPayload.actions.length > 0) {
     console.warn("[ui_action_contract_missing_actions]", {
-      legacy_actions_count: legacyActions.length,
+      legacy_actions_count: uiPayload.actions.length,
       current_step: String((resultData.state as Record<string, unknown> | undefined)?.current_step || ""),
     });
   }
@@ -464,9 +385,12 @@ function readPendingInteraction(
   const pending = toRecord(uiPayload.pending_interaction);
   const kind = String(pending.kind || "").trim();
   const status = String(pending.status || "").trim();
-  if (kind !== "wording_choice" || status !== "pending") return null;
+  if ((kind !== "text_compare" && kind !== "list_compare") || status !== "pending") return null;
   const renderModelRaw = toRecord(pending.render_model);
   const mode = String(renderModelRaw.mode || "").trim().toLowerCase() === "list" ? "list" : "text";
+  if ((kind === "list_compare" && mode !== "list") || (kind === "text_compare" && mode !== "text")) {
+    return null;
+  }
   const variantRaw = String(renderModelRaw.variant || "").trim();
   const variant =
     variantRaw === "clarify_dual" || variantRaw === "grouped_list_units"
@@ -513,7 +437,7 @@ function readPendingInteraction(
   if (!hasComparableValues) return null;
   return {
     id: String(pending.id || "").trim(),
-    kind: "wording_choice",
+    kind: kind as "text_compare" | "list_compare",
     status: "pending",
     allowedActions,
     renderModel: {
@@ -533,37 +457,14 @@ function readPendingInteraction(
   };
 }
 
-function hasLegacyCompareCompatSource(uiPayload: Record<string, unknown>): boolean {
-  const wordingChoice = toRecord(uiPayload.wording_choice);
-  if (Object.keys(wordingChoice).length === 0) return false;
-  const flags = toRecord(uiPayload.flags);
-  const wordingEnabled =
-    wordingChoice.enabled === true ||
-    String(flags.require_wording_pick || "").trim().toLowerCase() === "true";
-  if (!wordingEnabled) return false;
-  if (String(wordingChoice.presentation || "").trim() === "canonical") return false;
-  return (
-    String(wordingChoice.user_text || "").trim().length > 0 ||
-    String(wordingChoice.suggestion_text || "").trim().length > 0 ||
-    normalizeStringArray(wordingChoice.user_items).length > 0 ||
-    normalizeStringArray(wordingChoice.suggestion_items).length > 0
-  );
-}
-
 export function readCompareContractFailureReason(
   uiPayloadRaw: Record<string, unknown> | null | undefined
 ): string | null {
   const uiPayload = toRecord(uiPayloadRaw);
-  const feedbackContract = readFeedbackContract(uiPayload);
   const dreamBuilderContract = readDreamBuilderContract(uiPayload);
-  const compareSourceActive =
-    feedbackContract?.kind === "single_value_compare" ||
-    feedbackContract?.kind === "grouped_list_compare" ||
-    feedbackContract?.kind === "list_edit_compare" ||
-    feedbackContract?.kind === "list_duplicate_merge_compare" ||
-    (dreamBuilderContract?.phase === "compare" && Boolean(dreamBuilderContract.compare)) ||
-    hasLegacyCompareCompatSource(uiPayload);
-  if (!compareSourceActive) return null;
+  if (dreamBuilderContract?.phase === "compare" && Boolean(dreamBuilderContract.compare)) return null;
+  const uiViewVariant = String(toRecord(uiPayload.view).variant || "").trim().toLowerCase();
+  if (uiViewVariant !== "text_compare") return null;
   const pendingInteractionRaw = toRecord(uiPayload.pending_interaction);
   if (Object.keys(pendingInteractionRaw).length === 0) {
     return "ui_pending_interaction_missing_for_compare";
@@ -659,7 +560,7 @@ function defaultSurfaceForActionRole(role: string): string {
   if (normalizedRole === "text_submit") return "text_input";
   if (normalizedRole === "score_submit") return "primary";
   if (normalizedRole === "wording_pick_user" || normalizedRole === "wording_pick_suggestion") {
-    return "wording_choice";
+    return "compare_pick";
   }
   if (normalizedRole === "dream_start_exercise") {
     return "choice";
@@ -1866,7 +1767,7 @@ export function render(overrideToolOutput?: unknown): void {
   const uiViewVariant = String((uiView.variant || "")).trim();
   const dreamBuilderContract = readDreamBuilderContract(uiPayload);
   const dreamBuilderPhase = dreamBuilderContract?.phase || "";
-  const isViewModeWordingChoice = uiViewVariant === "wording_choice";
+  const isViewModeWordingChoice = uiViewVariant === "text_compare";
   const isViewModeDreamBuilderCollect =
     uiViewVariant === "dream_builder_collect" || dreamBuilderPhase === "collect";
   const isViewModeDreamBuilderRefine =

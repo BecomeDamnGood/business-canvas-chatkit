@@ -5047,42 +5047,12 @@
     if (!Array.isArray(raw)) return [];
     return raw.map((value) => String(value || "").trim()).filter(Boolean);
   }
-  function normalizeFeedbackContractKind(raw) {
-    const kind = String(raw || "").trim();
-    if (kind === "single_value_compare" || kind === "single_value_canonical_suggestion" || kind === "grouped_list_compare" || kind === "list_edit_compare" || kind === "list_duplicate_merge_compare") {
-      return kind;
-    }
-    return "";
-  }
   function normalizeDreamBuilderContractPhase(raw) {
     const phase = String(raw || "").trim();
     if (phase === "collect" || phase === "compare" || phase === "scoring" || phase === "refine") {
       return phase;
     }
     return "";
-  }
-  function readFeedbackContract(uiPayloadRaw) {
-    const uiPayload = toRecord3(uiPayloadRaw);
-    const feedback = toRecord3(uiPayload.feedback_contract);
-    const kind = normalizeFeedbackContractKind(feedback.kind);
-    if (!kind) return null;
-    const mode = String(feedback.mode || "").trim().toLowerCase() === "list" ? "list" : "text";
-    return {
-      kind,
-      mode,
-      rationale: String(feedback.rationale || "").trim(),
-      heading: String(feedback.heading || "").trim(),
-      supportText: String(feedback.support_text || "").trim(),
-      currentLabel: String(feedback.current_label || "").trim(),
-      suggestedLabel: String(feedback.suggested_label || "").trim(),
-      currentValue: String(feedback.current_value || "").trim(),
-      suggestedValue: String(feedback.suggested_value || "").trim(),
-      currentItems: normalizeStringArray(feedback.current_items),
-      suggestedItems: normalizeStringArray(feedback.suggested_items),
-      retainedHeading: String(feedback.retained_heading || "").trim(),
-      retainedItems: normalizeStringArray(feedback.retained_items),
-      instruction: String(feedback.instruction || "").trim()
-    };
   }
   function readDreamBuilderContract(uiPayloadRaw) {
     const uiPayload = toRecord3(uiPayloadRaw);
@@ -5139,17 +5109,6 @@
     };
   }
   function readSingleValueCardContent(uiPayload) {
-    const feedbackContract = readFeedbackContract(uiPayload);
-    if (feedbackContract?.kind === "single_value_canonical_suggestion") {
-      if (!feedbackContract.heading && !feedbackContract.suggestedValue && !feedbackContract.rationale) {
-        return null;
-      }
-      return {
-        ...feedbackContract.heading ? { heading: feedbackContract.heading } : {},
-        ...feedbackContract.suggestedValue ? { canonicalText: feedbackContract.suggestedValue } : {},
-        ...feedbackContract.rationale ? { feedbackReasonText: feedbackContract.rationale } : {}
-      };
-    }
     const content = toRecord3(uiPayload.content);
     if (String(content.kind || "").trim() !== "single_value") return null;
     const heading = String(content.heading || "").trim();
@@ -5197,7 +5156,7 @@ ${String(item || "").trim()}`.trim())
     return Boolean(readPendingInteraction(uiPayload));
   }
   function shouldSuppressPromptForWordingChoice(params) {
-    return String(params.uiViewVariant || "").trim() === "wording_choice" || params.wordingChoiceActive === true || params.requireWordingPick === true;
+    return String(params.uiViewVariant || "").trim() === "text_compare" || params.wordingChoiceActive === true || params.requireWordingPick === true;
   }
   function shouldShowTextInputForWordingChoice(params) {
     if (params.textSubmitAvailable !== true) return false;
@@ -5235,10 +5194,9 @@ ${String(item || "").trim()}`.trim())
     if (Array.isArray(actionContract.actions)) {
       return actionContract.actions.map((entry) => toRecord3(entry)).filter((entry) => String(entry.action_code || "").trim().length > 0);
     }
-    const legacyActions = Array.isArray(uiPayload.actions) ? uiPayload.actions : [];
-    if (legacyActions.length > 0) {
+    if (Array.isArray(uiPayload.actions) && uiPayload.actions.length > 0) {
       console.warn("[ui_action_contract_missing_actions]", {
-        legacy_actions_count: legacyActions.length,
+        legacy_actions_count: uiPayload.actions.length,
         current_step: String(resultData.state?.current_step || "")
       });
     }
@@ -5249,9 +5207,12 @@ ${String(item || "").trim()}`.trim())
     const pending = toRecord3(uiPayload.pending_interaction);
     const kind = String(pending.kind || "").trim();
     const status = String(pending.status || "").trim();
-    if (kind !== "wording_choice" || status !== "pending") return null;
+    if (kind !== "text_compare" && kind !== "list_compare" || status !== "pending") return null;
     const renderModelRaw = toRecord3(pending.render_model);
     const mode = String(renderModelRaw.mode || "").trim().toLowerCase() === "list" ? "list" : "text";
+    if (kind === "list_compare" && mode !== "list" || kind === "text_compare" && mode !== "text") {
+      return null;
+    }
     const variantRaw = String(renderModelRaw.variant || "").trim();
     const variant = variantRaw === "clarify_dual" || variantRaw === "grouped_list_units" ? variantRaw : "default";
     const allowedActions = Array.isArray(pending.allowed_actions) ? pending.allowed_actions.map((entry) => {
@@ -5288,7 +5249,7 @@ ${String(item || "").trim()}`.trim())
     if (!hasComparableValues) return null;
     return {
       id: String(pending.id || "").trim(),
-      kind: "wording_choice",
+      kind,
       status: "pending",
       allowedActions,
       renderModel: {
@@ -5307,21 +5268,12 @@ ${String(item || "").trim()}`.trim())
       }
     };
   }
-  function hasLegacyCompareCompatSource(uiPayload) {
-    const wordingChoice = toRecord3(uiPayload.wording_choice);
-    if (Object.keys(wordingChoice).length === 0) return false;
-    const flags = toRecord3(uiPayload.flags);
-    const wordingEnabled = wordingChoice.enabled === true || String(flags.require_wording_pick || "").trim().toLowerCase() === "true";
-    if (!wordingEnabled) return false;
-    if (String(wordingChoice.presentation || "").trim() === "canonical") return false;
-    return String(wordingChoice.user_text || "").trim().length > 0 || String(wordingChoice.suggestion_text || "").trim().length > 0 || normalizeStringArray(wordingChoice.user_items).length > 0 || normalizeStringArray(wordingChoice.suggestion_items).length > 0;
-  }
   function readCompareContractFailureReason(uiPayloadRaw) {
     const uiPayload = toRecord3(uiPayloadRaw);
-    const feedbackContract = readFeedbackContract(uiPayload);
     const dreamBuilderContract = readDreamBuilderContract(uiPayload);
-    const compareSourceActive = feedbackContract?.kind === "single_value_compare" || feedbackContract?.kind === "grouped_list_compare" || feedbackContract?.kind === "list_edit_compare" || feedbackContract?.kind === "list_duplicate_merge_compare" || dreamBuilderContract?.phase === "compare" && Boolean(dreamBuilderContract.compare) || hasLegacyCompareCompatSource(uiPayload);
-    if (!compareSourceActive) return null;
+    if (dreamBuilderContract?.phase === "compare" && Boolean(dreamBuilderContract.compare)) return null;
+    const uiViewVariant = String(toRecord3(uiPayload.view).variant || "").trim().toLowerCase();
+    if (uiViewVariant !== "text_compare") return null;
     const pendingInteractionRaw = toRecord3(uiPayload.pending_interaction);
     if (Object.keys(pendingInteractionRaw).length === 0) {
       return "ui_pending_interaction_missing_for_compare";
@@ -5352,7 +5304,7 @@ ${String(item || "").trim()}`.trim())
     if (normalizedRole === "text_submit") return "text_input";
     if (normalizedRole === "score_submit") return "primary";
     if (normalizedRole === "wording_pick_user" || normalizedRole === "wording_pick_suggestion") {
-      return "wording_choice";
+      return "compare_pick";
     }
     if (normalizedRole === "dream_start_exercise") {
       return "choice";
@@ -6199,7 +6151,7 @@ ${String(item || "").trim()}`.trim())
     const uiViewVariant = String(uiView.variant || "").trim();
     const dreamBuilderContract = readDreamBuilderContract(uiPayload);
     const dreamBuilderPhase = dreamBuilderContract?.phase || "";
-    const isViewModeWordingChoice = uiViewVariant === "wording_choice";
+    const isViewModeWordingChoice = uiViewVariant === "text_compare";
     const isViewModeDreamBuilderCollect = uiViewVariant === "dream_builder_collect" || dreamBuilderPhase === "collect";
     const isViewModeDreamBuilderRefine = uiViewVariant === "dream_builder_refine" || dreamBuilderPhase === "refine";
     const isViewModeDreamBuilderScoring = uiViewVariant === "dream_builder_scoring" || dreamBuilderPhase === "scoring";
@@ -6759,7 +6711,7 @@ ${String(item || "").trim()}`.trim())
     const pending = ui && typeof ui.pending_interaction === "object" ? ui.pending_interaction : {};
     const kind = String(pending.kind || "").trim().toLowerCase();
     const status = String(pending.status || "").trim().toLowerCase();
-    if (kind !== "wording_choice" || status !== "pending") return null;
+    if (kind !== "text_compare" && kind !== "list_compare" || status !== "pending") return null;
     const allowedActions = Array.isArray(pending.allowed_actions) ? pending.allowed_actions : [];
     return {
       id: String(pending.id || "").trim(),

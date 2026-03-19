@@ -767,7 +767,7 @@ test("attachRegistryPayload restores Dream single-value compare feedback contrac
     }
   );
 
-  assert.equal(payload.ui?.view?.variant, "wording_choice");
+  assert.equal(payload.ui?.view?.variant, "text_compare");
   assert.equal(payload.ui?.content, undefined);
   assert.equal(String(payload.ui?.feedback_contract?.kind || ""), "single_value_compare");
   assert.equal(
@@ -815,7 +815,7 @@ test("attachRegistryPayload backfills Dream compare current_value from specialis
     }
   );
 
-  assert.equal(payload.ui?.view?.variant, "wording_choice");
+  assert.equal(payload.ui?.view?.variant, "text_compare");
   assert.equal(String(payload.ui?.feedback_contract?.kind || ""), "single_value_compare");
   assert.equal(String(payload.ui?.feedback_contract?.current_value || ""), userInput);
   assert.equal(String(payload.ui?.feedback_contract?.suggested_value || ""), canonical);
@@ -859,7 +859,7 @@ test("attachRegistryPayload backfills non-Dream compare current_value from speci
     }
   );
 
-  assert.equal(payload.ui?.view?.variant, "wording_choice");
+  assert.equal(payload.ui?.view?.variant, "text_compare");
   assert.equal(String(payload.ui?.feedback_contract?.kind || ""), "single_value_compare");
   assert.equal(String(payload.ui?.feedback_contract?.current_value || ""), userInput);
   assert.equal(String(payload.ui?.feedback_contract?.suggested_value || ""), canonical);
@@ -907,7 +907,7 @@ test("attachRegistryPayload repairs explicit single-value compare contracts that
     null
   );
 
-  assert.equal(payload.ui?.view?.variant, "wording_choice");
+  assert.equal(payload.ui?.view?.variant, "text_compare");
   assert.equal(String(payload.ui?.feedback_contract?.kind || ""), "single_value_compare");
   assert.equal(String(payload.ui?.feedback_contract?.current_value || ""), userInput);
   assert.equal(String(payload.ui?.feedback_contract?.suggested_value || ""), canonical);
@@ -954,7 +954,7 @@ test("attachRegistryPayload suppresses single-value ui.content while wording-cho
     }
   );
 
-  assert.equal(payload.ui?.view?.variant, "wording_choice");
+  assert.equal(payload.ui?.view?.variant, "text_compare");
   assert.equal(payload.ui?.content, undefined);
   assert.equal(String(payload.ui?.feedback_contract?.kind || ""), "single_value_compare");
   assert.equal("wording_choice" in (payload.ui || {}), false);
@@ -997,7 +997,7 @@ test("attachRegistryPayload omits questionText while wording-choice picker is ac
     }
   );
 
-  assert.equal(payload.ui?.view?.variant, "wording_choice");
+  assert.equal(payload.ui?.view?.variant, "text_compare");
   assert.equal(Object.prototype.hasOwnProperty.call(payload.ui || {}, "questionText"), false);
 });
 

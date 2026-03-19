@@ -9,7 +9,6 @@ import {
   dreamExerciseButtonLabelKeyForState,
   parseWordingChoiceInstruction,
   readCompareContractFailureReason,
-  readFeedbackContract,
   readDreamBuilderContract,
   readStructuredSuggestionsCardContent,
   resolveActionCodeForStateKey,
@@ -40,10 +39,13 @@ import { STEP_REGISTRY_ORDER } from "./steps/step_registry.js";
 
 function buildPendingWordingChoiceUiPayload(overrides: Record<string, unknown> = {}) {
   return {
+    view: {
+      variant: "text_compare",
+    },
     pending_interaction: {
       version: "2026-03-18.pending_interaction.v1",
       id: "pi_wording_test",
-      kind: "wording_choice",
+      kind: "text_compare",
       status: "pending",
       source: "server_contract",
       response_contract_id: "dream:interactive:refine",
@@ -54,7 +56,7 @@ function buildPendingWordingChoiceUiPayload(overrides: Record<string, unknown> =
           label: "Choose this version",
           label_key: "wordingChoice.chooseVersion",
           role: "wording_pick_user",
-          surface: "wording_choice",
+          surface: "compare_pick",
           primary: false,
         },
         {
@@ -63,7 +65,7 @@ function buildPendingWordingChoiceUiPayload(overrides: Record<string, unknown> =
           label: "Choose this version",
           label_key: "wordingChoice.chooseVersion",
           role: "wording_pick_suggestion",
-          surface: "wording_choice",
+          surface: "compare_pick",
           primary: false,
         },
       ],
@@ -88,7 +90,7 @@ function buildPendingWordingChoiceUiPayload(overrides: Record<string, unknown> =
 
 test("shouldSuppressMainCardForWordingChoice suppresses the main card for wording-choice view variants", () => {
   assert.equal(
-    shouldSuppressMainCardForWordingChoice(buildPendingWordingChoiceUiPayload(), "wording_choice"),
+    shouldSuppressMainCardForWordingChoice(buildPendingWordingChoiceUiPayload(), "text_compare"),
     true
   );
 });
@@ -118,7 +120,7 @@ test("shouldSuppressMainCardForWordingChoice ignores stale wording-choice payloa
           require_wording_pick: true,
         },
       },
-      "wording_choice"
+      "text_compare"
     ),
     false
   );
@@ -152,34 +154,6 @@ test("shouldSuppressMainCardForWordingChoice keeps the main card enabled for non
   );
 });
 
-test("readFeedbackContract normalizes canonical single-value feedback from the server contract", () => {
-  const feedbackContract = readFeedbackContract({
-    feedback_contract: {
-      kind: "single_value_canonical_suggestion",
-      heading: "OP BASIS VAN JE INPUT STEL IK DE VOLGENDE BESTAANSREDEN VOOR",
-      suggested_value: "Wij bestaan om mensen positief in beweging te brengen.",
-      rationale: "Je huidige zin blijft nog te algemeen.",
-    },
-  });
-
-  assert.deepEqual(feedbackContract, {
-    kind: "single_value_canonical_suggestion",
-    mode: "text",
-    rationale: "Je huidige zin blijft nog te algemeen.",
-    heading: "OP BASIS VAN JE INPUT STEL IK DE VOLGENDE BESTAANSREDEN VOOR",
-    supportText: "",
-    currentLabel: "",
-    suggestedLabel: "",
-    currentValue: "",
-    suggestedValue: "Wij bestaan om mensen positief in beweging te brengen.",
-    currentItems: [],
-    suggestedItems: [],
-    retainedHeading: "",
-    retainedItems: [],
-    instruction: "",
-  });
-});
-
 test("strategy structured suggestion blocks get Strategy 1/2/3 headings in the widget renderer", () => {
   setRuntimeUiStrings({ "title.strategy": "Strategie" });
   const normalized = readStructuredSuggestionsCardContent({
@@ -205,10 +179,11 @@ test("strategy structured suggestion blocks get Strategy 1/2/3 headings in the w
   assert.match(String(decorated?.items?.[2] || ""), /^Strategie 3\b/);
 });
 
-test("shouldSuppressMainCardForWordingChoice follows the feedback contract for compare families", () => {
+test("shouldSuppressMainCardForWordingChoice follows pending_interaction for compare families", () => {
   assert.equal(
     shouldSuppressMainCardForWordingChoice(
       buildPendingWordingChoiceUiPayload({
+        kind: "list_compare",
         render_model: {
           mode: "list",
           variant: "grouped_list_units",
@@ -231,9 +206,9 @@ test("shouldSuppressMainCardForWordingChoice follows the feedback contract for c
   assert.equal(
     shouldSuppressMainCardForWordingChoice(
       {
-        feedback_contract: {
-          kind: "single_value_canonical_suggestion",
-          mode: "text",
+        content: {
+          kind: "single_value",
+          canonical_text: "Wij bestaan om mensen positief in beweging te brengen.",
         },
       },
       "default"
@@ -245,11 +220,8 @@ test("shouldSuppressMainCardForWordingChoice follows the feedback contract for c
 test("readCompareContractFailureReason fail-closes compare payloads that are missing pending_interaction", () => {
   assert.equal(
     readCompareContractFailureReason({
-      feedback_contract: {
-        kind: "single_value_compare",
-        mode: "text",
-        current_value: "Mijn versie",
-        suggested_value: "De suggestie",
+      view: {
+        variant: "text_compare",
       },
     }),
     "ui_pending_interaction_missing_for_compare"
@@ -257,11 +229,8 @@ test("readCompareContractFailureReason fail-closes compare payloads that are mis
   assert.equal(
     shouldSuppressMainCardForWordingChoice(
       {
-        feedback_contract: {
-          kind: "single_value_compare",
-          mode: "text",
-          current_value: "Mijn versie",
-          suggested_value: "De suggestie",
+        view: {
+          variant: "text_compare",
         },
       },
       "default"
@@ -273,14 +242,11 @@ test("readCompareContractFailureReason fail-closes compare payloads that are mis
 test("readCompareContractFailureReason rejects malformed pending_interaction payloads", () => {
   assert.equal(
     readCompareContractFailureReason({
-      feedback_contract: {
-        kind: "single_value_compare",
-        mode: "text",
-        current_value: "Mijn versie",
-        suggested_value: "De suggestie",
+      view: {
+        variant: "text_compare",
       },
       pending_interaction: {
-        kind: "wording_choice",
+        kind: "text_compare",
         status: "pending",
         allowed_actions: [
           {
@@ -289,7 +255,7 @@ test("readCompareContractFailureReason rejects malformed pending_interaction pay
             label: "Choose",
             label_key: "wordingChoice.chooseVersion",
             role: "wording_pick_user",
-            surface: "wording_choice",
+            surface: "compare_pick",
           },
         ],
         render_model: {
@@ -303,40 +269,6 @@ test("readCompareContractFailureReason rejects malformed pending_interaction pay
     }),
     "ui_pending_interaction_malformed_for_compare"
   );
-});
-
-test("readFeedbackContract normalizes grouped list compare contracts from the server", () => {
-  const feedbackContract = readFeedbackContract({
-    feedback_contract: {
-      kind: "grouped_list_compare",
-      mode: "list",
-      rationale: "Ik heb de resterende strategische keuze scherper gemaakt.",
-      current_label: "Jouw compacte formulering",
-      suggested_label: "Mijn suggestie",
-      current_items: ["AI scans en implementatiehulp", "Brand strategy voor technische teams"],
-      suggested_items: ["AI opportunity scans", "Implementation guidance for AI adoption"],
-      retained_heading: "Deze punten blijven al in de definitieve lijst:",
-      retained_items: ["Strategy workshops"],
-      instruction: "Kies de versie die het beste past bij het resterende verschil.",
-    },
-  });
-
-  assert.deepEqual(feedbackContract, {
-    kind: "grouped_list_compare",
-    mode: "list",
-    rationale: "Ik heb de resterende strategische keuze scherper gemaakt.",
-    heading: "",
-    supportText: "",
-    currentLabel: "Jouw compacte formulering",
-    suggestedLabel: "Mijn suggestie",
-    currentValue: "",
-    suggestedValue: "",
-    currentItems: ["AI scans en implementatiehulp", "Brand strategy voor technische teams"],
-    suggestedItems: ["AI opportunity scans", "Implementation guidance for AI adoption"],
-    retainedHeading: "Deze punten blijven al in de definitieve lijst:",
-    retainedItems: ["Strategy workshops"],
-    instruction: "Kies de versie die het beste past bij het resterende verschil.",
-  });
 });
 
 test("readDreamBuilderContract normalizes explicit Dream Builder compare ownership contracts", () => {
@@ -385,51 +317,10 @@ test("readDreamBuilderContract normalizes explicit Dream Builder compare ownersh
   });
 });
 
-test("readFeedbackContract stays authoritative over malformed legacy wording-choice compare shadows", () => {
-  const feedbackContract = readFeedbackContract({
-    feedback_contract: {
-      kind: "grouped_list_compare",
-      mode: "list",
-      rationale: "Contractuele feedback",
-      current_label: "Jouw input",
-      suggested_label: "Mijn suggestie",
-      current_items: ["Punt 1"],
-      suggested_items: ["Punt 2"],
-      instruction: "Kies de versie die past.",
-    },
-    wording_choice: {
-      enabled: true,
-      mode: "list",
-      user_label: "Verkeerd label",
-      suggestion_label: "Nog een verkeerd label",
-      user_items: ["Verkeerd punt"],
-      suggestion_items: ["Nog een verkeerd punt"],
-      instruction: "Verkeerde instructie",
-    },
-  });
-
-  assert.deepEqual(feedbackContract, {
-    kind: "grouped_list_compare",
-    mode: "list",
-    rationale: "Contractuele feedback",
-    heading: "",
-    supportText: "",
-    currentLabel: "Jouw input",
-    suggestedLabel: "Mijn suggestie",
-    currentValue: "",
-    suggestedValue: "",
-    currentItems: ["Punt 1"],
-    suggestedItems: ["Punt 2"],
-    retainedHeading: "",
-    retainedItems: [],
-    instruction: "Kies de versie die past.",
-  });
-});
-
 test("shouldSuppressPromptForWordingChoice hides the prompt while wording-choice is active", () => {
   assert.equal(
     shouldSuppressPromptForWordingChoice({
-      uiViewVariant: "wording_choice",
+      uiViewVariant: "text_compare",
       wordingChoiceActive: true,
       requireWordingPick: true,
     }),
@@ -449,7 +340,7 @@ test("shouldShowTextInputForWordingChoice keeps the field visible while a wordin
   assert.equal(
     shouldShowTextInputForWordingChoice({
       textSubmitAvailable: true,
-      uiViewVariant: "wording_choice",
+      uiViewVariant: "text_compare",
       wordingChoiceActive: true,
       requireWordingPick: true,
     }),

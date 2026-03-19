@@ -44,7 +44,7 @@ export type WordingChoiceUiPayload = {
 
 type UiViewVariant =
   | "default"
-  | "wording_choice"
+  | "text_compare"
   | "dream_builder_collect"
   | "dream_builder_scoring"
   | "dream_builder_refine";

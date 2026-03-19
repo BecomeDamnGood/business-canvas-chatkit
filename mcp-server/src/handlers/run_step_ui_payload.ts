@@ -37,7 +37,7 @@ export type WordingChoiceUiPayload = {
 
 export type UiViewVariant =
   | "default"
-  | "wording_choice"
+  | "text_compare"
   | "dream_builder_collect"
   | "dream_builder_scoring"
   | "dream_builder_refine";
@@ -796,10 +796,10 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
           ? "dream_builder_refine"
           : "dream_builder_collect";
     } else if (comparePickerActive) {
-      viewVariant = "wording_choice";
+      viewVariant = "text_compare";
     }
     const questionTextPayload =
-      viewVariant === "wording_choice" && !dreamBuilderCompareActive
+      viewVariant === "text_compare" && !dreamBuilderCompareActive
         ? {}
         : (questionText ? { questionText } : {});
     const rawContentPayload = normalizeUiContentPayload((specialist as Record<string, unknown>)?.ui_content);

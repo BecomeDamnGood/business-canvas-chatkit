@@ -7,8 +7,8 @@ This document is the contract-first source of truth for step behavior in the Bus
 - Every step owns exactly one canonical final field (except `dream` and `dream_explainer`, which co-own `dream_final`).
 - A step may only mutate its owned final field(s).
 - `is_offtopic=true` never mutates any `*_final` field.
-- `wording_choice_pending=true` blocks normal confirm/proceed until a wording pick action is handled.
-- Wording-choice decision rule is strict: show `user vs suggestion` whenever wording/content/order differs; only suppress when difference is spelling/surface-only with otherwise identical content.
+- `wording_choice_pending=true` blocks normal confirm/proceed until a compare pick action is handled.
+- Compare decision rule is strict: show `user vs suggestion` whenever wording/content/order differs; only suppress when difference is spelling/surface-only with otherwise identical content.
 - Language must be resolved before specialist call and must remain stable unless explicit override exists.
 - Runtime is contract-only:
 - interactive turns must be `ASK` with `contract_id + action_codes`.
@@ -46,6 +46,9 @@ This document is the contract-first source of truth for step behavior in the Bus
 - language state
 - Special flow:
 - Self mode / builder mode switch, and handoff to `dream_explainer`
+- Public compare mode:
+- `dream` self mode uses `ui.pending_interaction.kind="text_compare"`.
+- `dream_explainer` keeps exclusive ownership of `ui.dream_builder_contract`.
 - Contract transition to DreamBuilder start is explicit:
 - `ACTION_DREAM_INTRO_START_EXERCISE -> DREAM_EXPLAINER_MENU_SWITCH_SELF`
 - `ACTION_DREAM_WHY_START_EXERCISE -> DREAM_EXPLAINER_MENU_SWITCH_SELF`
@@ -85,7 +88,7 @@ This document is the contract-first source of truth for step behavior in the Bus
 - `business_name`
 - language state
 - Special flow:
-- wording choice dual-path (`user` vs `suggestion`)
+- `text_compare` dual-path (`user` vs `suggestion`)
 - Allowed transitions:
 - `purpose -> purpose`
 - `purpose -> bigwhy`
@@ -101,7 +104,7 @@ This document is the contract-first source of truth for step behavior in the Bus
 - `dream_final`
 - language state
 - Special flow:
-- wording choice dual-path
+- `text_compare` dual-path
 - Allowed transitions:
 - `bigwhy -> bigwhy`
 - `bigwhy -> role`
@@ -115,7 +118,7 @@ This document is the contract-first source of truth for step behavior in the Bus
 - `purpose_final`
 - language state
 - Special flow:
-- wording choice dual-path
+- `text_compare` dual-path
 - Allowed transitions:
 - `role -> role`
 - `role -> entity`
@@ -144,7 +147,7 @@ This document is the contract-first source of truth for step behavior in the Bus
 - prior finals recap context
 - language state
 - Special flow:
-- list-oriented wording choice and informational context handling
+- `list_compare` and informational context handling
 - Allowed transitions:
 - `strategy -> strategy`
 - `strategy -> targetgroup`
