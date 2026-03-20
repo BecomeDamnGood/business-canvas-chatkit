@@ -18,7 +18,7 @@ export async function runStepRuntimeExecute(
     resolveModelForCall, shouldLogLocalDevDiagnostics, isUiTranslationFastModelV1Enabled,
     isUiI18nV3LangBootstrapEnabled, isUiStartTriggerLangResolveV1Enabled, isInteractiveLocaleReady,
     normalizeLangCode, ensureUiStringsForState, resolveLanguageForTurn,
-    labelKeysForMenuActionCodes, bumpUiI18nCounter, turnUsageFromAccumulator, getDreamRuntimeMode,
+    labelKeysForActionCodes, bumpUiI18nCounter, turnUsageFromAccumulator, getDreamRuntimeMode,
     DREAM_STEP_ID, DREAM_EXPLAINER_SPECIALIST, buildTextForWidget, deriveSuggestionStateForWidget, pickPrompt, renderFreeTextTurnPolicy,
     validateRenderedContractOrRecover, applyUiPhaseByStep, runStepRuntimePreflightLayer, STEP_0_SPECIALIST,
     isUiLocaleReadyGateV1Enabled, hasUsableSpecialistForRetry, buildTransientFallbackSpecialist,
@@ -234,7 +234,7 @@ export async function runStepRuntimeExecute(
     response: {
       tokenLoggingEnabled,
       baselineModel,
-      labelKeysForActionCodes: labelKeysForMenuActionCodes,
+      labelKeysForActionCodes,
       onUiParityError: () => bumpUiI18nCounter(uiI18nTelemetry, "parity_errors"),
       attachRegistryPayload: (payload: any, specialist: any, flagsOverride: any, actionCodesOverride: any, renderedActionsOverride: any, compareOverride: any, contractMetaOverride: any) =>
         attachRegistryPayload(
@@ -301,8 +301,6 @@ export async function runStepRuntimeExecute(
       buildTextForWidget,
       pickPrompt,
       buildFailClosedState,
-      inferCurrentMenuForStep: () => "",
-      labelForActionInMenu: (_menuId: string, actionCode: string) => String(actionCode || "").trim(),
     },
     language: {
       normalizeLangCode,

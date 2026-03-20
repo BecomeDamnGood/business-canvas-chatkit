@@ -10,6 +10,7 @@ import {
   parseCompareInstruction,
   readCompareContractFailureReason,
   readDreamBuilderContract,
+  readUiContractOwner,
   readStructuredSuggestionsCardContent,
   resolveActionCodeForStateKey,
   resolveActionPayloadModeForStateKey,
@@ -302,8 +303,6 @@ test("readDreamBuilderContract normalizes explicit Dream Builder compare ownersh
         suggested_label: "Merge into one statement",
         current_items: ["I want to create freedom in my time and choices."],
         suggested_items: ["Freedom in time and choices will become more important in working life."],
-        instruction: "Choose the version that fits best.",
-        committed_statements: ["Statement 1", "Statement 2"],
       },
     },
   });
@@ -325,8 +324,6 @@ test("readDreamBuilderContract normalizes explicit Dream Builder compare ownersh
       suggestedItems: ["Freedom in time and choices will become more important in working life."],
       retainedHeading: "",
       retainedItems: [],
-      instruction: "Choose the version that fits best.",
-      committedStatements: ["Statement 1", "Statement 2"],
     },
     scoring: null,
   });
@@ -404,6 +401,25 @@ test("resolveActionCodeForStateKey falls back to action contract when lean state
 
   assert.equal(actionRoleForStateKey("ui_action_start"), "start");
   assert.equal(resolveActionCodeForStateKey(result, {}, "ui_action_start"), "ACTION_START");
+});
+
+test("readUiContractOwner reads no_feedback and terminal as explicit first-class owners", () => {
+  assert.equal(
+    readUiContractOwner({
+      ui: {
+        contract_id: "step_0:valid_output:no_feedback",
+      },
+    }),
+    "no_feedback"
+  );
+  assert.equal(
+    readUiContractOwner({
+      ui: {
+        contract_id: "presentation:valid_output:terminal",
+      },
+    }),
+    "terminal"
+  );
 });
 
 test("resolveActionCodeForStateKey does not fall back to state keys when the contract omits an action", () => {

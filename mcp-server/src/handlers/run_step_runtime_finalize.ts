@@ -13,7 +13,7 @@ import { createTurnResponseEngine, type TurnResponseEngine } from "./run_step_tu
 import type { UiI18nTelemetryCounters } from "./run_step_i18n_runtime.js";
 import { looksLikeExamplesFramingLine } from "./run_step_value_shape.js";
 import { isSingleValueTextPickerState } from "./run_step_compare_picker_contract.js";
-import { hasRenderablePendingCompareState, readCompareRuntime } from "./compare_runtime.js";
+import { hasRenderablePendingInteractionState, readPendingInteractionState } from "../core/state.js";
 import { readDreamBuilderCompareRuntime } from "./dream_builder_compare_runtime.js";
 import { getChooseForMeRegistryEntry, hasGroupedCompareListSemantics } from "../steps/step_registry.js";
 
@@ -28,7 +28,6 @@ export type RunStepRuntimeLocaleHintSource =
 
 type RunStepRuntimeTextHelpersDeps = {
   dreamStepId: string;
-  parseMenuFromContractIdForStep: (contractIdRaw: unknown, stepId: string) => string;
   canonicalizeComparableText: (value: string) => string;
   compareSelectionMessage: (
     stepId: string,
@@ -399,7 +398,6 @@ function extractStructuredStrategyExampleItems(raw: string): string[] {
 
 function normalizeStructuredSuggestionMessage(params: {
   contractStepId: string;
-  menuId: string;
   messageRaw: string;
   stateUiStrings: Record<string, unknown>;
   tokenizeWords: (text: string) => string[];
@@ -511,29 +509,30 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
       params.specialist && typeof params.specialist === "object"
         ? ({ ...(params.specialist as Record<string, unknown>) })
         : {};
-    const compareState = readCompareRuntime(specialist);
+    const compareState = readPendingInteractionState(params.state || null);
     const parts: string[] = [];
 
     const contractId = String((specialist as Record<string, unknown>)?.ui_contract_id || "").trim();
     const contractParts = contractId.split(":");
     const contractStepId = contractParts[0] || "";
+    const contractOwner = String(contractParts.slice(2).join(":") || "").trim().toLowerCase();
     const dreamBuilderCompare = contractStepId === deps.dreamStepId
       ? readDreamBuilderCompareRuntime(specialist)
       : null;
     const dreamBuilderComparePending = Boolean(dreamBuilderCompare);
     const comparePending =
-      hasRenderablePendingCompareState(compareState) ||
+      contractOwner === "pending_interaction" ||
       dreamBuilderComparePending;
     const wordingMode = dreamBuilderComparePending
       ? "list"
-      : (compareState?.mode === "list" ? "list" : "text");
+      : (compareState?.kind === "list_compare" ? "list" : "text");
     const canonicalPendingTextSuggestion = false;
     const wordingSuggestion = stripMarkupPreserveLines(
       dreamBuilderComparePending
         ? String(
             (dreamBuilderCompare?.suggested_items || []).join("\n") || specialist?.refined_formulation || ""
           )
-        : String(compareState?.suggestion_text || specialist?.refined_formulation || "")
+        : String(compareState?.render_model.suggestion_text || specialist?.refined_formulation || "")
     );
     const normalizeLine = (value: string): string =>
       String(value || "")
@@ -543,14 +542,16 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
         .trim();
     const suggestionNorm = normalizeLine(wordingSuggestion);
     const contractStatus = String(contractParts[1] || "").trim().toLowerCase();
-    if (isSingleValueTextPickerState({ specialist, stepIdHint: contractStepId })) {
+    if (isSingleValueTextPickerState({
+      compareState: readPendingInteractionState(params.state),
+      stepIdHint: contractStepId,
+    })) {
       return "";
     }
     const isSingleValueConfirmStep = new Set(["purpose", "bigwhy", "role", "entity", "targetgroup"]).has(
       contractStepId
     );
     const isSingleValueValidOutput = contractStatus === "valid_output" && isSingleValueConfirmStep;
-    const menuId = deps.parseMenuFromContractIdForStep(contractId, contractStepId).toUpperCase();
     const stateUiStrings =
       params.state && typeof (params.state as Record<string, unknown>).ui_strings === "object"
         ? ((params.state as Record<string, unknown>).ui_strings as Record<string, unknown>)
@@ -694,17 +695,19 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
       msg = filtered.join("\n\n").trim();
     }
     if (comparePending && wordingMode === "list" && msg) {
-      const compareState = readCompareRuntime(specialist);
+      const compareState = readPendingInteractionState(params.state || null);
       const userItems = dreamBuilderComparePending
         ? (dreamBuilderCompare?.current_items || [])
             .map((line) => String(line || "").trim())
             .filter(Boolean)
-        : (compareState?.user_items || []).map((line) => String(line || "").trim()).filter(Boolean);
+        : (compareState?.render_model.user_items || []).map((line: string) => String(line || "").trim()).filter(Boolean);
       const suggestionItems = dreamBuilderComparePending
         ? (dreamBuilderCompare?.suggested_items || [])
             .map((line) => String(line || "").trim())
             .filter(Boolean)
-        : (compareState?.suggestion_items || []).map((line) => String(line || "").trim()).filter(Boolean);
+        : (compareState?.render_model.suggestion_items || [])
+            .map((line: string) => String(line || "").trim())
+            .filter(Boolean);
       const knownItems = deps.mergeListItems(userItems, suggestionItems);
       const fallbackItems = knownItems.length > 0 ? knownItems : deps.splitSentenceItems(wordingSuggestion);
       msg = deps.sanitizePendingListMessage(msg, fallbackItems, params.state || null, specialist);
@@ -717,7 +720,6 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
     const prompt = promptOverride || promptFromSpecialist;
     msg = normalizeStructuredSuggestionMessage({
       contractStepId,
-      menuId,
       messageRaw: msg,
       stateUiStrings,
       tokenizeWords: deps.tokenizeWords,
@@ -1114,7 +1116,6 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
     if (!contractId) return null;
     const contractParts = contractId.split(":");
     const contractStepId = String(contractParts[0] || "").trim();
-    const menuId = deps.parseMenuFromContractIdForStep(contractId, contractStepId).toUpperCase();
     const config = structuredSuggestionMenuConfigFor(contractStepId);
     if (!config) return null;
     const uiStrings =
@@ -1220,9 +1221,7 @@ type RunStepRuntimeFinalizeI18nDeps = {
 type RunStepRuntimeFinalizeResponseDeps<TPayload> = {
   tokenLoggingEnabled: boolean;
   baselineModel: string;
-  parseMenuFromContractIdForStep: (contractIdRaw: unknown, stepId: string) => string;
   labelKeysForActionCodes?: (actionCodes: string[]) => string[];
-  labelKeysForMenuActionCodes?: (menuId: string, actionCodes: string[]) => string[];
   onUiParityError: () => void;
   attachRegistryPayload: RunStepAttachRegistryPayload<TPayload>;
   uiI18nTelemetry: unknown;
@@ -1426,7 +1425,6 @@ export function createRunStepRuntimeFinalizeLayer<TPayload extends Record<string
   const { finalizeResponse } = createRunStepResponseHelpers({
     applyUiClientActionContract,
     ...(response.labelKeysForActionCodes ? { labelKeysForActionCodes: response.labelKeysForActionCodes } : {}),
-    ...(response.labelKeysForMenuActionCodes ? { labelKeysForMenuActionCodes: response.labelKeysForMenuActionCodes } : {}),
     onUiParityError: response.onUiParityError,
     attachRegistryPayload: (payload, specialist, flagsOverride) =>
       response.attachRegistryPayload(payload, specialist, flagsOverride),

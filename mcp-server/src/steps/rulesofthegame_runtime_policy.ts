@@ -3,7 +3,7 @@ import {
   buildRulesOfTheGameBullets,
 } from "./rulesofthegame.js";
 import { UI_STRINGS_SOURCE_EN } from "../i18n/ui_strings_defaults.js";
-import { attachCompareRuntime, clearCompareRuntime } from "../handlers/compare_runtime.js";
+import { clearPendingInteractionState } from "../core/state.js";
 
 export const RULESOFTHEGAME_MIN_RULES = 3;
 export const RULESOFTHEGAME_MAX_RULES = 5;
@@ -231,34 +231,32 @@ export function applyRulesRuntimePolicy(params: {
       .join(" ")
       .trim();
 
-    const pendingSpecialist: Record<string, unknown> = attachCompareRuntime({
-      ...clearCompareRuntime(specialist),
+    const pendingSpecialist: Record<string, unknown> = {
+      ...clearPendingInteractionState(specialist),
       message: joinMessage(String(specialist.message || ""), rationale),
       question: "",
       refined_formulation: "",
       rulesofthegame: "",
       statements: userItems,
-      compare_runtime: {
+      pending_interaction_state: {
+        id: "",
         kind: "list_compare",
-        mode: "list",
-        status: "pending",
-        presentation: "picker",
-        resolution: "",
-        user_text: userBullets,
-        user_normalized_text: userBullets,
-        user_items: userItems,
-        suggestion_text: suggestionBullets,
-        suggestion_items: suggestionItems,
-        base_items: [],
-        user_label: "",
-        suggestion_label: "",
-        grouped_units: [],
-        active_unit_index: 0,
-        grouped_layout: [],
-        feedback_reason_text: rationale,
+        render_model: {
+          mode: "list",
+          instruction: "",
+          feedback_reason_text: rationale,
+          user_label: "",
+          suggestion_label: "",
+          user_text: userBullets,
+          suggestion_text: suggestionBullets,
+          user_items: userItems,
+          suggestion_items: suggestionItems,
+          retained_heading: "",
+          retained_items: [],
+        },
       },
       __rules_policy_applied: "true",
-    });
+    };
 
     return {
       specialist: pendingSpecialist,
@@ -274,7 +272,7 @@ export function applyRulesRuntimePolicy(params: {
   const bullets = buildRulesOfTheGameBullets(finalItems);
 
   const acceptedSpecialist: Record<string, unknown> = {
-    ...clearCompareRuntime(specialist),
+    ...clearPendingInteractionState(specialist),
     statements: finalItems,
     refined_formulation: bullets,
     rulesofthegame: bullets,

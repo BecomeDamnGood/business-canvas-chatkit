@@ -1,12 +1,13 @@
 import { isSingleValueCompareStep } from "../steps/step_registry.js";
 import {
-  attachCompareRuntime,
-  hasRenderablePendingCompareState,
-  readCompareRuntime,
-} from "./compare_runtime.js";
+  clearPendingInteractionState,
+  hasRenderablePendingInteractionState,
+  patchPendingInteractionState,
+  type PersistedPendingInteractionState,
+} from "../core/state.js";
 
-function normalizedMode(modeRaw: unknown): "text" | "list" {
-  return String(modeRaw || "").trim() === "list" ? "list" : "text";
+function normalizedMode(kindRaw: unknown): "text" | "list" {
+  return String(kindRaw || "").trim() === "list_compare" ? "list" : "text";
 }
 
 export function resolvePendingCompareStepId(
@@ -21,36 +22,37 @@ export function isSingleValueTextPickerStep(stepId: string, modeRaw: unknown): b
 }
 
 export function isSingleValueTextPickerState(params: {
-  specialist: Record<string, unknown> | null | undefined;
+  compareState: PersistedPendingInteractionState | null | undefined;
   stepIdHint?: string;
 }): boolean {
-  const compare = readCompareRuntime(params.specialist);
-  if (!hasRenderablePendingCompareState(compare)) return false;
+  const compare = params.compareState;
+  if (!hasRenderablePendingInteractionState(compare)) return false;
   if (!compare) return false;
   const stepId = String(params.stepIdHint || "").trim();
-  return isSingleValueTextPickerStep(stepId, compare.mode);
+  return isSingleValueTextPickerStep(stepId, compare.kind);
 }
 
 export function normalizePendingPickerSpecialistContract(params: {
   specialist: Record<string, unknown> | null | undefined;
+  compareState: PersistedPendingInteractionState | null | undefined;
   stepIdHint?: string;
 }): Record<string, unknown> {
   const specialist = params.specialist && typeof params.specialist === "object"
     ? ({ ...(params.specialist as Record<string, unknown>) })
     : {};
-  const compare = readCompareRuntime(specialist);
-  if (!hasRenderablePendingCompareState(compare)) {
-    return attachCompareRuntime(specialist);
+  const compare = params.compareState;
+  if (!hasRenderablePendingInteractionState(compare)) {
+    return clearPendingInteractionState(specialist);
   }
 
   const { ui_content: _ignoredUiContent, ...normalized } = specialist;
-  if (!isSingleValueTextPickerState({ specialist: normalized, stepIdHint: params.stepIdHint || "" })) {
-    return attachCompareRuntime(normalized);
+  if (!isSingleValueTextPickerState({ compareState: compare, stepIdHint: params.stepIdHint || "" })) {
+    return patchPendingInteractionState(normalized, compare || null);
   }
 
-  return attachCompareRuntime({
+  return patchPendingInteractionState({
     ...normalized,
     message: "",
     refined_formulation: "",
-  });
+  }, compare || null);
 }

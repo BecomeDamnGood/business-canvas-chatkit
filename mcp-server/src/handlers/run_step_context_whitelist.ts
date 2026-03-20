@@ -1,5 +1,4 @@
-import type { CanvasState } from "../core/state.js";
-import { readCompareRuntime } from "./compare_runtime.js";
+import { readPendingInteractionState, type CanvasState } from "../core/state.js";
 
 const GLOBAL_CONTEXT_KEYS = new Set([
   "action",
@@ -13,7 +12,7 @@ const GLOBAL_CONTEXT_KEYS = new Set([
   "user_intent",
   "meta_topic",
   "statements",
-  "compare_runtime",
+  "pending_interaction_state",
   "proceed_request_intent",
   "proceed_block_reason_codes",
   "proceed_block_rule_count",
@@ -51,20 +50,18 @@ function sanitizeContextValue(value: unknown): unknown {
   return null;
 }
 
-function sanitizeCompareRuntime(value: unknown): Record<string, unknown> | null {
-  const compare = readCompareRuntime({ compare_runtime: value });
+function sanitizePendingInteractionState(value: unknown): Record<string, unknown> | null {
+  const compare = readPendingInteractionState({ pending_interaction_state: value });
   if (!compare) return null;
+  const renderModel = compare.render_model;
   const next: Record<string, unknown> = {
     kind: compare.kind,
-    mode: compare.mode,
-    status: compare.status,
-    presentation: compare.presentation,
-    feedback_reason_text: compare.feedback_reason_text,
+    feedback_reason_text: renderModel.feedback_reason_text,
   };
-  if (compare.user_text) next.user_text = compare.user_text;
-  if (compare.suggestion_text) next.suggestion_text = compare.suggestion_text;
-  if (compare.user_items.length > 0) next.user_items = compare.user_items.slice(0, 25);
-  if (compare.suggestion_items.length > 0) next.suggestion_items = compare.suggestion_items.slice(0, 25);
+  if (renderModel.user_text) next.user_text = renderModel.user_text;
+  if (renderModel.suggestion_text) next.suggestion_text = renderModel.suggestion_text;
+  if (renderModel.user_items.length > 0) next.user_items = renderModel.user_items.slice(0, 25);
+  if (renderModel.suggestion_items.length > 0) next.suggestion_items = renderModel.suggestion_items.slice(0, 25);
   return next;
 }
 
@@ -85,11 +82,15 @@ export function buildContextSafeLastSpecialistResult(
   if (field) whitelist.add(field);
 
   const result: Record<string, unknown> = {};
+  const pendingInteractionState = sanitizePendingInteractionState(
+    (state as Record<string, unknown>).pending_interaction_state
+  );
+  if (pendingInteractionState) {
+    result.pending_interaction_state = pendingInteractionState;
+  }
   for (const key of whitelist) {
     if (!Object.prototype.hasOwnProperty.call(raw, key)) continue;
-    if (key === "compare_runtime") {
-      const compareRuntime = sanitizeCompareRuntime(raw[key]);
-      if (compareRuntime) result.compare_runtime = compareRuntime;
+    if (key === "pending_interaction_state") {
       continue;
     }
     const value = sanitizeContextValue(raw[key]);

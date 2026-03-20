@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 
 import { RECAP_INSTRUCTION, createRunStepRuntimeStateHelpers } from "./run_step_runtime_state_helpers.js";
 import { canonicalizeComparableText, parseListItems } from "./run_step_compare_heuristics.js";
-import { createCompareRuntimeState } from "./compare_runtime.js";
+import { createPendingInteractionState } from "../core/state.js";
 
 function buildHelpers() {
   const defaults: Record<string, string> = {
@@ -70,7 +70,7 @@ test("clearStepInteractiveState clears wording metadata but keeps provisional st
       provisional_by_step: { entity: "Mindd is een digitale innovatiepartner voor mkb-bedrijven." },
       provisional_source_by_step: { entity: "compare_pick" },
       last_specialist_result: {
-        compare_runtime: createCompareRuntimeState({
+        pending_interaction_state: createPendingInteractionState({
           kind: "text_compare",
           mode: "text",
           status: "pending",
@@ -87,7 +87,7 @@ test("clearStepInteractiveState clears wording metadata but keeps provisional st
     "Mindd is een digitale innovatiepartner voor mkb-bedrijven."
   );
   assert.equal(String((next.provisional_source_by_step || {}).entity || ""), "compare_pick");
-  assert.equal(String((next.last_specialist_result || {}).compare_runtime || ""), "");
+  assert.equal(String((next.last_specialist_result || {}).pending_interaction_state || ""), "");
 });
 
 test("compareSelectionMessage normalizes explicit products/services selection to bullets", () => {
@@ -195,7 +195,7 @@ test("buildSpecialistContextBlock whitelists last_specialist_result payload", ()
       meta_topic: "NONE",
       statements: ["Segment 1", "Segment 2"],
       targetgroup: "B2B software scale-ups",
-      compare_runtime: createCompareRuntimeState({
+      pending_interaction_state: createPendingInteractionState({
         kind: "text_compare",
         mode: "text",
         status: "pending",
@@ -215,7 +215,7 @@ test("buildSpecialistContextBlock whitelists last_specialist_result payload", ()
   assert.equal(parsed.action, "REFINE");
   assert.equal(parsed.targetgroup, "B2B software scale-ups");
   assert.deepEqual(parsed.statements, ["Segment 1", "Segment 2"]);
-  assert.deepEqual(parsed.compare_runtime, {
+  assert.deepEqual(parsed.pending_interaction_state, {
     kind: "text_compare",
     mode: "text",
     status: "pending",

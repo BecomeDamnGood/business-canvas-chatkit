@@ -18,24 +18,22 @@
         "message": "I think I understand what you mean.",
         "role": "Mindd sets standards for purpose-driven business.",
         "refined_formulation": "Mindd sets standards for purpose-driven business.",
-        "compare_runtime": {
+        "pending_interaction_state": {
           "kind": "text_compare",
-          "mode": "text",
-          "status": "pending",
-          "presentation": "picker",
-          "target_field": "role",
-          "user_text": "",
-          "user_normalized_text": "We offer the best quality.",
-          "user_items": [],
-          "suggestion_text": "Mindd sets standards for purpose-driven business.",
-          "suggestion_items": [],
-          "base_items": [],
-          "user_label": "",
-          "suggestion_label": "",
-          "grouped_units": [],
-          "active_unit_index": 0,
-          "grouped_layout": [],
-          "feedback_reason_text": ""
+          "render_model": {
+            "mode": "text",
+            "instruction": "",
+            "feedback_reason_text": "",
+            "user_label": "",
+            "suggestion_label": "",
+            "user_text": "We offer the best quality.",
+            "suggestion_text": "Mindd sets standards for purpose-driven business.",
+            "user_items": [],
+            "suggestion_items": [],
+            "units": [],
+            "retained_heading": "",
+            "retained_items": []
+          }
         }
       }
     }

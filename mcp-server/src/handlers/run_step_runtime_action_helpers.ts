@@ -9,7 +9,6 @@ type ActioncodeRegistryEntry = {
 
 type ActioncodeRegistryShape = {
   actions: Record<string, ActioncodeRegistryEntry>;
-  menus: Record<string, string[]>;
 };
 
 type CreateRunStepRuntimeActionHelpersDeps = {

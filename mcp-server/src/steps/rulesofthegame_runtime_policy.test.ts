@@ -6,7 +6,7 @@ import {
   evaluateRulesRuntimeGate,
   RULESOFTHEGAME_MAX_RULES,
 } from "./rulesofthegame_runtime_policy.js";
-import { readCompareRuntime } from "../handlers/compare_runtime.js";
+import { readPendingInteractionState } from "../core/state.js";
 
 test("rules runtime gate blocks confirm when accepted list has fewer than 3 rules", () => {
   const gate = evaluateRulesRuntimeGate({
@@ -41,7 +41,7 @@ test("rules runtime policy enforces explicit choice when list exceeds maximum", 
   });
 
   assert.equal(result.requiresChoice, true);
-  const compareState = readCompareRuntime(result.specialist);
+  const compareState = readPendingInteractionState(result.specialist);
   assert.equal(String(compareState?.status || ""), "pending");
   assert.equal(Array.isArray(compareState?.suggestion_items), true);
   assert.equal((compareState?.suggestion_items || []).length <= RULESOFTHEGAME_MAX_RULES, true);
@@ -61,6 +61,6 @@ test("rules runtime policy enforces internal suggestion for external phrasing", 
   });
 
   assert.equal(result.requiresChoice, true);
-  const suggestions = readCompareRuntime(result.specialist)?.suggestion_items || [];
+  const suggestions = readPendingInteractionState(result.specialist)?.suggestion_items || [];
   assert.equal(suggestions.some((line) => /prijsafspraken|pricing rules/i.test(String(line || ""))), true);
 });

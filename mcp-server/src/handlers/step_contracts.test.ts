@@ -3,11 +3,74 @@ import assert from "node:assert/strict";
 
 import { getDefaultState } from "../core/state.js";
 import { applyStateUpdate } from "./run_step_state_update_defaults.js";
-import { createCompareRuntimeState } from "./compare_runtime.js";
+import { createPendingInteractionState } from "../core/state.js";
 import { finalizeResponseContractInternals, validateUiPayloadContractParity } from "./turn_contract.js";
 
 function compareRuntime(overrides: Record<string, unknown>) {
-  return createCompareRuntimeState(overrides as any);
+  const kind = String(overrides.kind || "").trim() === "list_compare" ? "list_compare" : "text_compare";
+  return createPendingInteractionState({
+    id: String(overrides.id || ""),
+    kind,
+    render_model: {
+      mode: kind === "list_compare" ? "list" : "text",
+      instruction: String(overrides.compare_instruction || overrides.instruction || ""),
+      feedback_reason_text: String(overrides.feedback_reason_text || ""),
+      user_label: String(overrides.user_label || ""),
+      suggestion_label: String(overrides.suggestion_label || ""),
+      user_text: String(overrides.user_text || ""),
+      suggestion_text: String(overrides.suggestion_text || ""),
+      user_items: Array.isArray(overrides.user_items) ? overrides.user_items : [],
+      suggestion_items: Array.isArray(overrides.suggestion_items) ? overrides.suggestion_items : [],
+      ...(Array.isArray(overrides.units) ? { units: overrides.units as any } : {}),
+      ...(typeof overrides.retained_heading !== "undefined"
+        ? { retained_heading: String(overrides.retained_heading || "") }
+        : {}),
+      ...(Array.isArray(overrides.retained_items) ? { retained_items: overrides.retained_items as any } : {}),
+    },
+  } as any);
+}
+
+function finalizeFixture(response: Record<string, unknown>) {
+  const cloned = JSON.parse(JSON.stringify(response)) as Record<string, unknown>;
+  const specialist =
+    cloned.specialist && typeof cloned.specialist === "object"
+      ? (cloned.specialist as Record<string, unknown>)
+      : {};
+  const state =
+    cloned.state && typeof cloned.state === "object"
+      ? (cloned.state as Record<string, unknown>)
+      : {};
+  const pendingInteractionState =
+    state.pending_interaction_state ||
+    specialist.pending_interaction_state ||
+    {};
+  const normalizedPendingInteractionState =
+    pendingInteractionState &&
+    typeof pendingInteractionState === "object" &&
+    typeof specialist.compare_instruction !== "undefined" &&
+    !String((pendingInteractionState as any)?.render_model?.instruction || "").trim()
+      ? {
+          ...(pendingInteractionState as Record<string, unknown>),
+          render_model: {
+            ...((((pendingInteractionState as any)?.render_model || {}) as Record<string, unknown>)),
+            instruction: String(specialist.compare_instruction || ""),
+          },
+        }
+      : pendingInteractionState;
+  cloned.state = {
+    ...state,
+    pending_interaction_state: normalizedPendingInteractionState,
+  };
+  if (specialist.pending_interaction_state) {
+    const { pending_interaction_state: _pendingInteractionState, ...rest } = specialist;
+    cloned.specialist = rest;
+  }
+  return finalizeResponseContractInternals(cloned as any, {
+    applyUiClientActionContract: () => {},
+    labelKeysForActionCodes: () => [],
+    onUiParityError: () => {},
+    attachRegistryPayload: (payload) => payload,
+  });
 }
 
 test("offtopic contract: applyStateUpdate does not mutate canonical finals", () => {
@@ -91,7 +154,7 @@ test("final ownership: dream builder summary does not get staged as dream output
 });
 
 test("dream builder scoring without a dream_builder_contract owner fails closed", () => {
-  const response = finalizeResponseContractInternals(
+  const response = finalizeFixture(
     {
       ok: true,
       current_step_id: "dream",
@@ -134,7 +197,7 @@ test("dream builder scoring without a dream_builder_contract owner fails closed"
 });
 
 test("dream intro menu without an owner fails closed", () => {
-  const response = finalizeResponseContractInternals(
+  const response = finalizeFixture(
     {
       ok: true,
       current_step_id: "dream",
@@ -169,7 +232,7 @@ test("dream intro menu without an owner fails closed", () => {
 });
 
 test("interactive menu-only dream intro payload fails closed without an owner", () => {
-  const response = finalizeResponseContractInternals(
+  const response = finalizeFixture(
     {
       ok: true,
       current_step_id: "dream",
@@ -226,7 +289,7 @@ test("interactive menu-only dream intro payload fails closed without an owner", 
 });
 
 test("dream intro resume menu without an owner fails closed", () => {
-  const response = finalizeResponseContractInternals(
+  const response = finalizeFixture(
     {
       ok: true,
       current_step_id: "dream",
@@ -304,7 +367,7 @@ test("dream follow-up menus without an owner fail closed", () => {
   ] as const;
 
   for (const scenario of scenarios) {
-    const response = finalizeResponseContractInternals(
+    const response = finalizeFixture(
       {
         ok: true,
         current_step_id: "dream",
@@ -342,7 +405,7 @@ test("dream follow-up menus without an owner fail closed", () => {
 });
 
 test("dream canonical refine without explicit owner actions fails closed", () => {
-  const response = finalizeResponseContractInternals(
+  const response = finalizeFixture(
     {
       ok: true,
       current_step_id: "dream",
@@ -381,7 +444,7 @@ test("dream canonical refine without explicit owner actions fails closed", () =>
 });
 
 test("dream builder interactive variants without a builder owner fail closed", () => {
-  const response = finalizeResponseContractInternals(
+  const response = finalizeFixture(
     {
       ok: true,
       current_step_id: "dream",
@@ -421,23 +484,90 @@ test("dream builder interactive variants without a builder owner fail closed", (
   assert.equal(String(((response as any).error || {}).reason || ""), "ui_interactive_content_absent");
 });
 
+test("step_0 valid_output no_feedback stays a legal owner-backed contract state", () => {
+  const response = finalizeFixture(
+    {
+      ok: true,
+      current_step_id: "step_0",
+      text: "",
+      prompt: "Klaar om te starten?",
+      specialist: {
+        ui_contract_id: "step_0:valid_output:no_feedback",
+      },
+      state: {
+        started: "true",
+        current_step: "step_0",
+      } as any,
+      ui: {
+        view: {
+          mode: "interactive",
+        },
+        contract_id: "step_0:valid_output:no_feedback",
+        action_codes: ["ACTION_STEP0_READY_START"],
+      },
+    } as any,
+    {
+      applyUiClientActionContract: () => {},
+      labelKeysForActionCodes: () => ["actionLabel.ACTION_STEP0_READY_START"],
+      onUiParityError: () => {},
+      attachRegistryPayload: (payload) => payload,
+    }
+  );
+
+  assert.equal(response.ok, true);
+  assert.equal(String(((response as any).error || {}).reason || ""), "");
+  assert.equal(String((((response as any).ui || {}).contract_id || "")), "step_0:valid_output:no_feedback");
+});
+
+test("presentation terminal stays a legal owner-backed contract state without ui.content", () => {
+  const response = finalizeFixture(
+    {
+      ok: true,
+      current_step_id: "presentation",
+      text: "Je canvas is klaar.",
+      prompt: "",
+      specialist: {
+        ui_contract_id: "presentation:valid_output:terminal",
+      },
+      state: {
+        started: "true",
+        current_step: "presentation",
+      } as any,
+      ui: {
+        view: {
+          mode: "interactive",
+        },
+        contract_id: "presentation:valid_output:terminal",
+      },
+    } as any,
+    {
+      applyUiClientActionContract: () => {},
+      labelKeysForActionCodes: () => [],
+      onUiParityError: () => {},
+      attachRegistryPayload: (payload) => payload,
+    }
+  );
+
+  assert.equal(response.ok, true);
+  assert.equal(String(((response as any).error || {}).reason || ""), "");
+  assert.equal(String((((response as any).ui || {}).contract_id || "")), "presentation:valid_output:terminal");
+});
+
 test("pending interaction derives text_compare from compare text", () => {
-  const response = finalizeResponseContractInternals(
+  const response = finalizeFixture(
     {
       ok: true,
       current_step_id: "bigwhy",
       text: "",
       prompt: "",
       specialist: {
-        compare_runtime: compareRuntime({
+        pending_interaction_state: compareRuntime({
           kind: "text_compare",
-          mode: "text",
           status: "pending",
-          presentation: "picker",
           feedback_reason_text: "Je huidige formulering blijft te beschrijvend en nog niet richtinggevend genoeg.",
           user_label: "Your input",
           suggestion_label: "My suggestion",
-          user_normalized_text: "Wij zijn er om mooie merken te bouwen.",
+          user_text: "Wij zijn er om mooie merken te bouwen.",
           suggestion_text: "Wij bestaan om merken te bouwen die zichtbaar het leven van mensen verbeteren.",
         }),
         compare_instruction: "Choose the version that fits best.",
@@ -480,28 +610,26 @@ test("pending interaction derives text_compare from compare text", () => {
   );
 });
 
-test("final response pending interaction backfills user_text from specialist compare state when legacy user_text is blank", () => {
+test("final response pending interaction uses specialist compare user_text", () => {
   const userInput = "Dit gaat over dat mensen het beu zijn om verkeerd voorgelicht te worden.";
   const canonical =
     "Mindd droomt van een wereld waarin mensen zich zeker voelen omdat ze eerlijk geinformeerd worden.";
 
-  const response = finalizeResponseContractInternals(
+  const response = finalizeFixture(
     {
       ok: true,
       current_step_id: "dream",
       text: "",
       prompt: "",
       specialist: {
-        compare_runtime: compareRuntime({
+        pending_interaction_state: compareRuntime({
           kind: "text_compare",
-          mode: "text",
           status: "pending",
-          presentation: "picker",
           feedback_reason_text:
             "Je input benoemt het probleem van verkeerde voorlichting, maar een Droom vraagt om een positief toekomstbeeld met duidelijk menselijk effect.",
           user_label: "Dit is jouw input",
           suggestion_label: "Dit zou mijn suggestie zijn",
-          user_normalized_text: userInput,
+          user_text: userInput,
           suggestion_text: canonical,
         }),
         compare_instruction: "Klik alsjeblieft wat het beste bij je past.",
@@ -539,23 +667,21 @@ test("final response derives compare pending interaction directly from specialis
   const canonical =
     "Mindd droomt van een wereld waarin mensen zich zeker voelen omdat ze eerlijk geinformeerd worden.";
 
-  const response = finalizeResponseContractInternals(
+  const response = finalizeFixture(
     {
       ok: true,
       current_step_id: "dream",
       text: "",
       prompt: "",
       specialist: {
-        compare_runtime: compareRuntime({
+        pending_interaction_state: compareRuntime({
           kind: "text_compare",
-          mode: "text",
           status: "pending",
-          presentation: "picker",
           feedback_reason_text:
             "Je input benoemt het probleem van verkeerde voorlichting, maar een Droom vraagt om een positief toekomstbeeld met duidelijk menselijk effect.",
           user_label: "Dit is jouw input",
           suggestion_label: "Dit zou mijn suggestie zijn",
-          user_normalized_text: userInput,
+          user_text: userInput,
           suggestion_text: canonical,
         }),
         compare_instruction: "Klik alsjeblieft wat het beste bij je past.",
@@ -594,7 +720,7 @@ test("final response derives compare pending interaction directly from specialis
 });
 
 test("interactive responses fail closed when only a text submit action remains and no renderable content exists", () => {
-  const response = finalizeResponseContractInternals(
+  const response = finalizeFixture(
     {
       ok: true,
       current_step_id: "dream",
@@ -634,18 +760,16 @@ test("interactive responses fail closed when only a text submit action remains a
 });
 
 test("pending interaction derives list_compare from compare list feedback", () => {
-  const response = finalizeResponseContractInternals(
+  const response = finalizeFixture(
     {
       ok: true,
       current_step_id: "productsservices",
       text: "",
       prompt: "",
       specialist: {
-        compare_runtime: compareRuntime({
+        pending_interaction_state: compareRuntime({
           kind: "list_compare",
-          mode: "list",
           status: "pending",
-          presentation: "picker",
           feedback_reason_text: "Ik heb de servicebenaming specifieker gemaakt.",
           user_label: "Your input",
           suggestion_label: "My suggestion",
@@ -687,19 +811,16 @@ test("pending interaction derives list_compare from compare list feedback", () =
 });
 
 test("pending interaction derives grouped list compare into list_compare render model", () => {
-  const response = finalizeResponseContractInternals(
+  const response = finalizeFixture(
     {
       ok: true,
       current_step_id: "dream",
       text: "",
       prompt: "",
       specialist: {
-        compare_runtime: compareRuntime({
+        pending_interaction_state: compareRuntime({
           kind: "list_compare",
-          mode: "list",
           status: "pending",
-          presentation: "picker",
-          variant: "grouped_list_units",
           feedback_reason_text: "Je hebt al iets soortgelijks gezegd, dus een samengevoegde regel houdt je lijst scherper.",
           user_label: "Keep both statements",
           suggestion_label: "Merge into one statement",
@@ -767,20 +888,18 @@ test("pending interaction derives grouped list compare into list_compare render 
 });
 
 test("compare contracts self-heal missing compare actions from the active owner", () => {
-  const response = finalizeResponseContractInternals(
+  const response = finalizeFixture(
     {
       ok: true,
       current_step_id: "purpose",
       text: "",
       prompt: "",
       specialist: {
-        compare_runtime: compareRuntime({
+        pending_interaction_state: compareRuntime({
           kind: "text_compare",
-          mode: "text",
           status: "pending",
-          presentation: "picker",
           feedback_reason_text: "We exist to make complex choices understandable.",
-          user_normalized_text: "We want to do something good.",
+          user_text: "We want to do something good.",
           suggestion_text: "We exist to make complex choices understandable.",
         }),
         compare_instruction: "Choose the wording that fits best.",
@@ -817,20 +936,18 @@ test("compare contracts self-heal missing compare actions from the active owner"
 });
 
 test("dream compare contracts fail closed when generic card content is still present", () => {
-  const response = finalizeResponseContractInternals(
+  const response = finalizeFixture(
     {
       ok: true,
       current_step_id: "dream",
       text: "",
       prompt: "",
       specialist: {
-        compare_runtime: compareRuntime({
+        pending_interaction_state: compareRuntime({
           kind: "text_compare",
-          mode: "text",
           status: "pending",
-          presentation: "picker",
           feedback_reason_text: "Deze droomformulering maakt het toekomstbeeld scherper.",
-          user_normalized_text: "Wij willen bedrijven helpen groeien.",
+          user_text: "Wij willen bedrijven helpen groeien.",
           suggestion_text: "Mindd droomt van een wereld waarin mensen zich verbonden voelen.",
         }),
         compare_instruction: "Choose the wording that fits best.",
@@ -868,7 +985,7 @@ test("dream compare contracts fail closed when generic card content is still pre
 });
 
 test("final response publishes a single server-owned pending interaction for compare picks", () => {
-  const response = finalizeResponseContractInternals(
+  const response = finalizeFixture(
     {
       ok: true,
       current_step_id: "dream",
@@ -877,16 +994,14 @@ test("final response publishes a single server-owned pending interaction for com
       prompt: "",
       specialist: {
         action: "ASK",
-        compare_runtime: compareRuntime({
+        pending_interaction_state: compareRuntime({
           kind: "text_compare",
-          mode: "text",
           status: "pending",
-          presentation: "picker",
           target_field: "dream",
           feedback_reason_text: "Deze suggestie maakt de formulering scherper.",
           user_label: "Dit is jouw input:",
           suggestion_label: "Dit zou mijn suggestie zijn:",
-          user_normalized_text: "Mijn versie",
+          user_text: "Mijn versie",
           suggestion_text: "De suggestie",
         }),
         compare_instruction: "Klik alsjeblieft wat het beste bij je past.",
@@ -899,16 +1014,14 @@ test("final response publishes a single server-owned pending interaction for com
         ui_action_compare_pick_suggestion: "ACTION_COMPARE_PICK_SUGGESTION",
         last_specialist_result: {
           action: "ASK",
-          compare_runtime: compareRuntime({
+          pending_interaction_state: compareRuntime({
             kind: "text_compare",
-            mode: "text",
             status: "pending",
-            presentation: "picker",
             target_field: "dream",
             feedback_reason_text: "Deze suggestie maakt de formulering scherper.",
             user_label: "Dit is jouw input:",
             suggestion_label: "Dit zou mijn suggestie zijn:",
-            user_normalized_text: "Mijn versie",
+            user_text: "Mijn versie",
             suggestion_text: "De suggestie",
           }),
           compare_instruction: "Klik alsjeblieft wat het beste bij je past.",
@@ -948,20 +1061,18 @@ test("final response publishes a single server-owned pending interaction for com
 });
 
 test("specialist compare state keeps compare pick actions and default labels even without explicit compare view variant", () => {
-  const response = finalizeResponseContractInternals(
+  const response = finalizeFixture(
     {
       ok: true,
       current_step_id: "dream",
       text: "",
       prompt: "",
       specialist: {
-        compare_runtime: compareRuntime({
+        pending_interaction_state: compareRuntime({
           kind: "text_compare",
-          mode: "text",
           status: "pending",
-          presentation: "picker",
           feedback_reason_text: "De suggestie maakt de droom concreter.",
-          user_normalized_text: "Wij willen betere bedrijven bouwen.",
+          user_text: "Wij willen betere bedrijven bouwen.",
           suggestion_text: "Mindd droomt van bedrijven die vanuit betekenis echte verandering brengen.",
         }),
         compare_instruction: "Choose the version that fits best.",

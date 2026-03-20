@@ -279,9 +279,6 @@ export function readBusinessListReferenceItems(state: CanvasState, stepId: strin
       ? ((state as Record<string, unknown>).provisional_by_step as Record<string, unknown>)
       : {};
   const candidates: string[][] = [];
-  if (Array.isArray(lastSpecialist.compare_base_items)) {
-    candidates.push(dedupeItems((lastSpecialist.compare_base_items as unknown[]).map((item) => String(item || ""))));
-  }
   if (Array.isArray(lastSpecialist.statements)) {
     candidates.push(dedupeItems((lastSpecialist.statements as unknown[]).map((item) => String(item || ""))));
   }

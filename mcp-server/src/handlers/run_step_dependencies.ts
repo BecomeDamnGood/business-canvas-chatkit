@@ -80,7 +80,6 @@ import {
   type PresentationOutput,
 } from "../steps/presentation.js";
 import { ACTIONCODE_REGISTRY } from "../core/actioncode_registry.js";
-import { MENU_LABEL_DEFAULTS, MENU_LABEL_KEYS, labelKeyForMenuAction } from "../core/menu_contract.js";
 import {
   renderFreeTextTurnPolicy,
   type TurnPolicyRenderResult,
@@ -93,7 +92,7 @@ import {
 } from "../core/ui_contract_matrix.js";
 import { actionCodeToIntent } from "../core/actioncode_intent.js";
 import type { RenderedAction } from "../contracts/ui_actions.js";
-import { UI_STRINGS_WITH_MENU_KEYS } from "../i18n/ui_strings_defaults.js";
+import { UI_STRINGS_DEFAULT } from "../i18n/ui_strings_defaults.js";
 
 export type {
   LLMUsage,
@@ -146,13 +145,10 @@ export {
   PRESENTATION_STEP_ID,
   PRESENTATION_SPECIALIST,
   ACTIONCODE_REGISTRY,
-  MENU_LABEL_DEFAULTS,
-  MENU_LABEL_KEYS,
-  labelKeyForMenuAction,
   renderFreeTextTurnPolicy,
   ACTION_PRETRANSITION_BY_ACTIONCODE,
   UI_CONTRACT_VERSION,
   buildContractId,
   actionCodeToIntent,
-  UI_STRINGS_WITH_MENU_KEYS,
+  UI_STRINGS_DEFAULT,
 };

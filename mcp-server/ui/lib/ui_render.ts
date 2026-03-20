@@ -65,8 +65,6 @@ type NormalizedDreamBuilderCompareContract = {
   suggestedItems: string[];
   retainedHeading: string;
   retainedItems: string[];
-  instruction: string;
-  committedStatements: string[];
 };
 
 type NormalizedDreamBuilderScoringContract = {
@@ -119,6 +117,31 @@ type NormalizedPendingInteraction = {
   };
 };
 
+function parseContractOwner(contractIdRaw: unknown): string {
+  const contractId = String(contractIdRaw || "").trim();
+  if (!contractId) return "";
+  const parts = contractId.split(":");
+  if (parts.length < 3) return "";
+  const [, , ...ownerParts] = parts;
+  return ownerParts.join(":").trim().toLowerCase();
+}
+
+export function readUiContractOwner(resultData: Record<string, unknown> | null | undefined): string {
+  const result = resultData && typeof resultData === "object" ? resultData : {};
+  const uiPayload = toRecord(result.ui);
+  const specialist = toRecord(result.specialist);
+  const candidates = [
+    uiPayload.contract_id,
+    uiPayload.ui_contract_id,
+    specialist.ui_contract_id,
+  ];
+  for (const candidate of candidates) {
+    const owner = parseContractOwner(candidate);
+    if (owner) return owner;
+  }
+  return "";
+}
+
 function normalizeStringArray(raw: unknown): string[] {
   if (!Array.isArray(raw)) return [];
   return raw
@@ -166,8 +189,6 @@ export function readDreamBuilderContract(
           suggestedItems: normalizeStringArray(compareRaw.suggested_items),
           retainedHeading: String(compareRaw.retained_heading || "").trim(),
           retainedItems: normalizeStringArray(compareRaw.retained_items),
-          instruction: String(compareRaw.instruction || "").trim(),
-          committedStatements: normalizeStringArray(compareRaw.committed_statements),
         }
       : null;
   const scoringRaw = toRecord(contract.scoring);
@@ -1811,10 +1832,13 @@ export function render(overrideToolOutput?: unknown): void {
   const uiSubtitleFailureEl = document.getElementById("uiSubtitle");
 
   const hasSemanticCardContent = Boolean(singleValueContent) || Boolean(structuredSuggestionsContent);
+  const contractOwner = readUiContractOwner(result);
+  const hasSpecialOwner = contractOwner === "no_feedback" || contractOwner === "terminal";
   const hasOwnerBackedInteractiveContent =
     compareActive ||
     Boolean(dreamBuilderContract) ||
-    hasSemanticCardContent;
+    hasSemanticCardContent ||
+    hasSpecialOwner;
   const hasRenderableInteractiveContent = hasOwnerBackedInteractiveContent;
   if (!hasRenderableInteractiveContent) {
     console.warn("[ui_contract_interactive_content_absent]", {
@@ -1823,6 +1847,7 @@ export function render(overrideToolOutput?: unknown): void {
       payload_source: resolved.source,
       reason_code: "interactive_content_absent",
       has_owner_backed_content: hasOwnerBackedInteractiveContent,
+      contract_owner: contractOwner,
     });
     inputWrap.style.display = "none";
     const choiceWrap = document.getElementById("choiceWrap");
@@ -1953,15 +1978,11 @@ export function render(overrideToolOutput?: unknown): void {
       ? (state.dream_builder_statements as string[])
       : [];
   let statementsArray =
-    dreamBuilderContract?.phase === "compare" &&
-    dreamBuilderContract.compare &&
-    dreamBuilderContract.compare.committedStatements.length > 0
-      ? dreamBuilderContract.compare.committedStatements
-      : dreamBuilderContract?.statements && dreamBuilderContract.statements.length > 0
-        ? dreamBuilderContract.statements
-        : canonicalDreamStatements.length > 0
-          ? canonicalDreamStatements
-          : (Array.isArray(specialistStatements) ? (specialistStatements as string[]) : []);
+    dreamBuilderContract?.statements && dreamBuilderContract.statements.length > 0
+      ? dreamBuilderContract.statements
+      : canonicalDreamStatements.length > 0
+        ? canonicalDreamStatements
+        : (Array.isArray(specialistStatements) ? (specialistStatements as string[]) : []);
   const lastStatements = Array.isArray((lastSpecialist as { statements?: unknown[] }).statements)
     ? (lastSpecialist as { statements: unknown[] }).statements
     : [];

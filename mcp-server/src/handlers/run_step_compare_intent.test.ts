@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 
 import { createRunStepCompareHelpers as createRunStepCompareHelpersBase } from "./run_step_compare.js";
 import { pickDualChoiceSuggestion as defaultPickDualChoiceSuggestion } from "./run_step_compare_heuristics_defaults.js";
-import { attachCompareRuntime, createCompareRuntimeState, patchCompareRuntime, readCompareRuntime } from "./compare_runtime.js";
+import { createPendingInteractionState, patchPendingInteractionState, readPendingInteractionState } from "../core/state.js";
 import {
   createDreamBuilderCompareRuntimeState,
   patchDreamBuilderCompareRuntime,
@@ -43,9 +43,9 @@ function normalizeCompareFixture(raw: Record<string, unknown>): Record<string, u
     "pending_text_presentation_mode",
   ];
   const hasInlineCompare = inlineCompareKeys.some((key) => key in next);
-  if (!readCompareRuntime(next) && hasInlineCompare) {
+  if (!readPendingInteractionState(next) && hasInlineCompare) {
     const rawStatus = String(next.status || "").trim().toLowerCase();
-    next = patchCompareRuntime(next, {
+    next = patchPendingInteractionState(next, {
       kind: String(next.mode || "").trim() === "list" ? "list_compare" : "text_compare",
       mode: String(next.mode || "").trim() === "list" ? "list" : "text",
       status: rawStatus === "true" ? "pending" : rawStatus === "false" ? "resolved" : (next.status as any),
@@ -81,8 +81,8 @@ function normalizeCompareFixture(raw: Record<string, unknown>): Record<string, u
     });
     for (const key of inlineCompareKeys) delete next[key];
   }
-  const compare = readCompareRuntime(next);
-  if (compare) next = attachCompareRuntime(next);
+  const compare = readPendingInteractionState(next);
+  void compare;
   const dreamBuilderKeys = [
     "dream_builder_kind",
     "dream_builder_current_items",
@@ -166,7 +166,7 @@ function createRunStepCompareHelpers(...args: Parameters<typeof createRunStepCom
 }
 
 function compareState(raw: Record<string, unknown>) {
-  return readCompareRuntime(raw);
+  return readPendingInteractionState(raw);
 }
 
 function dreamBuilderCompareState(raw: Record<string, unknown>) {
@@ -179,11 +179,11 @@ function dreamBuilderComparePendingValue(raw: Record<string, unknown>): string {
 
 function withCompareRuntime(
   raw: Record<string, unknown>,
-  runtime: Partial<Parameters<typeof createCompareRuntimeState>[0]>
+  runtime: Partial<Parameters<typeof createPendingInteractionState>[0]>
 ): Record<string, unknown> {
   return {
     ...raw,
-    compare_runtime: createCompareRuntimeState(runtime),
+    pending_interaction_state: createPendingInteractionState(runtime),
   };
 }
 
@@ -3234,7 +3234,7 @@ test("applyComparePickSelection clears stale compare feedback context after sugg
       current_step: "targetgroup",
       active_specialist: "TargetGroup",
       last_specialist_result: {
-        compare_runtime: {
+        pending_interaction_state: {
           kind: "text_compare",
           mode: "text",
           status: "pending",

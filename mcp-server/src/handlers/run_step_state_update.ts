@@ -1,7 +1,13 @@
-import { normalizeDreamBuilderStatements, type BoolString, type CanvasState, type ProvisionalSource } from "../core/state.js";
+import {
+  clearPendingInteractionState,
+  normalizeDreamBuilderStatements,
+  readPendingInteractionState,
+  type BoolString,
+  type CanvasState,
+  type ProvisionalSource,
+} from "../core/state.js";
 import type { OrchestratorOutput } from "../core/orchestrator.js";
 import { canonicalPresentationRecapForState } from "./run_step_presentation_recap.js";
-import { attachCompareRuntime } from "./compare_runtime.js";
 import { readDreamBuilderCompareRuntime } from "./dream_builder_compare_runtime.js";
 import { isValidStepValueForStorage } from "./run_step_value_shape.js";
 
@@ -11,6 +17,7 @@ export type ApplyStateUpdateParams = {
   prev: CanvasState;
   decision: OrchestratorOutput;
   specialistResult: any;
+  pendingInteractionState?: Record<string, unknown> | null;
   showSessionIntroUsed: BoolString;
   provisionalSource?: ProvisionalSource;
 };
@@ -19,6 +26,7 @@ type ApplyPostSpecialistStateMutationsParams = {
   prevState: CanvasState;
   decision: OrchestratorOutput;
   specialistResult: any;
+  pendingInteractionState?: Record<string, unknown> | null;
   provisionalSource: ProvisionalSource;
 };
 
@@ -137,6 +145,11 @@ export function createRunStepStateUpdateHelpers(deps: RunStepStateUpdateDeps) {
   function applyStateUpdate(params: ApplyStateUpdateParams): CanvasState {
     const { prev, decision, showSessionIntroUsed } = params;
     let specialistResult = params.specialistResult;
+    const explicitPendingInteractionState = params.pendingInteractionState && typeof params.pendingInteractionState === "object"
+      ? (readPendingInteractionState({
+          pending_interaction_state: params.pendingInteractionState,
+        } as Record<string, unknown>) || {})
+      : {};
 
     const action = String(specialistResult?.action ?? "");
     const isOfftopic = specialistResult?.is_offtopic === true;
@@ -149,7 +162,10 @@ export function createRunStepStateUpdateHelpers(deps: RunStepStateUpdateDeps) {
       current_step: nextStep,
       active_specialist: activeSpecialist,
       last_specialist_result:
-        typeof specialistResult === "object" && specialistResult !== null ? attachCompareRuntime(specialistResult) : {},
+        typeof specialistResult === "object" && specialistResult !== null
+          ? clearPendingInteractionState(specialistResult)
+          : {},
+      pending_interaction_state: explicitPendingInteractionState,
       intro_shown_session: showSessionIntroUsed === "true" ? "true" : (prev as any).intro_shown_session,
       intro_shown_for_step: action === "INTRO" ? nextStep : (prev as any).intro_shown_for_step,
     };
@@ -312,7 +328,10 @@ export function createRunStepStateUpdateHelpers(deps: RunStepStateUpdateDeps) {
     }
 
     (nextState as any).last_specialist_result =
-      typeof specialistResult === "object" && specialistResult !== null ? attachCompareRuntime(specialistResult) : {};
+      typeof specialistResult === "object" && specialistResult !== null
+        ? clearPendingInteractionState(specialistResult)
+        : {};
+    (nextState as any).pending_interaction_state = explicitPendingInteractionState;
 
     return nextState;
   }
@@ -324,6 +343,7 @@ export function createRunStepStateUpdateHelpers(deps: RunStepStateUpdateDeps) {
       prev: prevState,
       decision,
       specialistResult,
+      pendingInteractionState: params.pendingInteractionState,
       showSessionIntroUsed: "false",
       provisionalSource,
     });

@@ -1,4 +1,4 @@
-import { type CanvasState } from "../core/state.js";
+import { readPendingInteractionState, type CanvasState } from "../core/state.js";
 import { ACTIONCODE_REGISTRY } from "../core/actioncode_registry.js";
 import { ACTION_LABEL_DEFAULTS, ACTION_PRETRANSITION_BY_ACTIONCODE, UI_CONTRACT_VERSION, labelKeyForActionCode } from "../core/ui_contract_matrix.js";
 import { parseUiContractStatusForStep } from "../core/ui_contract_id.js";
@@ -62,8 +62,6 @@ type DreamBuilderCompareContractPayload = {
   current_items?: string[];
   suggested_items?: string[];
   retained_items?: string[];
-  instruction?: string;
-  committed_statements?: string[];
 };
 
 type DreamBuilderScoringClusterPayload = {
@@ -113,7 +111,7 @@ export type ResolvedActionCodeTransition = {
   actionCode: string;
   stepId: string;
   targetStepId: string;
-  renderMode: "menu" | "no_buttons";
+  renderMode: "actions" | "no_buttons";
 };
 
 type UiPayloadHelperDeps = {
@@ -132,17 +130,10 @@ type UiPayloadHelperDeps = {
     actionCodes: string[],
     state?: CanvasState | null
   ) => RenderedAction[];
-  buildRenderedActionsFromMenu?: (
-    menuId: string,
-    actionCodes: string[],
-    state?: CanvasState | null
-  ) => RenderedAction[];
   buildQuestionTextFromActions: (prompt: string) => string;
   sanitizeEscapeInWidget: (specialist: any) => any;
-  isWidgetSuppressedEscapeMenuId: (menuId: string) => boolean;
   enforcePromptInvariants: (context: PromptInvariantContext) => Record<string, unknown>;
   isUiI18nV2Enabled: () => boolean;
-  isMenuLabelKeysV1Enabled: () => boolean;
   isUiI18nV3LangBootstrapEnabled: () => boolean;
   isUiLocaleMetaV1Enabled: () => boolean;
   isUiLangSourceResolverV1Enabled: () => boolean;
@@ -237,7 +228,6 @@ function normalizeDreamBuilderCompareContractFromSpecialist(
   const currentItems = compareRuntime.current_items;
   const suggestedItems = compareRuntime.suggested_items;
   if (currentItems.length === 0 || suggestedItems.length === 0) return undefined;
-  const segments = compareRuntime.segments;
   const normalized: DreamBuilderCompareContractPayload = {
     kind,
     current_items: currentItems,
@@ -248,13 +238,9 @@ function normalizeDreamBuilderCompareContractFromSpecialist(
   const rationale = compareRuntime.rationale;
   const currentLabel = compareRuntime.current_label;
   const suggestedLabel = compareRuntime.suggested_label;
-  const instruction = compareRuntime.instruction;
-  const committedStatements = compareRuntime.committed_statements;
   if (rationale) normalized.rationale = rationale;
   if (currentLabel) normalized.current_label = currentLabel;
   if (suggestedLabel) normalized.suggested_label = suggestedLabel;
-  normalized.instruction = instruction || "Choose the version that fits best.";
-  if (committedStatements.length > 0) normalized.committed_statements = committedStatements;
   return normalized;
 }
 
@@ -358,13 +344,7 @@ function buildDreamBuilderContract(params: {
 
   if (phase === "compare") {
     if (compareContract) {
-      contract.compare = {
-        ...compareContract,
-        committed_statements:
-          Array.isArray(compareContract.committed_statements) && compareContract.committed_statements.length > 0
-            ? compareContract.committed_statements
-            : params.statements,
-      };
+      contract.compare = compareContract;
     }
   }
   if (phase === "scoring" && scoringFromSpecialist) {
@@ -376,35 +356,23 @@ function buildDreamBuilderContract(params: {
 
 export function resolveActionCodeTransition(
   actionCode: string,
-  stepId: string,
-  sourceMenuId: string
+  stepId: string
 ): ResolvedActionCodeTransition | null {
   const safeActionCode = String(actionCode || "").trim().toUpperCase();
   const safeStepId = String(stepId || "").trim();
-  void sourceMenuId;
   if (!safeActionCode || !safeStepId) return null;
   const transition = ACTION_PRETRANSITION_BY_ACTIONCODE[safeActionCode];
   if (!transition) return null;
   const targetStepId = String(transition.targetStepId || safeStepId).trim();
   if (!targetStepId) return null;
-  const renderMode: "menu" | "no_buttons" =
-    String(transition.renderMode || "").trim() === "no_buttons" ? "no_buttons" : "menu";
+  const renderMode: "actions" | "no_buttons" =
+    String(transition.renderMode || "").trim() === "no_buttons" ? "no_buttons" : "actions";
   return {
     actionCode: safeActionCode,
     stepId: safeStepId,
     targetStepId,
     renderMode,
   };
-}
-
-export function resolveActionCodeMenuTransition(
-  actionCode: string,
-  stepId: string,
-  sourceMenuId: string
-): string {
-  const resolved = resolveActionCodeTransition(actionCode, stepId, sourceMenuId);
-  void resolved;
-  return "";
 }
 
 export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
@@ -448,7 +416,7 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
   function setUiRenderModeByStep(
     state: CanvasState,
     stepId: string,
-    mode: "menu" | "no_buttons"
+    mode: "actions" | "no_buttons"
   ): void {
     const safeStepId = String(stepId || "").trim();
     if (!safeStepId) return;
@@ -458,9 +426,9 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
     (state as any).__ui_render_mode_by_step = next;
   }
 
-  function inferUiRenderModeForStep(state: CanvasState, stepId: string): "menu" | "no_buttons" {
+  function inferUiRenderModeForStep(state: CanvasState, stepId: string): "actions" | "no_buttons" {
     const safeStepId = String(stepId || "").trim();
-    if (!safeStepId) return "menu";
+    if (!safeStepId) return "actions";
     const supportMode = currentTurnSupportMode({
       state,
       stepId: safeStepId,
@@ -473,25 +441,14 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
       (state as any).__ui_render_mode_by_step && typeof (state as any).__ui_render_mode_by_step === "object"
         ? ((state as any).__ui_render_mode_by_step as Record<string, unknown>)
         : {};
-    return String(existing[safeStepId] || "").trim() === "no_buttons" ? "no_buttons" : "menu";
+    return String(existing[safeStepId] || "").trim() === "no_buttons" ? "no_buttons" : "actions";
   }
 
   function parseStatusFromContractIdForStep(contractIdRaw: unknown, stepId: string): TurnOutputStatus | null {
     return parseUiContractStatusForStep(contractIdRaw, stepId);
   }
 
-  function parseMenuFromContractIdForStep(_contractIdRaw: unknown, _stepId: string): string {
-    return "";
-  }
-
-  function inferCurrentMenuForStep(state: CanvasState, stepId: string): string {
-    void state;
-    void stepId;
-    return "";
-  }
-
-  function labelForActionInMenu(menuId: string, actionCode: string): string {
-    void menuId;
+  function labelForActionCode(actionCode: string): string {
     const safeActionCode = String(actionCode || "").trim();
     if (!safeActionCode) return "";
     const labelKey = labelKeyForActionCode(safeActionCode);
@@ -524,9 +481,6 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
     const flags: Record<string, boolean | string> = { ...(flagsOverride || {}) };
     if (String(process.env.UI_I18N_V2 || process.env.UI_I18N_V3_TEXT_KEYS || "").trim()) {
       flags.ui_i18n_v2 = deps.isUiI18nV2Enabled();
-    }
-    if (String(process.env.MENU_LABEL_KEYS_V1 || process.env.UI_I18N_V3_MENU_KEY_ONLY || "").trim()) {
-      flags.menu_label_keys_v1 = deps.isMenuLabelKeysV1Enabled();
     }
     if (String(process.env.UI_I18N_V3_LANG_BOOTSTRAP || "").trim()) {
       flags.ui_i18n_v3_lang_bootstrap = deps.isUiI18nV3LangBootstrapEnabled();
@@ -661,7 +615,7 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
     const shouldSuppressSingleValueContent =
       Boolean(rawContentPayload) &&
       isSingleValueTextPickerState({
-        specialist: specialist as Record<string, unknown>,
+        compareState: readPendingInteractionState(effectiveState),
         stepIdHint: effectiveStepId,
       });
     const contentPayload = shouldSuppressSingleValueContent
@@ -724,9 +678,7 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
             ? renderedActionsOverride
             : deps.buildRenderedActionsFromActionCodes
               ? deps.buildRenderedActionsFromActionCodes(safeOverrideCodes, effectiveState)
-              : deps.buildRenderedActionsFromMenu
-                ? deps.buildRenderedActionsFromMenu("", safeOverrideCodes, effectiveState)
-                : [];
+              : [];
         return {
           action_codes: safeOverrideCodes,
           expected_choice_count: safeOverrideCodes.length,
@@ -875,12 +827,9 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
     applyUiPhaseByStep,
     setUiRenderModeByStep,
     inferUiRenderModeForStep,
-    parseMenuFromContractIdForStep,
     parseStatusFromContractIdForStep,
-    inferCurrentMenuForStep,
-    resolveActionCodeMenuTransition,
     resolveActionCodeTransition,
-    labelForActionInMenu,
+    labelForActionCode,
     buildUiPayload,
     attachRegistryPayload,
   };

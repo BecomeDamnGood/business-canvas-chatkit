@@ -5,7 +5,7 @@ import {
   createRunStepRuntimeFinalizeLayer,
   createRunStepRuntimeTextHelpers,
 } from "./run_step_runtime_finalize.js";
-import { createCompareRuntimeState } from "./compare_runtime.js";
+import { createPendingInteractionState } from "../core/state.js";
 
 function buildTextHelpers(compareSelectionMessage: (
   stepId: string,
@@ -1058,7 +1058,7 @@ test("buildTextForWidget does not synthesize canonical compare suggestion text f
     specialist: {
       ui_contract_id: "dream:ASK:DREAM_MENU_NEXT_STEP:v1",
       message: "Dat is een interessant uitgangspunt.",
-      compare_runtime: createCompareRuntimeState({
+      pending_interaction_state: createPendingInteractionState({
         kind: "text_compare",
         mode: "text",
         status: "pending",
@@ -1104,7 +1104,7 @@ test("buildTextForWidget does not surface canonical compare suggestion text acro
       specialist: {
         ui_contract_id: scenario.contract,
         message: "Heldere richting helpt je keuzes verscherpen.",
-        compare_runtime: createCompareRuntimeState({
+        pending_interaction_state: createPendingInteractionState({
           kind: "text_compare",
           mode: "text",
           status: "pending",
@@ -1156,7 +1156,7 @@ test("buildTextForWidget keeps standalone body text when only raw compare runtim
         ui_contract_id: scenario.contract,
         message: scenario.message,
         refined_formulation: scenario.suggestion,
-        compare_runtime: createCompareRuntimeState({
+        pending_interaction_state: createPendingInteractionState({
           kind: "text_compare",
           mode: "text",
           status: "pending",
@@ -1199,7 +1199,7 @@ test("buildTextForWidget keeps Dream single-value body visible even when stale c
         "Mindd droomt van een wereld waarin ondernemers rust ervaren in hun keuzes.",
       ].join("\n"),
       refined_formulation: "Mindd droomt van een wereld waarin ondernemers rust ervaren in hun keuzes.",
-      compare_runtime: createCompareRuntimeState({
+      pending_interaction_state: createPendingInteractionState({
         kind: "text_compare",
         mode: "text",
         status: "pending",
@@ -1241,7 +1241,7 @@ test("buildTextForWidget keeps Dream standalone body when only raw compare runti
         "Mindd droomt van een wereld waarin ondernemers rust ervaren in hun keuzes.",
       ].join("\n"),
       refined_formulation: "Mindd droomt van een wereld waarin ondernemers rust ervaren in hun keuzes.",
-      compare_runtime: createCompareRuntimeState({
+      pending_interaction_state: createPendingInteractionState({
         kind: "text_compare",
         mode: "text",
         status: "pending",
@@ -1291,7 +1291,7 @@ test("finalizeResponse no longer persists Dream self compare actions in state wh
     started: "true",
     last_specialist_result: {
       ui_contract_id: "dream:ASK:DREAM_MENU_NEXT_STEP:v1",
-      compare_runtime: createCompareRuntimeState({
+      pending_interaction_state: createPendingInteractionState({
         kind: "text_compare",
         mode: "text",
         status: "pending",

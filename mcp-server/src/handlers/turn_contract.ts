@@ -2,15 +2,15 @@ import { createHash } from "node:crypto";
 
 import { ACTIONCODE_REGISTRY } from "../core/actioncode_registry.js";
 import { VIEW_CONTRACT_VERSION as LOCALE_START_VIEW_CONTRACT_VERSION } from "../core/bootstrap_runtime.js";
-import type { CanvasState } from "../core/state.js";
 import {
-  hasRenderablePendingCompareState,
+  type CanvasState,
+  hasRenderablePendingInteractionState,
   normalizeStringArray,
   parseRetainedInstruction,
-  readCompareRuntime,
-} from "./compare_runtime.js";
+  readPendingInteractionState,
+} from "../core/state.js";
 import { labelKeyForActionCode } from "../core/ui_contract_matrix.js";
-import { UI_STRINGS_DEFAULT, UI_STRINGS_WITH_MENU_KEYS } from "../i18n/ui_strings_defaults.js";
+import { UI_STRINGS_DEFAULT } from "../i18n/ui_strings_defaults.js";
 import { resolveUiStringForState } from "../i18n/ui_strings_lookup.js";
 import { STEP_0_ID } from "../steps/step_0_validation.js";
 import { buildCanonicalWidgetState } from "./run_step_canonical_widget_state.js";
@@ -26,6 +26,7 @@ import {
   normalizeContractLang,
   normalizeContractLocale,
 } from "./ingress.js";
+import { parseUiContractId } from "../core/ui_contract_id.js";
 
 type RunStepContractResponse = Record<string, unknown>;
 type UiActionRole =
@@ -76,7 +77,6 @@ type PendingInteractionCompareRenderModel = {
 
 type UiParityDeps = {
   labelKeysForActionCodes?: (actionCodes: string[]) => string[];
-  labelKeysForMenuActionCodes?: (menuId: string, actionCodes: string[]) => string[];
 };
 
 type FinalizeContractInternalsOptions = UiParityDeps & {
@@ -111,9 +111,6 @@ function resolveLabelKeysForActionCodes(deps: UiParityDeps | undefined, actionCo
   if (!deps) return [];
   if (typeof deps.labelKeysForActionCodes === "function") {
     return deps.labelKeysForActionCodes(actionCodes);
-  }
-  if (typeof deps.labelKeysForMenuActionCodes === "function") {
-    return deps.labelKeysForMenuActionCodes("", actionCodes);
   }
   return [];
 }
@@ -193,24 +190,23 @@ function buildNormalCompareRenderModel(
   response: RunStepContractResponse
 ): PendingInteractionCompareRenderModel | null {
   const state = toRecord(response.state);
-  const specialist = toRecord(response.specialist);
-  const compare = readCompareRuntime(specialist);
-  if (!hasRenderablePendingCompareState(compare)) return null;
+  const compare = readPendingInteractionState(state);
+  if (!hasRenderablePendingInteractionState(compare)) return null;
   if (!compare) return null;
+  const renderModel = toRecord(compare.render_model);
   const defaultUserLabel = uiLabelForKey(state, "compareHeading");
   const defaultSuggestionLabel = uiLabelForKey(state, "compareSuggestionLabel");
-  const mode = compare.mode;
-  const instructionSource = String(
-    specialist.compare_instruction || uiLabelForKey(state, "compareInstruction")
-  ).trim();
-  const parsedInstruction = parseRetainedInstruction(instructionSource);
-  const feedbackReasonText = String(compare.feedback_reason_text || "").trim();
-  const userText = String(compare.user_normalized_text || compare.user_text || "").trim();
-  const suggestionText = String(compare.suggestion_text || specialist.refined_formulation || "").trim();
-  const userItems = normalizeStringArray(compare.user_items);
-  const suggestionItems = normalizeStringArray(compare.suggestion_items);
-  const groupedUnits = Array.isArray(compare.grouped_units)
-    ? (compare.grouped_units as Array<Record<string, unknown>>)
+  const mode = compare.kind === "list_compare" ? "list" : "text";
+  const parsedInstruction = parseRetainedInstruction(
+    String(renderModel.instruction || uiLabelForKey(state, "compareInstruction")).trim()
+  );
+  const feedbackReasonText = String(renderModel.feedback_reason_text || "").trim();
+  const userText = String(renderModel.user_text || "").trim();
+  const suggestionText = String(renderModel.suggestion_text || "").trim();
+  const userItems = normalizeStringArray(renderModel.user_items);
+  const suggestionItems = normalizeStringArray(renderModel.suggestion_items);
+  const groupedUnits = Array.isArray(renderModel.units)
+    ? (renderModel.units as Array<Record<string, unknown>>)
       .map((entry) => {
         const unit = toRecord(entry);
         const groupedUserItems = normalizeStringArray(unit.user_items);
@@ -234,15 +230,17 @@ function buildNormalCompareRenderModel(
     mode,
     instruction: parsedInstruction.instructionText,
     feedback_reason_text: feedbackReasonText,
-    user_label: String(compare.user_label || "").trim() || defaultUserLabel,
-    suggestion_label: String(compare.suggestion_label || "").trim() || defaultSuggestionLabel,
+    user_label: String(renderModel.user_label || "").trim() || defaultUserLabel,
+    suggestion_label: String(renderModel.suggestion_label || "").trim() || defaultSuggestionLabel,
     user_text: userText,
     suggestion_text: suggestionText,
     user_items: userItems,
     suggestion_items: suggestionItems,
     ...(groupedUnits.length > 0 ? { units: groupedUnits } : {}),
-    retained_heading: parsedInstruction.retainedHeading,
-    retained_items: parsedInstruction.retainedItems,
+    retained_heading: String(renderModel.retained_heading || "").trim() || parsedInstruction.retainedHeading,
+    retained_items: normalizeStringArray(renderModel.retained_items).length > 0
+      ? normalizeStringArray(renderModel.retained_items)
+      : parsedInstruction.retainedItems,
   };
 }
 
@@ -497,7 +495,19 @@ function hasRenderableResponseContent(response: RunStepContractResponse): boolea
   const hasPendingCompare =
     (pendingKind === "text_compare" || pendingKind === "list_compare") &&
     String(uiPendingInteraction.status || "").trim().toLowerCase() === "pending";
-  return hasPendingCompare || hasDreamBuilderOwner(uiPayload) || hasRenderableUiContentOwner(uiPayload);
+  const specialist = toRecord(response.specialist);
+  const contractIdCandidates = [
+    uiPayload.contract_id,
+    uiPayload.ui_contract_id,
+    specialist.ui_contract_id,
+  ];
+  const contractOwner = contractIdCandidates
+    .map((candidate) => parseUiContractId(candidate)?.owner || "")
+    .find((owner) => Boolean(String(owner || "").trim()))
+    ?.trim()
+    .toLowerCase() || "";
+  const hasSpecialOwner = contractOwner === "no_feedback" || contractOwner === "terminal";
+  return hasPendingCompare || hasDreamBuilderOwner(uiPayload) || hasRenderableUiContentOwner(uiPayload) || hasSpecialOwner;
 }
 
 function synchronizeComparePickActionsFromOwner(response: RunStepContractResponse): void {
@@ -530,8 +540,7 @@ function validateInteractiveRenderableContentInvariant(
   const ui = toRecord(response.ui);
   const view = toRecord(ui.view);
   const mode = String(view.mode || "").trim().toLowerCase();
-  const currentStep = String(response.current_step_id || state.current_step || STEP_0_ID).trim() || STEP_0_ID;
-  if (currentStep === STEP_0_ID) return null;
+  void state;
   if (mode !== "interactive") return null;
   if (hasRenderableResponseContent(response)) return null;
   return "ui_interactive_content_absent";
@@ -549,7 +558,7 @@ function uiLabelForKey(state: Record<string, unknown>, labelKey: string): string
   const stateUiStrings = toRecord(state.ui_strings);
   const localized = String(stateUiStrings[labelKey] || "").trim();
   if (localized) return localized;
-  return String(UI_STRINGS_WITH_MENU_KEYS[labelKey] || UI_STRINGS_DEFAULT[labelKey] || "").trim();
+  return String(UI_STRINGS_DEFAULT[labelKey] || "").trim();
 }
 
 function actionLabelKeyMatchesState(

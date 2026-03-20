@@ -222,10 +222,6 @@ export function isUiI18nV2Enabled(): boolean {
   return envFlagEnabled("UI_I18N_V3_TEXT_KEYS", envFlagEnabled("UI_I18N_V2", true));
 }
 
-export function isMenuLabelKeysV1Enabled(): boolean {
-  return envFlagEnabled("UI_I18N_V3_MENU_KEY_ONLY", envFlagEnabled("MENU_LABEL_KEYS_V1", true));
-}
-
 export function isUiI18nV3LangBootstrapEnabled(): boolean {
   return envFlagEnabled("UI_I18N_V3_LANG_BOOTSTRAP", true);
 }

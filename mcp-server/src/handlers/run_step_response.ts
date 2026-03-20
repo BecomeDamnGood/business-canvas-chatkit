@@ -345,7 +345,6 @@ function buildTurnSubcalls(metaRows: Record<string, unknown>[]): TurnSubcallSnap
 type RunStepResponseDeps = {
   applyUiClientActionContract: (targetState: CanvasState | null | undefined) => void;
   labelKeysForActionCodes?: (actionCodes: string[]) => string[];
-  labelKeysForMenuActionCodes?: (menuId: string, actionCodes: string[]) => string[];
   onUiParityError: () => void;
   attachRegistryPayload: (
     payload: Record<string, unknown>,
@@ -372,7 +371,6 @@ export function createRunStepResponseHelpers(deps: RunStepResponseDeps) {
       {
         applyUiClientActionContract: deps.applyUiClientActionContract,
         ...(deps.labelKeysForActionCodes ? { labelKeysForActionCodes: deps.labelKeysForActionCodes } : {}),
-        ...(deps.labelKeysForMenuActionCodes ? { labelKeysForMenuActionCodes: deps.labelKeysForMenuActionCodes } : {}),
         onUiParityError: deps.onUiParityError,
         attachRegistryPayload: deps.attachRegistryPayload,
       }

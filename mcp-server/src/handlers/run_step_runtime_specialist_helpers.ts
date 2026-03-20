@@ -1,11 +1,9 @@
-import type { CanvasState } from "../core/state.js";
-import { isTrueFlag } from "./run_step_type_guards.js";
 import {
-  attachCompareRuntime,
-  hasRenderablePendingCompareState,
-  patchCompareRuntime,
-  readCompareRuntime,
-} from "./compare_runtime.js";
+  patchPendingInteractionState,
+  readPendingInteractionState,
+  type CanvasState,
+} from "../core/state.js";
+import { isTrueFlag } from "./run_step_type_guards.js";
 
 type CreateRunStepRuntimeSpecialistHelpersDeps = {
   step0Id: string;
@@ -48,7 +46,7 @@ export function createRunStepRuntimeSpecialistHelpers(deps: CreateRunStepRuntime
     const langRaw = String((state as Record<string, unknown> | null | undefined)?.language || "").trim().toLowerCase();
     const localeRaw = String((state as Record<string, unknown> | null | undefined)?.locale || "").trim().toLowerCase();
     const baseLang = (langRaw || localeRaw).split(/[-_]/)[0] || "";
-    if (!baseLang || baseLang === "en") return attachCompareRuntime(materialized);
+    if (!baseLang || baseLang === "en") return materialized;
 
     const mapTerm = (key: string): string =>
       deps.uiStringFromStateMap(state || null, key, deps.uiDefaultString(key, ""));
@@ -82,7 +80,7 @@ export function createRunStepRuntimeSpecialistHelpers(deps: CreateRunStepRuntime
     };
 
     const next = { ...materialized };
-    const compareState = readCompareRuntime(materialized);
+    const compareState = readPendingInteractionState(materialized);
     const localizableKeys = [
       "message",
       "question",
@@ -111,15 +109,19 @@ export function createRunStepRuntimeSpecialistHelpers(deps: CreateRunStepRuntime
     }
     let localized = next;
     if (compareState) {
-      localized = patchCompareRuntime(localized, {
-        suggestion_text: localizeText(compareState.suggestion_text),
-        suggestion_items: compareState.suggestion_items
-          .map((line) => localizeText(line))
-          .map((line) => String(line || "").trim())
-          .filter(Boolean),
+      const renderModel = compareState.render_model;
+      localized = patchPendingInteractionState(localized, {
+        render_model: {
+          ...renderModel,
+          suggestion_text: localizeText(renderModel.suggestion_text),
+          suggestion_items: renderModel.suggestion_items
+            .map((line) => localizeText(line))
+            .map((line) => String(line || "").trim())
+            .filter(Boolean),
+        },
       });
     }
-    return attachCompareRuntime(localized);
+    return localized;
   }
 
   function normalizeEntityPhrase(raw: string): string {
@@ -148,11 +150,11 @@ export function createRunStepRuntimeSpecialistHelpers(deps: CreateRunStepRuntime
     const normalizedRefined = normalizeEntityPhrase(String(materialized.refined_formulation || ""));
     const normalizedEntity = normalizeEntityPhrase(String(materialized.entity || ""));
     const canonical = normalizedEntity || normalizedRefined;
-    if (!canonical) return attachCompareRuntime(materialized);
+    if (!canonical) return materialized;
     const next = { ...materialized };
     if (normalizedRefined) next.refined_formulation = normalizedRefined;
     next.entity = canonical;
-    return attachCompareRuntime(next);
+    return next;
   }
 
   function enforceDreamBuilderQuestionProgress(
@@ -172,12 +174,12 @@ export function createRunStepRuntimeSpecialistHelpers(deps: CreateRunStepRuntime
         ? ({ ...(specialistResult as Record<string, unknown>) })
         : {};
     if (currentStepId !== deps.dreamStepId || activeSpecialist !== deps.dreamExplainerSpecialist) {
-      return attachCompareRuntime(specialist);
+      return specialist;
     }
     const isOfftopic = isTrueFlag(specialist.is_offtopic);
-    if (isOfftopic) return attachCompareRuntime(specialist);
+    if (isOfftopic) return specialist;
     const scoringPhase = String(specialist.scoring_phase || "").trim() === "true";
-    if (scoringPhase) return attachCompareRuntime(specialist);
+    if (scoringPhase) return specialist;
 
     const currentQuestion = String(specialist.question || "").trim();
     const specialistStatementsCount = Array.isArray(specialist.statements)
@@ -186,8 +188,7 @@ export function createRunStepRuntimeSpecialistHelpers(deps: CreateRunStepRuntime
     const hasCollectedInput =
       params.canonicalStatementCount > 0 ||
       specialistStatementsCount > 0 ||
-      params.comparePending ||
-      hasRenderablePendingCompareState(readCompareRuntime(specialist));
+      params.comparePending;
     const stage = String((params.state as Record<string, unknown>).__dream_builder_prompt_stage || "").trim();
 
     const baseQuestion = deps.uiStringFromStateMap(
@@ -202,23 +203,23 @@ export function createRunStepRuntimeSpecialistHelpers(deps: CreateRunStepRuntime
     );
 
     if (!hasCollectedInput) {
-      if (stage !== "base" && stage !== "") return attachCompareRuntime(specialist);
-      if (!baseQuestion || baseQuestion === currentQuestion) return attachCompareRuntime(specialist);
+      if (stage !== "base" && stage !== "") return specialist;
+      if (!baseQuestion || baseQuestion === currentQuestion) return specialist;
       (params.state as Record<string, unknown>).__dream_builder_prompt_stage = "base";
-      return attachCompareRuntime({
+      return {
         ...specialist,
         question: baseQuestion,
-      });
+      };
     }
 
     if (!moreQuestion || (stage === "more" && moreQuestion === currentQuestion)) {
-      return attachCompareRuntime(specialist);
+      return specialist;
     }
     (params.state as Record<string, unknown>).__dream_builder_prompt_stage = "more";
-    return attachCompareRuntime({
+    return {
       ...specialist,
       question: moreQuestion,
-    });
+    };
   }
 
   function isMetaOfftopicFallbackTurn(params: {

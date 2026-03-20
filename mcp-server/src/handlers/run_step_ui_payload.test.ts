@@ -1,12 +1,32 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { createCompareRuntimeState } from "./compare_runtime.js";
+import { createPendingInteractionState } from "../core/state.js";
 import { createDreamBuilderCompareRuntimeState } from "./dream_builder_compare_runtime.js";
 import { createRunStepUiPayloadHelpers } from "./run_step_ui_payload.js";
 
 function compareRuntime(overrides: Record<string, unknown>) {
-  return createCompareRuntimeState(overrides as any);
+  const kind = String(overrides.kind || "").trim() === "list_compare" ? "list_compare" : "text_compare";
+  return createPendingInteractionState({
+    id: String(overrides.id || ""),
+    kind,
+    render_model: {
+      mode: kind === "list_compare" ? "list" : "text",
+      instruction: String(overrides.compare_instruction || overrides.instruction || ""),
+      feedback_reason_text: String(overrides.feedback_reason_text || ""),
+      user_label: String(overrides.user_label || ""),
+      suggestion_label: String(overrides.suggestion_label || ""),
+      user_text: String(overrides.user_text || ""),
+      suggestion_text: String(overrides.suggestion_text || ""),
+      user_items: Array.isArray(overrides.user_items) ? overrides.user_items : [],
+      suggestion_items: Array.isArray(overrides.suggestion_items) ? overrides.suggestion_items : [],
+      ...(Array.isArray(overrides.units) ? { units: overrides.units as any } : {}),
+      ...(typeof overrides.retained_heading !== "undefined"
+        ? { retained_heading: String(overrides.retained_heading || "") }
+        : {}),
+      ...(Array.isArray(overrides.retained_items) ? { retained_items: overrides.retained_items as any } : {}),
+    },
+  } as any);
 }
 
 function buildHelpers() {
@@ -229,7 +249,6 @@ test("attachRegistryPayload emits explicit Dream Builder compare ownership contr
         suggested_items: [
           "Over 5 tot 10 jaar zal positieve impact op het leven van anderen belangrijker worden.",
         ],
-        instruction: "Choose the version that fits best.",
         segments: [{ kind: "unit", unit_id: "unit_1" }],
       }),
     },
@@ -268,8 +287,6 @@ test("attachRegistryPayload emits explicit Dream Builder compare ownership contr
       suggested_value: "Over 5 tot 10 jaar zal positieve impact op het leven van anderen belangrijker worden.",
       current_items: ["I want my work to make a positive difference in people's lives."],
       suggested_items: ["Over 5 tot 10 jaar zal positieve impact op het leven van anderen belangrijker worden."],
-      instruction: "Choose the version that fits best.",
-      committed_statements: ["Statement 1", "Statement 2"],
     },
   });
   assert.equal(payload.ui?.view?.variant, "dream_builder_collect");
@@ -325,7 +342,7 @@ test("attachRegistryPayload never emits ordinary compare payloads for Dream Buil
     {
       ui_contract_id: "dream:incomplete_output:DREAM_EXPLAINER_MENU_SWITCH_SELF:v1",
       suggest_dreambuilder: "true",
-      compare_runtime: compareRuntime({
+      pending_interaction_state: compareRuntime({
         kind: "list_compare",
         mode: "list",
         status: "pending",
@@ -337,7 +354,6 @@ test("attachRegistryPayload never emits ordinary compare payloads for Dream Buil
         rationale: "Dream Builder zoekt naar bredere maatschappelijke verschuivingen.",
         current_items: ["I want to help people solve a problem they truly care about."],
         suggested_items: ["Over 5 tot 10 jaar zoeken mensen steeds meer naar oplossingen die voor hen echt betekenisvol zijn."],
-        instruction: "Choose the version that fits best.",
         segments: [{ kind: "retained", items: ["Statement 1", "Statement 2"] }],
       }),
     },
@@ -482,7 +498,7 @@ test("attachRegistryPayload does not synthesize public compare contracts from co
     },
     {
       ui_contract_id: "strategy:valid_output:STRATEGY_MENU_CONFIRM:v1",
-      compare_runtime: compareRuntime({
+      pending_interaction_state: compareRuntime({
         kind: "list_compare",
         mode: "list",
         status: "pending",
@@ -595,8 +611,6 @@ test("attachRegistryPayload preserves compare rationale and retained items from 
       suggested_value: "Over 5 tot 10 jaar zullen meer mensen hulp zoeken voor problemen die er echt toe doen.",
       current_items: ["I want to help people solve a problem they truly care about."],
       suggested_items: ["Over 5 tot 10 jaar zullen meer mensen hulp zoeken voor problemen die er echt toe doen."],
-      instruction: "Kies de versie die het beste past bij het resterende verschil.",
-      committed_statements: [],
     },
   });
   assert.equal("compare" in (payload.ui || {}), false);
@@ -633,7 +647,6 @@ test("attachRegistryPayload does not duplicate committed Dream Builder statement
         suggested_items: [
           "Over 5 tot 10 jaar zullen meer mensen problemen willen oplossen die er echt toe doen.",
         ],
-        instruction: "Kies de versie die het beste past.",
         segments: [
           {
             kind: "retained",
@@ -670,11 +683,6 @@ test("attachRegistryPayload does not duplicate committed Dream Builder statement
       suggested_items: [
         "Over 5 tot 10 jaar zullen meer mensen problemen willen oplossen die er echt toe doen.",
       ],
-      instruction: "Kies de versie die het beste past.",
-      committed_statements: [
-        "Over 5 tot 10 jaar zullen meer mensen streven naar werk dat een positieve impact heeft op het leven van anderen.",
-        "De samenleving zal meer waarde hechten aan initiatieven die generaties overstijgen en blijvende betekenis hebben.",
-      ],
     },
   });
   assert.equal("retained_heading" in ((payload.ui?.dream_builder_contract?.compare || {}) as Record<string, unknown>), false);
@@ -696,7 +704,7 @@ test("attachRegistryPayload keeps Dream single-value ui.content when stale canon
     },
     {
       ui_contract_id: "dream:ASK:DREAM_MENU_NEXT_STEP:v1",
-      compare_runtime: compareRuntime({
+      pending_interaction_state: compareRuntime({
         kind: "text_compare",
         mode: "text",
         status: "pending",
@@ -751,7 +759,7 @@ test("attachRegistryPayload keeps Dream single-value ui.content available while 
     },
     {
       ui_contract_id: "dream:ASK:DREAM_MENU_NEXT_STEP:v1",
-      compare_runtime: compareRuntime({
+      pending_interaction_state: compareRuntime({
         kind: "text_compare",
         mode: "text",
         status: "pending",
@@ -807,7 +815,7 @@ test("attachRegistryPayload does not publish Dream compare payloads when overrid
     },
     {
       ui_contract_id: "dream:ASK:DREAM_MENU_NEXT_STEP:v1",
-      compare_runtime: compareRuntime({
+      pending_interaction_state: compareRuntime({
         kind: "text_compare",
         mode: "text",
         status: "pending",
@@ -852,7 +860,7 @@ test("attachRegistryPayload does not publish non-Dream compare payloads when ove
     },
     {
       ui_contract_id: "purpose:ASK:PURPOSE_MENU_REFINE:v1",
-      compare_runtime: compareRuntime({
+      pending_interaction_state: compareRuntime({
         kind: "text_compare",
         mode: "text",
         status: "pending",
@@ -897,7 +905,7 @@ test("attachRegistryPayload ignores explicit single-value compare contracts that
     },
     {
       ui_contract_id: "dream:ASK:DREAM_MENU_NEXT_STEP:v1",
-      compare_runtime: compareRuntime({
+      pending_interaction_state: compareRuntime({
         kind: "text_compare",
         mode: "text",
         status: "pending",
@@ -936,7 +944,7 @@ test("attachRegistryPayload keeps single-value ui.content available while non-Dr
     },
     {
       ui_contract_id: "purpose:ASK:PURPOSE_MENU_REFINE:v1",
-      compare_runtime: compareRuntime({
+      pending_interaction_state: compareRuntime({
         kind: "text_compare",
         mode: "text",
         status: "pending",
@@ -991,7 +999,7 @@ test("attachRegistryPayload omits questionText while compare picker is active", 
     {
       ui_contract_id: "strategy:ASK:STRATEGY_MENU_ASK_MORE:v1",
       question: "Waar focus je nog meer op binnen je strategie?",
-      compare_runtime: compareRuntime({
+      pending_interaction_state: compareRuntime({
         kind: "list_compare",
         mode: "list",
         status: "pending",
@@ -1034,7 +1042,7 @@ test("attachRegistryPayload keeps compare feedback internal and out of the publi
     },
     {
       ui_contract_id: "purpose:ASK:PURPOSE_MENU_REFINE:v1",
-      compare_runtime: compareRuntime({
+      pending_interaction_state: compareRuntime({
         kind: "text_compare",
         mode: "text",
         status: "pending",
@@ -1079,7 +1087,7 @@ test("attachRegistryPayload keeps grouped compare feedback internal and out of t
     },
     {
       ui_contract_id: "strategy:ASK:STRATEGY_MENU_CONFIRM:v1",
-      compare_runtime: compareRuntime({
+      pending_interaction_state: compareRuntime({
         kind: "list_compare",
         mode: "list",
         status: "pending",

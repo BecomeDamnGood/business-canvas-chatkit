@@ -1,6 +1,5 @@
 import { ACTIONCODE_REGISTRY } from "./actioncode_registry.js";
 import { buildUiContractId } from "./ui_contract_id.js";
-import { MENU_LABEL_DEFAULTS } from "../i18n/menu_label_defaults.js";
 
 export type TurnOutputStatus = "no_output" | "incomplete_output" | "valid_output";
 
@@ -24,16 +23,12 @@ export function labelKeyForActionCode(actionCode: string): string {
 
 export const ACTION_LABEL_DEFAULTS: Record<string, string> = (() => {
   const defaults: Record<string, string> = {};
-  for (const [menuId, actionCodesRaw] of Object.entries(ACTIONCODE_REGISTRY.menus)) {
-    const actionCodes = Array.isArray(actionCodesRaw)
-      ? actionCodesRaw.map((code) => String(code || "").trim()).filter(Boolean)
-      : [];
-    actionCodes.forEach((actionCode) => {
-      const labelKey = labelKeyForActionCode(actionCode);
-      if (defaults[labelKey]) return;
-      const legacyLabelKey = `menuLabel.${menuId}.${String(actionCode || "").trim().toUpperCase()}`;
-      defaults[labelKey] = String(MENU_LABEL_DEFAULTS[legacyLabelKey] || "").trim() || humanizeActionCode(actionCode);
-    });
+  for (const actionCode of Object.keys(ACTIONCODE_REGISTRY.actions)) {
+    const safeActionCode = String(actionCode || "").trim();
+    if (!safeActionCode) continue;
+    const labelKey = labelKeyForActionCode(safeActionCode);
+    if (defaults[labelKey]) continue;
+    defaults[labelKey] = humanizeActionCode(safeActionCode);
   }
   return defaults;
 })();
@@ -45,7 +40,7 @@ export type UiContractStateDefinition = {
 
 export type UiActionPretransition = {
   targetStepId: string;
-  renderMode?: "menu" | "no_buttons";
+  renderMode?: "actions" | "no_buttons";
 };
 
 export const ACTION_PRETRANSITION_BY_ACTIONCODE: Record<string, UiActionPretransition> = {

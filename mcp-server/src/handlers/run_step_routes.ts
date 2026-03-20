@@ -956,7 +956,7 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
         deps.applyUiPhaseByStep(
           nextState,
           deps.dreamStepId,
-          buildUiContractId(deps.dreamStepId, "no_output", "DREAM_MENU_INTRO")
+          buildUiContractId(deps.dreamStepId, "no_output", "content")
         );
         return finalizeRouteTurnIntent(context, {
           state: nextState,

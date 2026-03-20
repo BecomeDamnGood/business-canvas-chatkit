@@ -130,6 +130,7 @@ export type RunStepRouteStatePorts = {
     prevState: CanvasState;
     decision: OrchestratorOutput;
     specialistResult: any;
+    pendingInteractionState?: Record<string, unknown>;
     provisionalSource: ProvisionalSource;
   }) => CanvasState;
   setDreamRuntimeMode: (state: CanvasState, mode: RunStepDreamRuntimeMode) => void;
@@ -143,7 +144,7 @@ export type RunStepRouteContractPorts = {
   validateRenderedContractOrRecover: RunStepValidateRenderedContractOrRecover;
   applyUiPhaseByStep: (state: CanvasState, stepId: string, contractId: string) => void;
   ensureUiStrings: (state: CanvasState, routeOrText: string) => Promise<CanvasState>;
-  buildContractId: (stepId: string, status: TurnOutputStatus, menuId: string) => string;
+  buildContractId: (stepId: string, status: TurnOutputStatus, owner: string) => string;
 };
 
 export type RunStepRouteStep0Ports = {
@@ -262,6 +263,7 @@ export type RunStepPipelineStatePorts = {
     prevState: CanvasState;
     decision: OrchestratorOutput;
     specialistResult: any;
+    pendingInteractionState?: Record<string, unknown>;
     provisionalSource: ProvisionalSource;
   }) => CanvasState;
   getDreamRuntimeMode: (state: CanvasState) => RunStepDreamRuntimeMode;
@@ -297,7 +299,7 @@ export type RunStepPipelineRenderPorts = {
   renderFreeTextTurnPolicy: RunStepRenderFreeTextTurnPolicy;
   validateRenderedContractOrRecover: RunStepValidateRenderedContractOrRecover;
   applyUiPhaseByStep: (state: CanvasState, stepId: string, contractId: string) => void;
-  buildContractId: (stepId: string, status: TurnOutputStatus, menuId: string) => string;
+  buildContractId: (stepId: string, status: TurnOutputStatus, owner: string) => string;
 };
 
 export type RunStepComparePipelinePorts = {
@@ -342,6 +344,7 @@ export type RunStepComparePipelinePorts = {
   }) => {
     specialist: Record<string, unknown>;
     compare?: CompareUiPayload | null;
+    pendingState?: Record<string, unknown> | null;
   };
   buildCompareFromPendingSpecialist: (
     specialistResult: any,

@@ -1,5 +1,8 @@
 import {
   STEP_FINAL_FIELD_BY_STEP_ID,
+  clearPendingInteractionState,
+  hasRenderablePendingInteractionState,
+  readPendingInteractionState,
   type CanvasState,
   type ProvisionalSource,
 } from "../core/state.js";
@@ -12,12 +15,6 @@ import {
 import { buildContextSafeLastSpecialistResult } from "./run_step_context_whitelist.js";
 import { isValidStepValueForStorage } from "./run_step_value_shape.js";
 import { productsServicesItemsFromText } from "../shared/productsservices_items.js";
-import {
-  attachCompareRuntime,
-  clearCompareRuntime,
-  hasRenderablePendingCompareState,
-  readCompareRuntime,
-} from "./compare_runtime.js";
 
 type ParseStep0FinalFn = (raw: string, fallbackName: string) => { name?: string } | null | undefined;
 
@@ -300,21 +297,21 @@ export function createRunStepRuntimeStateHelpers(deps: CreateRunStepRuntimeState
       (next as any).last_specialist_result && typeof (next as any).last_specialist_result === "object"
         ? { ...((next as any).last_specialist_result as Record<string, unknown>) }
         : null;
-    if (!last) return next;
-    const compareState = readCompareRuntime(last);
+    const compareState = readPendingInteractionState(next);
     const currentStep = String((next as any).current_step || "").trim();
     const shouldResetCompareState =
       currentStep === stepId ||
-      hasRenderablePendingCompareState(compareState);
-    if (!shouldResetCompareState) return next;
+      hasRenderablePendingInteractionState(compareState);
+    if (!shouldResetCompareState || !last) return next;
     const resetLast = {
-      ...clearCompareRuntime(last),
+      ...clearPendingInteractionState(last),
       feedback_reason_text: "",
       proceed_request_intent: "",
       proceed_block_reason_codes: [],
       proceed_block_rule_count: 0,
     };
-    (next as any).last_specialist_result = attachCompareRuntime(resetLast);
+    (next as any).last_specialist_result = clearPendingInteractionState(resetLast);
+    (next as any).pending_interaction_state = {};
     return next;
   }
 
@@ -494,7 +491,7 @@ export function createRunStepRuntimeStateHelpers(deps: CreateRunStepRuntimeState
     const field = fieldForStep(stepId);
     const fieldValue = field ? String(last[field] || "").trim() : "";
     const refined = String(last.refined_formulation || "").trim();
-    const wordingValue = String(readCompareRuntime(last)?.suggestion_text || "").trim();
+    const wordingValue = String(readPendingInteractionState(state)?.render_model.suggestion_text || "").trim();
     const provisional = provisionalValueForStep(state, stepId);
     const finalField = FINAL_FIELD_BY_STEP_ID[stepId] || "";
     const finalValue = finalField ? String((state as any)?.[finalField] || "").trim() : "";
@@ -607,7 +604,7 @@ export function createRunStepRuntimeStateHelpers(deps: CreateRunStepRuntimeState
       state.last_specialist_result && typeof state.last_specialist_result === "object"
         ? ({ ...(state.last_specialist_result as Record<string, unknown>) })
         : {};
-    const compareState = readCompareRuntime(lastRaw);
+    const compareState = readPendingInteractionState(state);
     const proceedRequestIntent = String(lastRaw.proceed_request_intent || "").trim();
     const proceedBlockReasonCodes = Array.isArray(lastRaw.proceed_block_reason_codes)
       ? (lastRaw.proceed_block_reason_codes as unknown[]).map((value) => String(value || "").trim()).filter(Boolean)

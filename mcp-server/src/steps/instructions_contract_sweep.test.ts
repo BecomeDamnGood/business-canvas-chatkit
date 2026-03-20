@@ -107,7 +107,7 @@ test("core steps explicitly declare runtime contract-driven menu/button routing"
   }
 });
 
-test("menu-exposed content routes are explicitly documented in step instructions", () => {
+test("action-exposed content routes are explicitly documented in step instructions", () => {
   const instructionTextsByStep = new Map<string, string>([
     ["dream", `${DREAM_INSTRUCTIONS}\n${DREAM_EXPLAINER_INSTRUCTIONS}`],
     ["purpose", PURPOSE_INSTRUCTIONS],
@@ -120,11 +120,6 @@ test("menu-exposed content routes are explicitly documented in step instructions
     ["rulesofthegame", RULESOFTHEGAME_INSTRUCTIONS],
     ["presentation", PRESENTATION_INSTRUCTIONS],
   ]);
-  const menuActionCodes = new Set(
-    Object.values(ACTIONCODE_REGISTRY.menus).flatMap((codes) =>
-      Array.isArray(codes) ? codes.map((code) => String(code || "").trim()).filter(Boolean) : []
-    )
-  );
   const shouldEnforceRouteDocumentation = (route: string): boolean => {
     if (!route.startsWith("__ROUTE__")) return false;
     if (/_CONTINUE__$/.test(route)) return false;
@@ -134,7 +129,6 @@ test("menu-exposed content routes are explicitly documented in step instructions
   };
 
   for (const [actionCode, entry] of Object.entries(ACTIONCODE_REGISTRY.actions)) {
-    if (!menuActionCodes.has(actionCode)) continue;
     const stepId = String(entry.step || "").trim();
     const route = String(entry.route || "").trim();
     if (!instructionTextsByStep.has(stepId)) continue;

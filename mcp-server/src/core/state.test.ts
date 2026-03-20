@@ -191,14 +191,14 @@ test("migrateState: v6 language_source maps legacy transport source to locale_hi
 
 test("state version support: only known versions are accepted for migration", () => {
   assert.equal(isSupportedStateVersion(CURRENT_STATE_VERSION), true);
-  assert.equal(isSupportedStateVersion("15"), false);
+  assert.equal(isSupportedStateVersion("16"), false);
 });
 
 test("migrateState: unknown future version fails closed", () => {
   assert.throws(
     () => migrateState({
       ...getDefaultState(),
-      state_version: "15",
+      state_version: "16",
     }),
     /Unsupported state_version/
   );

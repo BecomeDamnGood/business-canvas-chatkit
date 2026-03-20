@@ -1,4 +1,4 @@
-import { getFinalFieldForStepId } from "../core/state.js";
+import { getFinalFieldForStepId, readPendingInteractionState } from "../core/state.js";
 import { isValidStepValueForStorage } from "./run_step_value_shape.js";
 
 export const BIGWHY_MAX_WORDS = 28;
@@ -86,7 +86,7 @@ export function resolveRequiredFinalValue(params: {
 
   const specialistField = stepId === presentationStepId ? "presentation_brief" : stepId;
   const previousCanonicalText = pickCanonicalTextFromUiContent(previousSpecialist);
-  const previousCompare = readCompareRuntime(previousSpecialist);
+  const pendingInteraction = readPendingInteractionState(state);
   return {
     field: finalField,
     value: pickFirstValidForStep(
@@ -94,10 +94,9 @@ export function resolveRequiredFinalValue(params: {
       provisionalValue,
       previousSpecialist[specialistField],
       previousSpecialist.refined_formulation,
-      previousCompare?.suggestion_text,
+      pendingInteraction?.render_model.suggestion_text,
       previousCanonicalText,
       state[finalField]
     ),
   };
 }
-import { readCompareRuntime } from "./compare_runtime.js";

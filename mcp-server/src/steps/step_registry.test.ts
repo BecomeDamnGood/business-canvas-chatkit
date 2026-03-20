@@ -2,7 +2,6 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { ACTIONCODE_REGISTRY } from "../core/actioncode_registry.js";
-import { NEXT_MENU_BY_ACTIONCODE } from "../core/ui_contract_matrix.js";
 import { CANONICAL_STEPS, STEP_FINAL_FIELD_BY_STEP_ID } from "../core/state.js";
 import {
   CHOOSE_FOR_ME_STEP_REGISTRY_ENTRIES,
@@ -17,30 +16,33 @@ test("state canonical steps are sourced from the step registry order", () => {
   assert.deepEqual(CANONICAL_STEPS, STEP_REGISTRY_ORDER);
 });
 
-test("step registry order indexes and families stay internally consistent", () => {
+test("step registry metadata stays aligned with the owner-first architecture", () => {
   for (const [index, stepId] of STEP_REGISTRY_ORDER.entries()) {
     const entry = STEP_REGISTRY_BY_STEP_ID[stepId];
     assert.equal(entry.orderIndex, index, `wrong orderIndex for ${stepId}`);
     assert.ok(entry.titleKey, `missing titleKey for ${stepId}`);
     assert.ok(entry.stepperLabelKey, `missing stepperLabelKey for ${stepId}`);
     assert.ok(entry.sectionTitleMode, `missing sectionTitleMode for ${stepId}`);
-    if (entry.sectionTitleMode === "business_name_template") {
-      assert.ok(entry.sectionTitleWithBusinessKey, `missing sectionTitleWithBusinessKey for ${stepId}`);
-      assert.ok(entry.sectionTitleWithoutBusinessKey, `missing sectionTitleWithoutBusinessKey for ${stepId}`);
-    } else {
-      assert.ok(entry.sectionTitleKey, `missing sectionTitleKey for ${stepId}`);
-    }
-    if (stepId === "step_0" || stepId === "presentation") {
-      assert.equal(entry.supportFamily, "none", `special flow ${stepId} must not be interactive support`);
-      assert.equal(entry.compareFamily, "none", `special flow ${stepId} must not be in wording family`);
+    assert.ok(entry.finalField, `missing finalField for ${stepId}`);
+    assert.ok(entry.specialistId, `missing specialistId for ${stepId}`);
+
+    if (stepId === "step_0") {
+      assert.equal(entry.uiMode, "no_feedback");
       continue;
     }
-    assert.equal(entry.supportFamily, "interactive_step", `wrong support family for ${stepId}`);
-    if (entry.stepKind === "list_value") {
-      assert.equal(entry.compareFamily, "grouped_list", `wrong wording family for ${stepId}`);
-    } else {
-      assert.equal(entry.compareFamily, "single_value", `wrong wording family for ${stepId}`);
+    if (stepId === "presentation") {
+      assert.equal(entry.uiMode, "terminal");
+      continue;
     }
+    if (stepId === "strategy" || stepId === "productsservices" || stepId === "rulesofthegame") {
+      assert.equal(entry.uiMode, "list_compare", `wrong uiMode for ${stepId}`);
+      continue;
+    }
+    assert.equal(
+      entry.uiMode,
+      "text_compare",
+      `wrong uiMode for ${stepId}; ordinary single-value steps must stay text_compare`
+    );
   }
 });
 
@@ -98,27 +100,17 @@ test("state final field map stays aligned with the step registry", () => {
   }
 });
 
-test("choose-for-me contracts stay aligned with action registry and UI transitions", () => {
+test("choose-for-me contracts stay aligned with the action registry without menu transitions", () => {
   for (const entry of CHOOSE_FOR_ME_STEP_REGISTRY_ENTRIES) {
     const { stepId } = entry;
-    const { actionCode, menuId, nextMenuId } = entry.chooseForMe;
+    const { actionCode, routeToken, mode, itemKind, field } = entry.chooseForMe;
     const action = ACTIONCODE_REGISTRY.actions[actionCode];
     assert.ok(action, `missing action registry entry for ${actionCode}`);
     assert.equal(action.step, stepId, `wrong action step for ${actionCode}`);
-
-    const menuActions = ACTIONCODE_REGISTRY.menus[menuId] || [];
-    assert.ok(
-      menuActions.includes(actionCode),
-      `menu ${menuId} must include ${actionCode}`
-    );
-
-    const transition = NEXT_MENU_BY_ACTIONCODE[actionCode];
-    assert.ok(transition, `missing UI transition for ${actionCode}`);
-    assert.equal(transition.step_id, stepId, `wrong transition step for ${actionCode}`);
-    assert.ok(
-      Array.isArray(transition.from_menu_ids) && transition.from_menu_ids.includes(menuId),
-      `transition ${actionCode} must allow from menu ${menuId}`
-    );
-    assert.equal(transition.to_menu_id, nextMenuId, `wrong next menu for ${actionCode}`);
+    assert.equal(action.dispatch_owner, "special_route", `wrong dispatch owner for ${actionCode}`);
+    assert.ok(routeToken.startsWith("__ROUTE__"), `route token must stay explicit for ${actionCode}`);
+    assert.ok(mode === "suggestions" || mode === "examples", `unexpected choose-for-me mode for ${actionCode}`);
+    assert.ok(itemKind === "sentence" || itemKind === "phrase" || itemKind === "multiline_list");
+    assert.ok(Boolean(field), `missing choose-for-me field for ${actionCode}`);
   }
 });

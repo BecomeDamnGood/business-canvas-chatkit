@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { createRunStepResponseHelpers } from "./run_step_response.js";
-import { createCompareRuntimeState } from "./compare_runtime.js";
+import { createPendingInteractionState } from "../core/state.js";
 
 function buildHelpers() {
   return createRunStepResponseHelpers({
@@ -80,7 +80,7 @@ test("finalizeResponse logs compare render decisions with compare and prompt fie
         active_specialist: "Strategy",
         bootstrap_session_id: "bs_test",
         last_specialist_result: {
-          compare_runtime: createCompareRuntimeState({
+          pending_interaction_state: createPendingInteractionState({
             kind: "list_compare",
             mode: "list",
             status: "pending",
@@ -173,7 +173,7 @@ test("finalizeResponse logs compare analytics from pending_interaction when lega
         active_specialist: "Strategy",
         bootstrap_session_id: "bs_feedback_contract",
         last_specialist_result: {
-          compare_runtime: createCompareRuntimeState({
+          pending_interaction_state: createPendingInteractionState({
             kind: "list_compare",
             mode: "list",
             status: "pending",
@@ -242,7 +242,7 @@ test("finalizeResponse emits session start and compare selection analytics witho
         bootstrap_session_id: "bs_usage",
         __session_turn_index: 1,
         last_specialist_result: {
-          compare_runtime: createCompareRuntimeState({
+          pending_interaction_state: createPendingInteractionState({
             kind: "list_compare",
             mode: "list",
             status: "resolved",

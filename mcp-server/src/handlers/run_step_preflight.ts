@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 
 import { ACTIONCODE_REGISTRY } from "../core/actioncode_registry.js";
 import { actionCodeToIntent } from "../core/actioncode_intent.js";
+import { ACTION_LABEL_DEFAULTS, labelKeyForActionCode } from "../core/ui_contract_matrix.js";
 import type { CanvasState } from "../core/state.js";
 
 type LocaleHintSource =
@@ -114,8 +115,6 @@ type NormalizeActionCodeParams = {
   clickedActionCodeForNoRepeat: string;
   transientTextSubmit: string;
   inputMode: string;
-  inferCurrentMenuForStep: (state: CanvasState, stepId: string) => string;
-  labelForActionInMenu: (menuId: string, actionCode: string) => string;
 };
 
 type NormalizeActionCodeResult = {
@@ -383,27 +382,21 @@ export function createRunStepPreflightHelpers(deps: RunStepPreflightDeps) {
 
     if (actionCodeRaw) {
       const sourceStep = String(state.current_step || "").trim();
-      const menuId = params.inferCurrentMenuForStep(state, sourceStep);
-      if (menuId) {
-        const expectedCount = ACTIONCODE_REGISTRY.menus[menuId]?.length;
-        deps.logStructuredEvent?.({
-          severity: "info",
-          event: "actioncode_click",
-          state,
-          step_id: sourceStep || deps.step0Id,
-          contract_id: String(((state as any).__ui_phase_by_step || {})[sourceStep] || ""),
-          details: {
-            registry_version: ACTIONCODE_REGISTRY.version,
-            menu_id: menuId,
-            expected_count: expectedCount ?? 0,
-            action_code: actionCodeRaw,
-            input_mode: params.inputMode,
-          },
-        });
-      }
-      const sourceMenu = params.inferCurrentMenuForStep(state, sourceStep);
+      deps.logStructuredEvent?.({
+        severity: "info",
+        event: "actioncode_click",
+        state,
+        step_id: sourceStep || deps.step0Id,
+        contract_id: String(((state as any).__ui_phase_by_step || {})[sourceStep] || ""),
+        details: {
+          registry_version: ACTIONCODE_REGISTRY.version,
+          action_code: actionCodeRaw,
+          input_mode: params.inputMode,
+        },
+      });
       clickedActionCodeForNoRepeat = String(actionCodeRaw || "").trim().toUpperCase();
-      clickedLabelForNoRepeat = params.labelForActionInMenu(sourceMenu, clickedActionCodeForNoRepeat);
+      const labelKey = labelKeyForActionCode(clickedActionCodeForNoRepeat);
+      clickedLabelForNoRepeat = String(ACTION_LABEL_DEFAULTS[labelKey] || "").trim();
       (state as any).__last_clicked_action_for_contract = clickedActionCodeForNoRepeat;
       (state as any).__last_clicked_label_for_contract = clickedLabelForNoRepeat;
     }

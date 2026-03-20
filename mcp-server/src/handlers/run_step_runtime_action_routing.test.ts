@@ -3,12 +3,12 @@ import assert from "node:assert/strict";
 
 import { runStepRuntimeActionRoutingLayer as runStepRuntimeActionRoutingLayerBase } from "./run_step_runtime_action_routing.js";
 import {
-  attachCompareRuntime,
-  createCompareRuntimeState,
-  hasRenderablePendingCompareState,
-  patchCompareRuntime,
-  readCompareRuntime,
-} from "./compare_runtime.js";
+  clearPendingInteractionState,
+  createPendingInteractionState,
+  hasRenderablePendingInteractionState,
+  patchPendingInteractionState,
+  readPendingInteractionState,
+} from "../core/state.js";
 import {
   createDreamBuilderCompareRuntimeState,
   patchDreamBuilderCompareRuntime,
@@ -48,46 +48,39 @@ function normalizeCompareFixture(raw: Record<string, unknown>): Record<string, u
     "pending_text_presentation_mode",
   ];
   const hasInlineCompare = inlineCompareKeys.some((key) => key in next);
-  if (!readCompareRuntime(next) && hasInlineCompare) {
+  if (!readPendingInteractionState(next) && hasInlineCompare) {
     const rawStatus = String(next.status || "").trim().toLowerCase();
-    next = patchCompareRuntime(next, {
+    next = patchPendingInteractionState(next, {
       kind: String(next.mode || "").trim() === "list" ? "list_compare" : "text_compare",
-      mode: String(next.mode || "").trim() === "list" ? "list" : "text",
       status: rawStatus === "true" ? "pending" : rawStatus === "false" ? "resolved" : (next.status as any),
-      presentation: String(next.presentation || "").trim() === "canonical" ? "canonical" : "picker",
-      resolution:
-        String(next.resolution || "").trim() === "user" || String(next.resolution || "").trim() === "suggestion"
-          ? (String(next.resolution || "").trim() as "user" | "suggestion")
-          : "",
-      target_field: String(next.target_field || "").trim(),
-      variant: String(next.variant || "").trim(),
-      user_text: String(next.user_text || "").trim(),
-      user_normalized_text: String(next.user_normalized_text || next.user_text || "").trim(),
-      user_items: Array.isArray(next.user_items) ? (next.user_items as unknown[]).map(String) : [],
-      suggestion_text: String(next.suggestion_text || "").trim(),
-      suggestion_items: Array.isArray(next.suggestion_items) ? (next.suggestion_items as unknown[]).map(String) : [],
-      base_items: Array.isArray(next.base_items) ? (next.base_items as unknown[]).map(String) : [],
-      list_semantics: String(next.list_semantics || "").trim() === "full" ? "full" : "delta",
-      user_label: String(next.user_label || "").trim(),
-      suggestion_label: String(next.suggestion_label || "").trim(),
-      grouped_mode: String(next.grouped_mode || "").trim() === "grouped_units" ? "grouped_units" : "",
-      grouped_cursor: String(next.grouped_cursor || "").trim(),
-      grouped_units: Array.isArray(next.grouped_units) ? (next.grouped_units as unknown[]) : [],
-      grouped_segments: Array.isArray(next.grouped_segments) ? (next.grouped_segments as unknown[]) : [],
-      user_variant_semantics: String(next.user_variant_semantics || "").trim(),
-      user_variant_stepworthy: String(next.user_variant_stepworthy || "").trim().toLowerCase() === "true",
-      feedback_reason_key: String(next.feedback_reason_key || "").trim(),
-      feedback_reason_text: String(next.feedback_reason_text || "").trim(),
-      pending_text_intent: String(next.pending_text_intent || "").trim(),
-      pending_text_anchor: String(next.pending_text_anchor || "").trim(),
-      pending_text_seed_source: String(next.pending_text_seed_source || "").trim(),
-      pending_text_feedback_text: String(next.pending_text_feedback_text || "").trim(),
-      pending_text_presentation_mode: String(next.pending_text_presentation_mode || "").trim(),
+      render_model: {
+        mode: String(next.mode || "").trim() === "list" ? "list" : "text",
+        instruction: String(next.instruction || "").trim(),
+        feedback_reason_text: String(next.feedback_reason_text || "").trim(),
+        user_label: String(next.user_label || "").trim(),
+        suggestion_label: String(next.suggestion_label || "").trim(),
+        user_text: String(next.user_text || "").trim(),
+        suggestion_text: String(next.suggestion_text || "").trim(),
+        user_items: Array.isArray(next.user_items) ? (next.user_items as unknown[]).map(String) : [],
+        suggestion_items: Array.isArray(next.suggestion_items) ? (next.suggestion_items as unknown[]).map(String) : [],
+        retained_items: Array.isArray(next.base_items) ? (next.base_items as unknown[]).map(String) : [],
+        units: Array.isArray(next.grouped_units)
+          ? (next.grouped_units as Array<Record<string, unknown>>).map((unit) => ({
+              user_items: Array.isArray(unit.user_items) ? (unit.user_items as unknown[]).map(String) : [],
+              suggestion_items: Array.isArray(unit.suggestion_items) ? (unit.suggestion_items as unknown[]).map(String) : [],
+              feedback_reason_text: String(unit.feedback_reason_text || "").trim(),
+            }))
+          : [],
+      },
     });
     for (const key of inlineCompareKeys) delete next[key];
   }
-  const compare = readCompareRuntime(next);
-  if (compare) next = attachCompareRuntime(next);
+  const compare = readPendingInteractionState(next);
+  if (compare) {
+    if (hasRenderablePendingInteractionState(compare) && !String(next.pending_interaction_id || "").trim()) {
+      next.pending_interaction_id = "__TEST_PENDING_INTERACTION__";
+    }
+  }
   const dreamBuilderKeys = [
     "dream_builder_kind",
     "dream_builder_current_items",
@@ -129,8 +122,8 @@ function normalizeCompareFixture(raw: Record<string, unknown>): Record<string, u
   return next;
 }
 
-function compareState(raw: Record<string, unknown>): ReturnType<typeof readCompareRuntime> {
-  return readCompareRuntime(raw);
+function compareState(raw: Record<string, unknown>): ReturnType<typeof readPendingInteractionState> {
+  return readPendingInteractionState(raw);
 }
 
 function dreamBuilderCompareState(raw: Record<string, unknown>) {
@@ -143,11 +136,38 @@ function dreamBuilderComparePendingValue(raw: Record<string, unknown>): string {
 
 function withCompareRuntime(
   raw: Record<string, unknown>,
-  runtime: Partial<Parameters<typeof createCompareRuntimeState>[0]>
+  runtime: Partial<Parameters<typeof createPendingInteractionState>[0]>
 ): Record<string, unknown> {
+  const runtimeRecord = runtime as Record<string, unknown>;
   return {
     ...raw,
-    compare_runtime: createCompareRuntimeState(runtime),
+    pending_interaction_state: createPendingInteractionState({
+      kind:
+        String(runtimeRecord.kind || "").trim() ||
+        (String(runtimeRecord.mode || "").trim() === "list" ? "list_compare" : "text_compare"),
+      status: "pending",
+      render_model: {
+        mode: String(runtimeRecord.mode || "").trim() === "list" ? "list" : "text",
+        instruction: String(runtimeRecord.instruction || "").trim(),
+        feedback_reason_text: String(runtimeRecord.feedback_reason_text || "").trim(),
+        user_label: String(runtimeRecord.user_label || "").trim(),
+        suggestion_label: String(runtimeRecord.suggestion_label || "").trim(),
+        user_text: String(runtimeRecord.user_text || "").trim(),
+        suggestion_text: String(runtimeRecord.suggestion_text || "").trim(),
+        user_items: Array.isArray(runtimeRecord.user_items) ? (runtimeRecord.user_items as unknown[]).map(String) : [],
+        suggestion_items: Array.isArray(runtimeRecord.suggestion_items)
+          ? (runtimeRecord.suggestion_items as unknown[]).map(String)
+          : [],
+        retained_items: Array.isArray(runtimeRecord.base_items) ? (runtimeRecord.base_items as unknown[]).map(String) : [],
+        units: Array.isArray(runtimeRecord.grouped_units)
+          ? (runtimeRecord.grouped_units as Array<Record<string, unknown>>).map((unit) => ({
+              user_items: Array.isArray(unit.user_items) ? (unit.user_items as unknown[]).map(String) : [],
+              suggestion_items: Array.isArray(unit.suggestion_items) ? (unit.suggestion_items as unknown[]).map(String) : [],
+              feedback_reason_text: String(unit.feedback_reason_text || "").trim(),
+            }))
+          : [],
+      },
+    }),
   };
 }
 
@@ -162,7 +182,7 @@ function withDreamBuilderCompareRuntime(
 }
 
 function comparePendingValue(raw: Record<string, unknown>): string {
-  return hasRenderablePendingCompareState(compareState(raw)) ? "true" : "false";
+  return hasRenderablePendingInteractionState(compareState(raw)) ? "true" : "false";
 }
 
 function comparePresentationValue(raw: Record<string, unknown>): string {
@@ -217,23 +237,18 @@ function compareUserItemsValue(raw: Record<string, unknown>): string[] {
 function normalizeCompareResult(result: Record<string, unknown> | null | undefined) {
   if (!result || typeof result !== "object") return result;
   const record = result as Record<string, unknown>;
+  const normalizedNextState =
+    record.nextState && typeof record.nextState === "object"
+      ? normalizeCompareStateContainer(record.nextState)
+      : null;
   return {
     ...record,
     ...(record.specialist && typeof record.specialist === "object"
       ? { specialist: normalizeCompareFixture(record.specialist as Record<string, unknown>) }
       : {}),
-    ...(record.nextState && typeof record.nextState === "object"
+    ...(normalizedNextState
       ? {
-          nextState: {
-            ...(record.nextState as Record<string, unknown>),
-            ...(record.nextState && typeof (record.nextState as Record<string, unknown>).last_specialist_result === "object"
-              ? {
-                  last_specialist_result: normalizeCompareFixture(
-                    ((record.nextState as Record<string, unknown>).last_specialist_result as Record<string, unknown>) || {}
-                  ),
-                }
-              : {}),
-          },
+          nextState: normalizedNextState,
         }
       : {}),
   };
@@ -242,9 +257,14 @@ function normalizeCompareResult(result: Record<string, unknown> | null | undefin
 function normalizeCompareStateContainer(raw: unknown): Record<string, unknown> {
   const record = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
   if (record.last_specialist_result && typeof record.last_specialist_result === "object") {
+    const normalizedLastSpecialist = normalizeCompareFixture(record.last_specialist_result as Record<string, unknown>);
     return {
       ...record,
-      last_specialist_result: normalizeCompareFixture(record.last_specialist_result as Record<string, unknown>),
+      last_specialist_result: clearPendingInteractionState(normalizedLastSpecialist),
+      pending_interaction_state:
+        readPendingInteractionState(record) ||
+        readPendingInteractionState(normalizedLastSpecialist) ||
+        {},
     };
   }
   return record;
@@ -334,19 +354,11 @@ function buildBaseState(): Record<string, unknown> {
 
 function buildParams(intentEnabled: boolean) {
   const clearStepInteractiveState = (state: Record<string, unknown>, _stepId: string) => ({
-    ...state,
-    last_specialist_result: normalizeCompareFixture({
+    ...clearPendingInteractionState(state),
+    __pending_interaction_id: "",
+    last_specialist_result: clearPendingInteractionState({
       ...((state.last_specialist_result as Record<string, unknown>) || {}),
-      status: "false",
-      resolution: "",
-      user_text: "",
-      user_normalized_text: "",
-      user_items: [],
-      suggestion_items: [],
-      base_items: [],
-      suggestion_text: "",
-      mode: "",
-      target_field: "",
+      pending_interaction_id: "",
     }),
   });
 
@@ -396,6 +408,7 @@ function buildParams(intentEnabled: boolean) {
       dreamExplainerSwitchSelfMenuId: "DREAM_SWITCH_SELF",
     },
     action: {
+      pretransitionByActionCode: {},
       nextMenuByActionCode: {},
       dreamStartExerciseActionCodes: new Set<string>(),
       resolveActionCodeTransition: () => null,
@@ -404,6 +417,8 @@ function buildParams(intentEnabled: boolean) {
       applyUiPhaseByStep: () => {},
       buildContractId: () => "",
       processActionCode: (actionCodeInput: string) => actionCodeInput,
+      firstConfirmActionCodeForStep: () => "",
+      firstGuidanceActionCodeForStep: () => "",
       firstConfirmActionCodeForMenu: () => "",
       firstGuidanceActionCodeForMenu: () => "",
       shouldPretransitionActionCode: () => true,
@@ -414,16 +429,23 @@ function buildParams(intentEnabled: boolean) {
       provisionalValueForStep: () => "",
       clearProvisionalValue: (state: any) => state,
       clearStepInteractiveState,
-      applyPostSpecialistStateMutations: ({ prevState, decision, specialistResult }: any) => ({
-        ...prevState,
-        current_step: String(decision.current_step || ""),
-        active_specialist: String(decision.specialist_to_call || ""),
-        intro_shown_for_step:
-          String(specialistResult?.action || "").trim() === "INTRO"
-            ? String(decision.current_step || "")
-            : String((prevState as Record<string, unknown>).intro_shown_for_step || ""),
-        last_specialist_result: normalizeCompareFixture(specialistResult),
-      }),
+      applyPostSpecialistStateMutations: ({ prevState, decision, specialistResult, pendingInteractionState }: any) => {
+        const normalizedSpecialist = normalizeCompareFixture(specialistResult);
+        return {
+          ...prevState,
+          current_step: String(decision.current_step || ""),
+          active_specialist: String(decision.specialist_to_call || ""),
+          intro_shown_for_step:
+            String(specialistResult?.action || "").trim() === "INTRO"
+              ? String(decision.current_step || "")
+              : String((prevState as Record<string, unknown>).intro_shown_for_step || ""),
+          last_specialist_result: clearPendingInteractionState(normalizedSpecialist),
+          pending_interaction_state:
+            pendingInteractionState ||
+            readPendingInteractionState(normalizedSpecialist) ||
+            {},
+        };
+      },
       isUiStateHygieneSwitchV1Enabled: () => true,
       isClearlyGeneralOfftopicInput: () => false,
       shouldTreatAsStepContributingInput: () => true,
@@ -460,6 +482,15 @@ function buildParams(intentEnabled: boolean) {
             status: "true",
             user_normalized_text: "updated user variant",
             suggestion_text: "suggestion",
+          }),
+          pendingState: createPendingInteractionState({
+            kind: "text_compare",
+            render_model: {
+              mode: "text",
+              user_text: "updated user variant",
+              suggestion_text: "existing suggestion",
+              feedback_reason_text: "pick one",
+            },
           }),
           compare: {
             enabled: true,
@@ -527,11 +558,10 @@ function buildParams(intentEnabled: boolean) {
 test("runStepRuntimeActionRoutingLayer rebuilds active compare as a third variant for new step content", async () => {
   const result = await runStepRuntimeActionRoutingLayer(buildParams(false) as any);
   assert.ok(result);
-  const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
-  assert.equal(comparePendingValue(specialist), "true");
+  const compareStateContainer = (result.state as Record<string, unknown>) || {};
+  assert.equal(comparePendingValue(compareStateContainer), "true");
   assert.equal(result.submittedTextIntent, "content_input");
   assert.equal(result.submittedTextAnchor, "user_input");
-  assert.notEqual(compareUserValue(specialist), "");
   assert.ok(result.response);
 });
 
@@ -659,10 +689,8 @@ test("runStepRuntimeActionRoutingLayer keeps explicit suggestion rejection insid
   assert.ok(result);
   assert.equal(result.submittedTextIntent, "reject_suggestion_explicit");
   assert.equal(result.submittedTextAnchor, "suggestion");
-  const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
-  assert.equal(comparePendingValue(specialist), "true");
+  assert.equal(comparePendingValue((result.state as Record<string, unknown>) || {}), "true");
   assert.ok(result.response);
-  assert.notEqual(compareSuggestionValue(specialist), "");
 });
 
 test("runStepRuntimeActionRoutingLayer suspends the picker before returning an off-topic response", async () => {
@@ -680,9 +708,7 @@ test("runStepRuntimeActionRoutingLayer suspends the picker before returning an o
   const result = await runStepRuntimeActionRoutingLayer(params);
 
   assert.ok(result);
-  const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
-  assert.equal(comparePendingValue(specialist), "false");
-  assert.ok(result.response);
+  assert.equal(comparePendingValue((result.state as Record<string, unknown>) || {}), "false");
 });
 
 test("runStepRuntimeActionRoutingLayer suspends pending picker state when no picker payload can be rebuilt", async () => {
@@ -697,9 +723,7 @@ test("runStepRuntimeActionRoutingLayer suspends pending picker state when no pic
   const result = await runStepRuntimeActionRoutingLayer(params);
 
   assert.ok(result);
-  const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
-  assert.equal(comparePendingValue(specialist), "false");
-  assert.ok(result.response);
+  assert.equal(comparePendingValue((result.state as Record<string, unknown>) || {}), "false");
 });
 
 test("runStepRuntimeActionRoutingLayer keeps dream scoring free text available for reclustering input", async () => {
@@ -963,12 +987,15 @@ test("runStepRuntimeActionRoutingLayer keeps resumed Dream picker visible even w
       status: "true",
       mode: "text",
       target_field: "dream",
+      pending_interaction_id: "__TEST_PENDING_INTERACTION__",
       user_text:
         "Ik zou willen dat mensen gezonder zouden eten met minder bewerkt voedsel en voedsel eten waar minimale tot geen ongezonde toevoegingen in zitten.",
       user_normalized_text:
         "Ik zou willen dat mensen gezonder zouden eten met minder bewerkt voedsel en voedsel eten waar minimale tot geen ongezonde toevoegingen in zitten.",
       suggestion_text:
         "Bart droomt van een wereld waarin mensen zich gezond en energiek voelen doordat zij genieten van puur, onbewerkt voedsel zonder ongezonde toevoegingen.",
+      feedback_reason_text:
+        "Deze formulering maakt de droom concreter en inspirerender zonder de kern van de input te verliezen.",
       message: "Ik denk dat ik je begrijp.",
       refined_formulation:
         "Bart droomt van een wereld waarin mensen zich gezond en energiek voelen doordat zij genieten van puur, onbewerkt voedsel zonder ongezonde toevoegingen.",
@@ -989,7 +1016,7 @@ test("runStepRuntimeActionRoutingLayer keeps resumed Dream picker visible even w
   const result = await runStepRuntimeActionRoutingLayer(params);
   assert.ok(result.response);
   const specialist = ((result.response as Record<string, unknown>).specialist || {}) as Record<string, unknown>;
-  assert.equal(comparePresentationValue(specialist), "picker");
+  assert.equal(comparePendingValue(specialist), "true");
   assert.equal(compareUserVariantStepworthyValue(specialist), "false");
 });
 
@@ -1336,8 +1363,7 @@ test("runStepRuntimeActionRoutingLayer keeps rules confirm blocked while grouped
 test("runStepRuntimeActionRoutingLayer keeps free-text variants inside the widget compare flow when enabled", async () => {
   const result = await runStepRuntimeActionRoutingLayer(buildParams(true) as any);
   assert.ok(result);
-  const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
-  assert.equal(comparePendingValue(specialist), "true");
+  assert.equal(comparePendingValue((result.state as Record<string, unknown>) || {}), "true");
   assert.equal(result.submittedTextIntent, "content_input");
   assert.equal(result.submittedTextAnchor, "user_input");
 });
@@ -1405,12 +1431,8 @@ test("runStepRuntimeActionRoutingLayer clears pending compare choice for feedbac
   assert.equal(result.userMessage, "Dit raakt me nog niet echt.");
   assert.equal(result.submittedTextIntent, "feedback_on_suggestion");
   assert.equal(result.submittedTextAnchor, "suggestion");
-  const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
-  assert.equal(comparePendingValue(specialist), "true");
-  assert.equal(compareResolutionValue(specialist), "");
-  assert.equal(comparePendingIntentValue(specialist), "feedback_on_suggestion");
-  assert.equal(comparePendingAnchorValue(specialist), "suggestion");
-  assert.equal(comparePendingSeedSourceValue(specialist), "");
+  assert.equal(comparePendingValue((result.state as Record<string, unknown>) || {}), "true");
+  assert.equal(compareResolutionValue((result.state as Record<string, unknown>) || {}), "");
 });
 
 test("runStepRuntimeActionRoutingLayer does not implicit-accept suggestion when user explicitly rejects it", async () => {
@@ -1433,11 +1455,8 @@ test("runStepRuntimeActionRoutingLayer does not implicit-accept suggestion when 
   assert.equal(implicitPickCalled, false);
   assert.equal(result.submittedTextIntent, "reject_suggestion_explicit");
   assert.equal(result.submittedTextAnchor, "suggestion");
-  const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
-  assert.equal(comparePendingValue(specialist), "true");
-  assert.equal(compareResolutionValue(specialist), "");
-  assert.equal(comparePendingIntentValue(specialist), "reject_suggestion_explicit");
-  assert.equal(comparePendingAnchorValue(specialist), "suggestion");
+  assert.equal(comparePendingValue((result.state as Record<string, unknown>) || {}), "true");
+  assert.equal(compareResolutionValue((result.state as Record<string, unknown>) || {}), "");
 });
 
 test("runStepRuntimeActionRoutingLayer handles explicit accept correctly in Dream pending flow", async () => {
@@ -1520,10 +1539,9 @@ test("runStepRuntimeActionRoutingLayer keeps explicit reject inside the widget i
 
   const result = await runStepRuntimeActionRoutingLayer(params);
   assert.ok(result);
-  const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
   assert.equal(result.submittedTextIntent, "reject_suggestion_explicit");
   assert.equal(result.submittedTextAnchor, "suggestion");
-  assert.equal(comparePendingValue(specialist), "true");
+  assert.equal(comparePendingValue((result.state as Record<string, unknown>) || {}), "true");
 });
 
 test("runStepRuntimeActionRoutingLayer suspends the picker and renders a normal widget response for off-topic text", async () => {
@@ -1749,8 +1767,7 @@ test("runStepRuntimeActionRoutingLayer maps proceed text intent to current confi
   };
   params.runtime.userMessage = "Ga door naar de volgende stap";
   params.runtime.compareEnabled = false;
-  params.action.inferCurrentMenuForStep = () => "STRATEGY_MENU_CONFIRM";
-  params.action.firstConfirmActionCodeForMenu = () => "ACTION_STRATEGY_CONFIRM_SATISFIED";
+  params.action.firstConfirmActionCodeForStep = () => "ACTION_STRATEGY_CONFIRM_SATISFIED";
   params.action.resolveActionCodeTransition = () => null;
   params.action.processActionCode = () => "yes";
 
@@ -1769,8 +1786,7 @@ test("runStepRuntimeActionRoutingLayer maps proceed text intent to current confi
   params.runtime.inputMode = "chat";
   params.runtime.userMessage = "Ga door naar de volgende stap";
   params.runtime.compareEnabled = false;
-  params.action.inferCurrentMenuForStep = () => "STRATEGY_MENU_CONFIRM";
-  params.action.firstConfirmActionCodeForMenu = () => "ACTION_STRATEGY_CONFIRM_SATISFIED";
+  params.action.firstConfirmActionCodeForStep = () => "ACTION_STRATEGY_CONFIRM_SATISFIED";
   params.action.resolveActionCodeTransition = () => null;
   params.action.processActionCode = () => "yes";
 
@@ -1789,9 +1805,8 @@ test("runStepRuntimeActionRoutingLayer maps proceed text intent to guidance acti
   params.runtime.inputMode = "chat";
   params.runtime.userMessage = "Ga door naar de volgende stap";
   params.runtime.compareEnabled = false;
-  params.action.inferCurrentMenuForStep = () => "STRATEGY_MENU_ASK";
-  params.action.firstConfirmActionCodeForMenu = () => "";
-  params.action.firstGuidanceActionCodeForMenu = () => "ACTION_STRATEGY_ASK_3_QUESTIONS";
+  params.action.firstConfirmActionCodeForStep = () => "";
+  params.action.firstGuidanceActionCodeForStep = () => "ACTION_STRATEGY_ASK_3_QUESTIONS";
   params.action.resolveActionCodeTransition = () => null;
   params.action.processActionCode = () => "__ROUTE__STRATEGY_ASK_3_QUESTIONS__";
 

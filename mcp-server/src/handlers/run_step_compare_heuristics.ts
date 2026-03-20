@@ -1023,9 +1023,7 @@ export function createRunStepCompareHeuristicHelpers(deps: RunStepCompareHeurist
       );
     }
 
-    pushCandidate(
-      String(readCompareRuntime(previousSpecialist)?.suggestion_text || previousSpecialist?.refined_formulation || "")
-    );
+    pushCandidate(String(previousSpecialist?.refined_formulation || ""));
     const messageCandidate = extractSuggestionFromMessage(String(specialistResult?.message || ""));
     const userComparableForMessage = String(userRaw || "").trim();
     if (messageCandidate) {
@@ -1067,4 +1065,3 @@ export function createRunStepCompareHeuristicHelpers(deps: RunStepCompareHeurist
     pickRoleSuggestionFromPreviousState,
   };
 }
-import { readCompareRuntime } from "./compare_runtime.js";

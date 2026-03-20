@@ -1,4 +1,9 @@
-import type { CanvasState } from "../core/state.js";
+import {
+  clearPendingInteractionState,
+  patchPendingInteractionState,
+  readPendingInteractionState,
+  type CanvasState,
+} from "../core/state.js";
 import type { TurnOutputStatus } from "../core/turn_policy_renderer.js";
 import type { OrchestratorOutput } from "../core/orchestrator.js";
 import type { RunStepAttachRegistryPayload } from "./run_step_ports.js";
@@ -24,13 +29,6 @@ import {
   RULESOFTHEGAME_MIN_RULES,
   RULESOFTHEGAME_MAX_RULES,
 } from "../steps/rulesofthegame_runtime_policy.js";
-import {
-  attachCompareRuntime,
-  clearCompareRuntime,
-  hasRenderablePendingCompareState,
-  patchCompareRuntime,
-  readCompareRuntime,
-} from "./compare_runtime.js";
 import {
   clearDreamBuilderCompareRuntime,
   readDreamBuilderCompareRuntime,
@@ -83,21 +81,20 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     dreamStartExerciseActionCodes: Set<string>;
     resolveActionCodeTransition: (
       actionCode: string,
-      currentStepId: string,
-      sourceMenuId: string
+      currentStepId: string
     ) =>
       | {
           targetStepId: string;
-          renderMode: "menu" | "no_buttons";
+          renderMode: "actions" | "no_buttons";
         }
       | null;
     setUiRenderModeByStep: (
       state: CanvasState,
       stepId: string,
-      renderMode: "menu" | "no_buttons"
+      renderMode: "actions" | "no_buttons"
     ) => void;
     applyUiPhaseByStep: (state: CanvasState, stepId: string, contractId: string) => void;
-    buildContractId: (stepId: string, status: TurnOutputStatus, menuId: string) => string;
+    buildContractId: (stepId: string, status: TurnOutputStatus, owner: string) => string;
     processActionCode: (
       actionCodeInput: string,
       currentStep: string,
@@ -123,6 +120,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
       prevState: CanvasState;
       decision: OrchestratorOutput;
       specialistResult: Record<string, unknown>;
+      pendingInteractionState?: Record<string, unknown>;
       provisionalSource: "action_route" | "system_generated" | "user_input";
     }) => CanvasState;
     isUiStateHygieneSwitchV1Enabled: () => boolean;
@@ -246,38 +244,110 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     ({ ...((((stateValue as Record<string, unknown>).last_specialist_result as Record<string, unknown>) || {})) });
 
   const writeLastSpecialist = (stateValue: CanvasState, specialist: Record<string, unknown>): void => {
-    (stateValue as Record<string, unknown>).last_specialist_result = attachCompareRuntime(specialist);
+    (stateValue as Record<string, unknown>).last_specialist_result = clearPendingInteractionState(specialist);
+    (stateValue as Record<string, unknown>).pending_interaction_state =
+      readPendingInteractionState(stateValue) || {};
   };
+
+  const readPendingInteractionId = (
+    stateValue: CanvasState,
+    specialist: Record<string, unknown>
+  ): string =>
+    String(
+      (stateValue as Record<string, unknown>).__pending_interaction_id ||
+      specialist.pending_interaction_id ||
+      ""
+    ).trim();
 
   const clearDreamBuilderLegacyCompareFields = (
     specialist: Record<string, unknown>
   ): Record<string, unknown> => ({
-    ...clearCompareRuntime(specialist),
+    ...clearPendingInteractionState(specialist),
   });
 
-  const hasRenderablePendingCompare = (specialist: Record<string, unknown>): boolean => {
-    const compareState = readCompareRuntime(specialist);
-    if (!compareState) return false;
-    const mode = compareState.mode === "list" ? "list" : "text";
-    const stepId = String(state.current_step || "").trim();
-    const dreamRuntimeMode = action.getDreamRuntimeMode(state);
-    const dreamBuilderFlowActive = String(state.current_step || "") === ids.dreamStepId && dreamRuntimeMode !== "self";
-    if (dreamBuilderFlowActive && stepId === ids.dreamStepId) return false;
-    if (!hasRenderablePendingCompareState(compareState)) return false;
-    if (mode === "list") return true;
-    const suggestionText = String(compareState.suggestion_text || specialist.refined_formulation || "").trim();
-    return Boolean(suggestionText && String(compareState.user_normalized_text || compareState.user_text || "").trim());
+  const buildActivePendingCompareContext = (
+    stateValue: CanvasState,
+    specialist: Record<string, unknown>
+  ): { specialist: Record<string, unknown>; compare: CompareUiPayload } | null => {
+    if (!runtime.compareEnabled || runtime.inputMode !== "widget") return null;
+    const pendingCompareState = readPendingInteractionState(stateValue);
+    if (!pendingCompareState) return null;
+    if (!readPendingInteractionId(stateValue, specialist)) return null;
+    const stepId = String(stateValue.current_step || "").trim();
+    const activeSpecialist = String((stateValue as Record<string, unknown>).active_specialist || "");
+    const dreamRuntimeMode = action.getDreamRuntimeMode(stateValue);
+    const dreamBuilderFlowActive =
+      stepId === ids.dreamStepId && dreamRuntimeMode !== "self";
+    if (dreamBuilderFlowActive) return null;
+    if (
+      !compare.isCompareEligibleContext(
+        stepId,
+        activeSpecialist,
+        specialist,
+        specialist,
+        dreamRuntimeMode
+      )
+    ) {
+      return null;
+    }
+    const pendingSpecialist = normalizePendingPickerSpecialistContract({
+      specialist,
+      compareState: pendingCompareState,
+      stepIdHint: stepId,
+    });
+    const pendingChoice = compare.buildCompareFromPendingSpecialist(
+      pendingSpecialist,
+      stateValue,
+      activeSpecialist,
+      specialist,
+      stepId,
+      dreamRuntimeMode
+    );
+    if (!pendingChoice || pendingChoice.enabled !== true) return null;
+    return {
+      specialist: pendingSpecialist,
+      compare: pendingChoice,
+    };
   };
 
-  const hasPickerPendingCompare = (specialist: Record<string, unknown>): boolean =>
-    hasRenderablePendingCompare(specialist);
+  const hasVisibleOrdinaryCompareOwner = (
+    stateValue: CanvasState,
+    specialist: Record<string, unknown>
+  ): boolean => {
+    if (!runtime.compareEnabled || runtime.inputMode !== "widget") return false;
+    const pendingCompareState = readPendingInteractionState(stateValue);
+    if (!pendingCompareState) return false;
+    if (!readPendingInteractionId(stateValue, specialist)) return false;
+    const stepId = String(stateValue.current_step || "").trim();
+    const activeSpecialist = String((stateValue as Record<string, unknown>).active_specialist || "");
+    const dreamRuntimeMode = action.getDreamRuntimeMode(stateValue);
+    const dreamBuilderFlowActive =
+      stepId === ids.dreamStepId && dreamRuntimeMode !== "self";
+    if (dreamBuilderFlowActive) return false;
+    if (
+      !compare.isCompareEligibleContext(
+        stepId,
+        activeSpecialist,
+        specialist,
+        specialist,
+        dreamRuntimeMode
+      )
+    ) {
+      return false;
+    }
+    return true;
+  };
+
+  const hasActiveOrdinaryCompareOwner = (
+    stateValue: CanvasState,
+    specialist: Record<string, unknown>
+  ): boolean => hasVisibleOrdinaryCompareOwner(stateValue, specialist);
 
   const normalizeAcceptedOutputPendingSpecialist = async (
     specialist: Record<string, unknown>,
     stepId: string
   ): Promise<Record<string, unknown>> => {
-    const compareState = readCompareRuntime(specialist);
-    if (compareState?.status !== "pending") return specialist;
+    if (!readPendingInteractionState(state)) return specialist;
     const dreamRuntimeMode = action.getDreamRuntimeMode(state);
     const dreamBuilderFlowActive = String(state.current_step || "") === ids.dreamStepId && dreamRuntimeMode !== "self";
     if (dreamBuilderFlowActive && stepId === ids.dreamStepId) {
@@ -363,7 +433,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
       String(pendingSpecialist.rulesofthegame || "").trim() ||
       String(pendingSpecialist.refined_formulation || "").trim() ||
       acceptedValue;
-    const comparePending = readCompareRuntime(pendingSpecialist)?.status === "pending";
+    const comparePending = hasActiveOrdinaryCompareOwner(stateForRules, pendingSpecialist);
     const gate = evaluateRulesRuntimeGate({
       acceptedOutput,
       acceptedValue,
@@ -412,7 +482,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
       String(pendingSpecialist.rulesofthegame || "").trim() ||
       String(pendingSpecialist.refined_formulation || "").trim() ||
       acceptedValue;
-    const comparePending = readCompareRuntime(pendingSpecialist)?.status === "pending";
+    const comparePending = hasActiveOrdinaryCompareOwner(stateForText, pendingSpecialist);
     const gate = evaluateRulesRuntimeGate({
       acceptedOutput,
       acceptedValue,
@@ -515,35 +585,23 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
   if (runtime.actionCodeRaw && actionCodeStepTransitions[runtime.actionCodeRaw]) {
     const stepId = String(state.current_step ?? "");
     const prev = readLastSpecialist(state);
+    const previousPendingCompare = buildActivePendingCompareContext(state, prev);
 
     if (
       runtime.compareEnabled &&
-      readCompareRuntime(prev)?.status === "pending" &&
-      compare.isCompareEligibleContext(
-        stepId,
-        String((state as Record<string, unknown>).active_specialist || ""),
-        prev,
-        prev,
-        action.getDreamRuntimeMode(state)
-      )
+      previousPendingCompare
     ) {
       const stateWithUi = await behavior.ensureUiStrings(state, userMessage);
       state = stateWithUi;
-      const pendingSpecialistSeed = await normalizeAcceptedOutputPendingSpecialist(prev, stepId);
-      const pendingSpecialist = normalizePendingPickerSpecialistContract({
-        specialist: pendingSpecialistSeed,
-        stepIdHint: stepId,
-      });
-      writeLastSpecialist(state, pendingSpecialist);
-      const pendingChoice = compare.buildCompareFromPendingSpecialist(
-        pendingSpecialist,
-        stateWithUi,
-        String((state as Record<string, unknown>).active_specialist || ""),
-        prev,
-        stepId,
-        action.getDreamRuntimeMode(state)
+      const pendingSpecialistSeed = await normalizeAcceptedOutputPendingSpecialist(
+        previousPendingCompare.specialist,
+        stepId
       );
-      if (pendingChoice?.enabled) {
+      const pendingContext = buildActivePendingCompareContext(stateWithUi, pendingSpecialistSeed);
+      if (pendingContext) {
+        const pendingSpecialist = pendingContext.specialist;
+        const pendingChoice = pendingContext.compare;
+        writeLastSpecialist(state, pendingSpecialist);
         const payload = behavior.attachRegistryPayload(
           {
             ok: true,
@@ -579,14 +637,8 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
 
     if (
       runtime.compareEnabled &&
-      readCompareRuntime(prev)?.status === "pending" &&
-      !compare.isCompareEligibleContext(
-        stepId,
-        String((state as Record<string, unknown>).active_specialist || ""),
-        prev,
-        prev,
-        action.getDreamRuntimeMode(state)
-      )
+      readPendingInteractionState(state) &&
+      !buildActivePendingCompareContext(state, prev)
     ) {
       state = statePorts.clearStepInteractiveState(state, stepId);
       statePorts.bumpUiI18nCounter(runtime.uiI18nTelemetry, "state_hygiene_resets_count");
@@ -602,8 +654,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     });
     const resolvedTransition = action.resolveActionCodeTransition(
       runtime.actionCodeRaw,
-      stepId,
-      ""
+      stepId
     );
 
     if (!(finalInfo.field && !finalInfo.value)) {
@@ -638,7 +689,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
         action.setUiRenderModeByStep(
           state,
           String((state as Record<string, unknown>).current_step || stepId),
-          "menu"
+          "actions"
         );
       }
 
@@ -657,7 +708,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     const stepId = String(state.current_step || "").trim();
     if (stepId) {
       const pending = readLastSpecialist(state);
-      if (readCompareRuntime(pending)?.status === "pending" && !hasRenderablePendingCompare(pending)) {
+      if (readPendingInteractionState(state) && !buildActivePendingCompareContext(state, pending)) {
         state = statePorts.clearStepInteractiveState(state, stepId);
         statePorts.bumpUiI18nCounter(runtime.uiI18nTelemetry, "state_hygiene_resets_count");
       }
@@ -677,8 +728,8 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
           userMessage = "ACTION_RULES_CONFIRM_ALL";
         } else {
           state = await behavior.ensureUiStrings(state, userMessage);
-          state = statePorts.clearStepInteractiveState(state, ids.rulesofthegameStepId);
           const blockedSpecialist = buildRulesProceedBlockedSpecialist(state, pendingSpecialist);
+          state = statePorts.clearStepInteractiveState(state, ids.rulesofthegameStepId);
           writeLastSpecialist(state, blockedSpecialist);
           const payload = behavior.attachRegistryPayload(
             ({
@@ -709,17 +760,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
         }
       } else if (looksLikeProceedTextIntent(userMessage)) {
         const pendingSpecialist = readLastSpecialist(state);
-        const hasPendingCompare =
-          runtime.compareEnabled &&
-          readCompareRuntime(pendingSpecialist)?.status === "pending" &&
-          compare.isCompareEligibleContext(
-            stepId,
-            String((state as Record<string, unknown>).active_specialist || ""),
-            pendingSpecialist,
-            pendingSpecialist,
-            action.getDreamRuntimeMode(state)
-          ) &&
-          hasPickerPendingCompare(pendingSpecialist);
+        const hasPendingCompare = hasActiveOrdinaryCompareOwner(state, pendingSpecialist);
         if (hasPendingCompare) {
           userMessage = "__COMPARE_PICK_SUGGESTION__";
         } else {
@@ -739,8 +780,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     const transitionSpec = params.action.pretransitionByActionCode[safeActionCodeInput];
     const resolvedTransition = action.resolveActionCodeTransition(
       safeActionCodeInput,
-      currentStepForMenuTransition,
-      ""
+      currentStepForMenuTransition
     );
 
     if (transitionSpec && !resolvedTransition) {
@@ -798,7 +838,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
   const dreamRuntimeModeBeforeTurn = action.getDreamRuntimeMode(state);
   const dreamBuilderModeActive =
     currentStepId === ids.dreamStepId && dreamRuntimeModeBeforeTurn !== "self";
-  if (dreamBuilderModeActive && readCompareRuntime(pendingBeforeTurn)?.status === "pending") {
+  if (dreamBuilderModeActive && readPendingInteractionState(state)) {
     pendingBeforeTurn = clearDreamBuilderLegacyCompareFields(pendingBeforeTurn);
     writeLastSpecialist(state, pendingBeforeTurn);
   }
@@ -817,14 +857,16 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     specialist: Record<string, unknown>
   ): Record<string, unknown> =>
     normalizePendingPickerSpecialistContract({
-      specialist: clearCompareRuntime(specialist),
+      specialist: clearPendingInteractionState(specialist),
+      compareState: readPendingInteractionState(state),
       stepIdHint: String(state.current_step || ""),
     });
   const suspendPendingDreamBuilderCompareSpecialist = (
     specialist: Record<string, unknown>
   ): Record<string, unknown> => ({
     ...normalizePendingPickerSpecialistContract({
-      specialist: clearCompareRuntime(specialist),
+      specialist: clearPendingInteractionState(specialist),
+      compareState: readPendingInteractionState(state),
       stepIdHint: String(state.current_step || ""),
     }),
     ...clearDreamBuilderCompareRuntime(specialist),
@@ -834,10 +876,13 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     specialist: Record<string, unknown>;
     compare?: CompareUiPayload | null;
   }): Promise<RunStepRuntimeActionRoutingOutput<TPayload>> => {
-    const stateWithUi = await behavior.ensureUiStrings(params.nextState, userMessage);
+    const rawStateWithUi = await behavior.ensureUiStrings(params.nextState, userMessage);
     const shouldSuspendPendingPicker =
       (!params.compare || params.compare.enabled !== true) &&
-      readCompareRuntime(params.specialist)?.status === "pending";
+      Boolean(readPendingInteractionState(rawStateWithUi));
+    const stateWithUi = shouldSuspendPendingPicker
+      ? (clearPendingInteractionState(rawStateWithUi) as CanvasState)
+      : rawStateWithUi;
     const responseSpecialistBase = shouldSuspendPendingPicker
       ? suspendPendingCompareSpecialist(params.specialist)
       : params.specialist;
@@ -998,7 +1043,8 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     const renderedState = await behavior.ensureUiStrings(
       {
         ...renderedResult.value.state,
-        last_specialist_result: attachCompareRuntime(renderedResult.value.specialist),
+        last_specialist_result: clearPendingInteractionState(renderedResult.value.specialist),
+        pending_interaction_state: readPendingInteractionState(renderedResult.value.specialist) || {},
       },
       runtime.actionCodeRaw || userMessage
     );
@@ -1033,20 +1079,11 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     dreamBuilderModeActive &&
     Boolean(readDreamBuilderCompareRuntime(pendingBeforeTurn));
   let hasPendingCompare =
-    runtime.compareEnabled &&
-    runtime.inputMode === "widget" &&
     !dreamBuilderModeActive &&
-    readCompareRuntime(pendingBeforeTurn)?.status === "pending" &&
-    compare.isCompareEligibleContext(
-      String(state.current_step || ""),
-      String((state as Record<string, unknown>).active_specialist || ""),
-      pendingBeforeTurn,
-      pendingBeforeTurn,
-      action.getDreamRuntimeMode(state)
-    ) &&
-    hasRenderablePendingCompare(pendingBeforeTurn);
+    hasActiveOrdinaryCompareOwner(state, pendingBeforeTurn);
   const suspendPendingCompare = (specialist: Record<string, unknown>) => {
     const suspended = suspendPendingCompareSpecialist(specialist);
+    state = clearPendingInteractionState(state) as CanvasState;
     writeLastSpecialist(state, suspended);
     pendingBeforeTurn = suspended;
     hasPendingCompare = false;
@@ -1062,12 +1099,13 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     pendingBeforeTurn = suspended;
   }
   if (shouldResolvePendingCompareFromTextIntent) {
-    const pendingCompareState = readCompareRuntime(pendingBeforeTurn);
+    const pendingCompareState = readPendingInteractionState(state);
+    const pendingRenderModel = pendingCompareState?.render_model;
     const pendingSuggestion = String(
-      pendingCompareState?.suggestion_text || pendingBeforeTurn.refined_formulation || ""
+      pendingRenderModel?.suggestion_text || pendingBeforeTurn.refined_formulation || ""
     ).trim();
     const pendingUserInput = String(
-      pendingCompareState?.user_normalized_text || pendingCompareState?.user_text || ""
+      pendingRenderModel?.user_text || ""
     ).trim();
     acceptedOutputUserTurnClassification = await statePorts.classifyAcceptedOutputUserTurn({
       model: runtime.model,
@@ -1093,9 +1131,9 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     submittedTextAnchor = pendingIntentResolution.anchor;
     if (pendingIntentResolution.intent !== "accept_suggestion_explicit") {
       const pendingFeedbackText = String(userMessage || "").trim();
-      const nextPending = patchCompareRuntime(pendingBeforeTurn, {});
-      writeLastSpecialist(state, nextPending);
-      pendingBeforeTurn = nextPending;
+      const nextPending = patchPendingInteractionState(state, {});
+      state = nextPending as CanvasState;
+      pendingBeforeTurn = readLastSpecialist(state);
     }
     if (pendingIntentResolution.intent === "accept_suggestion_explicit") {
       const implicitSelection = compare.applyComparePickSelection({
@@ -1119,18 +1157,11 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     }
     pendingBeforeTurn = readLastSpecialist(state);
     hasPendingCompare =
-      runtime.compareEnabled &&
-      runtime.inputMode === "widget" &&
       !dreamBuilderModeActive &&
-      readCompareRuntime(pendingBeforeTurn)?.status === "pending" &&
-      compare.isCompareEligibleContext(
-        String(state.current_step || ""),
-        String((state as Record<string, unknown>).active_specialist || ""),
-        pendingBeforeTurn,
-        pendingBeforeTurn,
-        action.getDreamRuntimeMode(state)
-      ) &&
-      hasRenderablePendingCompare(pendingBeforeTurn);
+      hasActiveOrdinaryCompareOwner(state, pendingBeforeTurn);
+    if (!hasPendingCompare && readPendingInteractionState(state)) {
+      suspendPendingCompare(pendingBeforeTurn);
+    }
     if (hasPendingCompare) {
       if (isGeneralOfftopicInput) {
         const stateWithUi = await behavior.ensureUiStrings(state, userMessage);
@@ -1167,7 +1198,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
             {
               ...pendingBeforeTurn,
               refined_formulation: String(
-                pendingCompareState?.suggestion_text || pendingBeforeTurn.refined_formulation || ""
+                pendingRenderModel?.suggestion_text || pendingBeforeTurn.refined_formulation || ""
               ).trim(),
             },
             pendingBeforeTurn
@@ -1179,6 +1210,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
         const rebuiltSpecialist = rebuilt.compare
           ? normalizePendingPickerSpecialistContract({
               specialist: rebuilt.specialist,
+              compareState: readPendingInteractionState(state),
               stepIdHint: currentStepId,
             })
           : rebuilt.specialist;
@@ -1216,6 +1248,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
 
         pendingSpecialist = normalizePendingPickerSpecialistContract({
           specialist: pendingSpecialist,
+          compareState: readPendingInteractionState(stateWithUi),
           stepIdHint: String(state.current_step || ""),
         });
 
@@ -1230,6 +1263,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
         if (!pendingChoice || pendingChoice.enabled !== true) {
           pendingSpecialist = normalizePendingPickerSpecialistContract({
             specialist: pendingBeforeTurn,
+            compareState: readPendingInteractionState(stateWithUi),
             stepIdHint: String(state.current_step || ""),
           });
           pendingChoice = compare.buildCompareFromPendingSpecialist(
@@ -1281,6 +1315,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
 
     pendingSpecialist = normalizePendingPickerSpecialistContract({
       specialist: pendingSpecialist,
+      compareState: readPendingInteractionState(stateWithUi),
       stepIdHint: String(state.current_step || ""),
     });
     writeLastSpecialist(state, pendingSpecialist);

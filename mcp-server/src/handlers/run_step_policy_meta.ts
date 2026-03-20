@@ -14,7 +14,7 @@ import { PRODUCTSSERVICES_STEP_ID } from "../steps/productsservices.js";
 import { RULESOFTHEGAME_STEP_ID } from "../steps/rulesofthegame.js";
 import { PRESENTATION_STEP_ID } from "../steps/presentation.js";
 import { SPECIALIST_META_TOPICS, type SpecialistMetaTopic } from "../steps/user_intent.js";
-import { attachCompareRuntime, clearCompareRuntime } from "./compare_runtime.js";
+import { clearPendingInteractionState } from "../core/state.js";
 import { isTrueFlag } from "./run_step_type_guards.js";
 
 export const LANGUAGE_LOCK_INSTRUCTION = `LANGUAGE OVERRIDE (HARD)
@@ -797,7 +797,7 @@ export function createRunStepPolicyMetaHelpers(deps: RunStepPolicyMetaDeps) {
     const metaTopic = resolveSpecialistMetaTopic(specialist);
     if (metaTopic === "BEN_PROFILE") {
       return {
-        ...clearCompareRuntime(specialist),
+        ...clearPendingInteractionState(specialist),
         action: "ASK",
         is_offtopic: true,
         message: buildBenProfileMessage(params.state),
@@ -824,13 +824,13 @@ export function createRunStepPolicyMetaHelpers(deps: RunStepPolicyMetaDeps) {
       ? `${specialistMessage} ${redirectSentence}`.trim()
       : redirectSentence;
 
-    const next = attachCompareRuntime({
-      ...clearCompareRuntime(specialist),
+    const next = {
+      ...clearPendingInteractionState(specialist),
       action: "ASK",
       message,
       __offtopic_meta_passthrough: "false",
       feedback_reason_text: "",
-    } as Record<string, unknown>);
+    } as Record<string, unknown>;
 
     if (stepId === DREAM_STEP_ID && String(params.activeSpecialist || "").trim() === DREAM_EXPLAINER_SPECIALIST) {
       next.suggest_dreambuilder = "true";

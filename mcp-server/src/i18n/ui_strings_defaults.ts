@@ -2,7 +2,7 @@
  * SSOT default UI strings and i18n key set for server-side locale resolution.
  */
 import { ACTIONCODE_REGISTRY } from "../core/actioncode_registry.js";
-import { MENU_LABEL_DEFAULTS, MENU_LABEL_KEYS, labelKeyForMenuAction } from "../core/menu_contract.js";
+import { ACTION_LABEL_DEFAULTS, labelKeyForActionCode } from "../core/ui_contract_matrix.js";
 import { getStepRegistryEntry, getStepTitleKey } from "../steps/step_registry.js";
 const PRESTART_TEXT_DEFAULT = {
   headline: "Build a complete Business Model and Strategy Canvas step by step.",
@@ -22,7 +22,7 @@ const PRESTART_TEXT_DEFAULT = {
 const PRESTART_WELCOME_DEFAULT = PRESTART_TEXT_DEFAULT.headline;
 
 
-export const UI_STRINGS_DEFAULT: Record<string, string> = {
+const UI_STRINGS_BASE: Record<string, string> = {
   "title.step_0": "Validation & Business Name",
   "title.dream": "Dream",
   "title.purpose": "Purpose",
@@ -333,33 +333,12 @@ export const UI_STRINGS_DEFAULT: Record<string, string> = {
   "sectionTitle.presentation": "Create your Presentation",
 };
 
-function buildMenuLabelUiDefaults(): Record<string, string> {
-  const next: Record<string, string> = {};
-  for (const [menuId, codesRaw] of Object.entries(ACTIONCODE_REGISTRY.menus)) {
-    const safeActionCodes = Array.isArray(codesRaw)
-      ? codesRaw.map((code) => String(code || "").trim()).filter(Boolean)
-      : [];
-    const labelKeys = Array.isArray(MENU_LABEL_KEYS[menuId])
-      ? MENU_LABEL_KEYS[menuId]
-      : [];
-    if (safeActionCodes.length === 0) continue;
-    for (let i = 0; i < safeActionCodes.length; i += 1) {
-      const actionCode = safeActionCodes[i];
-      const key = String(labelKeys[i] || "").trim() || labelKeyForMenuAction(menuId, actionCode, i);
-      const label = String(MENU_LABEL_DEFAULTS[key] || "").trim();
-      if (!key || !label) continue;
-      next[key] = label;
-    }
-  }
-  return next;
-}
-
-export const UI_STRINGS_WITH_MENU_KEYS: Record<string, string> = {
-  ...UI_STRINGS_DEFAULT,
-  ...buildMenuLabelUiDefaults(),
+export const UI_STRINGS_DEFAULT: Record<string, string> = {
+  ...UI_STRINGS_BASE,
+  ...ACTION_LABEL_DEFAULTS,
 };
 
-export const UI_STRINGS_KEYS = Object.keys(UI_STRINGS_WITH_MENU_KEYS);
+export const UI_STRINGS_KEYS = Object.keys(UI_STRINGS_DEFAULT);
 export const UI_STRINGS_SCHEMA_VERSION = "2026-03-07-ui-i18n-v6_catalog";
 
 function buildCriticalUiKeysStep0(): string[] {
@@ -405,9 +384,6 @@ function buildCriticalUiKeysStep0(): string[] {
     "error.generic.title",
     "error.generic.body",
   ]);
-  for (const key of UI_STRINGS_KEYS) {
-    if (key.startsWith("menuLabel.STEP0_")) keySet.add(key);
-  }
   return [...keySet].filter((key) => UI_STRINGS_KEYS.includes(key));
 }
 
@@ -457,4 +433,4 @@ export function criticalUiKeysForStep(stepIdRaw: string): string[] {
   return [...keys];
 }
 
-export const UI_STRINGS_SOURCE_EN: Record<string, string> = UI_STRINGS_WITH_MENU_KEYS;
+export const UI_STRINGS_SOURCE_EN: Record<string, string> = UI_STRINGS_DEFAULT;

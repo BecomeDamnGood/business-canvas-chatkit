@@ -1,10 +1,13 @@
-import type { CanvasState } from "../core/state.js";
+import {
+  clearPendingInteractionState,
+  readPendingInteractionState,
+  type CanvasState,
+} from "../core/state.js";
 import type { TurnPolicyRenderResult } from "../core/turn_policy_renderer.js";
 import type { RenderedAction } from "../contracts/ui_actions.js";
 import type { UiI18nTelemetryCounters } from "./run_step_i18n_runtime.js";
 import type { UiContractMeta, CompareUiPayload } from "./run_step_ui_payload.js";
 import { getChooseForMeRegistryEntry } from "../steps/step_registry.js";
-import { attachCompareRuntime } from "./compare_runtime.js";
 
 type TurnResponseEngineDeps<TPayload> = {
   renderFreeTextTurnPolicy: (params: {
@@ -127,7 +130,8 @@ export function createTurnResponseEngine<TPayload>(
 
     const nextState = validated.state;
     const rendered = validated.rendered as TurnResponseRenderedOutput;
-    const renderedSpecialist = attachCompareRuntime(rendered.specialist);
+    const renderedPendingInteraction = readPendingInteractionState(rendered.specialist) || {};
+    const renderedSpecialist = clearPendingInteractionState(rendered.specialist);
     const stepId = String((nextState as Record<string, unknown>).current_step ?? "");
     if (validated.violation) {
       (nextState as Record<string, unknown>).__render_contract_violation = String(validated.violation || "");
@@ -137,6 +141,7 @@ export function createTurnResponseEngine<TPayload>(
       deps.applyUiPhaseByStep(nextState, stepId, contractId);
     }
     (nextState as Record<string, unknown>).last_specialist_result = renderedSpecialist;
+    (nextState as Record<string, unknown>).pending_interaction_state = renderedPendingInteraction;
     const currentMap =
       typeof (nextState as Record<string, unknown>).suggestion_state_by_step === "object" &&
       (nextState as Record<string, unknown>).suggestion_state_by_step !== null
@@ -200,9 +205,9 @@ export function createTurnResponseEngine<TPayload>(
         tool: "run_step" as const,
         current_step_id: String(params.state.current_step),
         active_specialist: String(stateRecord.active_specialist || ""),
-        text: deps.buildTextForWidget({ specialist: attachCompareRuntime(params.specialist), state: params.state }),
-        prompt: deps.pickPrompt(attachCompareRuntime(params.specialist)),
-        specialist: attachCompareRuntime(params.specialist),
+        text: deps.buildTextForWidget({ specialist: params.specialist, state: params.state }),
+        prompt: deps.pickPrompt(params.specialist),
+        specialist: params.specialist,
         state: params.state,
         ...(params.debug ? { debug: params.debug } : {}),
       },

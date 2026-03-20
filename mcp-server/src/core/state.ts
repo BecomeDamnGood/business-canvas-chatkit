@@ -1,6 +1,7 @@
 // src/core/state.ts
 import { z } from "zod";
 import { STEP_REGISTRY_BY_STEP_ID, STEP_REGISTRY_ORDER } from "../steps/step_registry.js";
+import type { PendingInteractionCompareRenderModel } from "../handlers/run_step_runtime_types.js";
 
 /**
  * Canonical step IDs (expand later as you add steps)
@@ -259,6 +260,244 @@ function uiStatusAllowsFull(status: UiStringsStatus): boolean {
   return status === "ready";
 }
 
+function toRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function trimString(value: unknown): string {
+  return String(value || "").trim();
+}
+
+export function normalizeStringArray(raw: unknown): string[] {
+  return Array.isArray(raw)
+    ? raw.map((value) => String(value || "").trim()).filter(Boolean)
+    : [];
+}
+
+export function parseRetainedInstruction(rawInstruction: unknown): {
+  retainedHeading: string;
+  retainedItems: string[];
+  instructionText: string;
+} {
+  const instruction = String(rawInstruction || "").replace(/\r/g, "\n").trim();
+  if (!instruction) {
+    return { retainedHeading: "", retainedItems: [], instructionText: "" };
+  }
+  const lines = instruction
+    .split("\n")
+    .map((line) => String(line || "").trim());
+  const firstBulletIndex = lines.findIndex((line) => /^(?:[-*•·]|\d+[\).])\s+/.test(line));
+  if (firstBulletIndex < 0) {
+    return { retainedHeading: "", retainedItems: [], instructionText: instruction };
+  }
+
+  let bulletEndIndex = firstBulletIndex;
+  while (bulletEndIndex < lines.length && /^(?:[-*•·]|\d+[\).])\s+/.test(lines[bulletEndIndex])) {
+    bulletEndIndex += 1;
+  }
+
+  const retainedHeading = lines
+    .slice(0, firstBulletIndex)
+    .filter(Boolean)
+    .join("\n")
+    .trim();
+  const retainedItems = lines
+    .slice(firstBulletIndex, bulletEndIndex)
+    .map((line) => line.replace(/^\s*(?:[-*•·]|\d+[\).])\s+/, "").trim())
+    .filter(Boolean);
+  const instructionText = lines
+    .slice(bulletEndIndex)
+    .filter(Boolean)
+    .join("\n")
+    .trim();
+  if (!retainedHeading || retainedItems.length === 0) {
+    return { retainedHeading: "", retainedItems: [], instructionText: instruction };
+  }
+  return { retainedHeading, retainedItems, instructionText: instructionText || instruction };
+}
+
+export type PendingInteractionStateKind = "text_compare" | "list_compare";
+
+export type PersistedPendingInteractionState = {
+  id: string;
+  kind: PendingInteractionStateKind;
+  status: "pending";
+  render_model: PendingInteractionCompareRenderModel;
+};
+
+const PendingInteractionRenderUnitZod = z.object({
+  user_items: z.array(z.string()),
+  suggestion_items: z.array(z.string()),
+  feedback_reason_text: z.string(),
+});
+
+const PendingInteractionRenderModelZod = z.object({
+  mode: z.enum(["text", "list"]),
+  instruction: z.string(),
+  feedback_reason_text: z.string(),
+  user_label: z.string(),
+  suggestion_label: z.string(),
+  user_text: z.string(),
+  suggestion_text: z.string(),
+  user_items: z.array(z.string()),
+  suggestion_items: z.array(z.string()),
+  units: z.array(PendingInteractionRenderUnitZod).optional(),
+  retained_heading: z.string(),
+  retained_items: z.array(z.string()),
+});
+
+const PersistedPendingInteractionStateZod = z.object({
+  id: z.string(),
+  kind: z.enum(["text_compare", "list_compare"]),
+  status: z.literal("pending"),
+  render_model: PendingInteractionRenderModelZod,
+});
+
+const DEFAULT_PENDING_INTERACTION_RENDER_MODEL: PendingInteractionCompareRenderModel = {
+  mode: "text",
+  instruction: "",
+  feedback_reason_text: "",
+  user_label: "",
+  suggestion_label: "",
+  user_text: "",
+  suggestion_text: "",
+  user_items: [],
+  suggestion_items: [],
+  units: [],
+  retained_heading: "",
+  retained_items: [],
+};
+
+function normalizePendingInteractionKind(
+  raw: unknown,
+  fallbackMode: "text" | "list"
+): PendingInteractionStateKind {
+  const kind = trimString(raw).toLowerCase();
+  if (kind === "list_compare") return "list_compare";
+  if (kind === "text_compare") return "text_compare";
+  return fallbackMode === "list" ? "list_compare" : "text_compare";
+}
+
+function normalizePendingInteractionRenderModel(raw: unknown): PendingInteractionCompareRenderModel | null {
+  const record = toRecord(raw);
+  if (Object.keys(record).length === 0) return null;
+  const mode = String(record.mode || "").trim() === "list" ? "list" : "text";
+  return {
+    mode,
+    instruction: trimString(record.instruction),
+    feedback_reason_text: trimString(record.feedback_reason_text),
+    user_label: trimString(record.user_label),
+    suggestion_label: trimString(record.suggestion_label),
+    user_text: trimString(record.user_text),
+    suggestion_text: trimString(record.suggestion_text),
+    user_items: normalizeStringArray(record.user_items),
+    suggestion_items: normalizeStringArray(record.suggestion_items),
+    units: Array.isArray(record.units)
+      ? (record.units as unknown[])
+        .map((entry) => {
+          const unit = toRecord(entry);
+          const userItems = normalizeStringArray(unit.user_items);
+          const suggestionItems = normalizeStringArray(unit.suggestion_items);
+          const feedbackReasonText = trimString(unit.feedback_reason_text);
+          if (userItems.length === 0 && suggestionItems.length === 0) return null;
+          return {
+            user_items: userItems,
+            suggestion_items: suggestionItems,
+            feedback_reason_text: feedbackReasonText,
+          };
+        })
+        .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry))
+      : [],
+    retained_heading: trimString(record.retained_heading),
+    retained_items: normalizeStringArray(record.retained_items),
+  };
+}
+
+function normalizePendingInteractionStateRecord(rawState: unknown): PersistedPendingInteractionState | null {
+  const record = toRecord(rawState);
+  if (Object.keys(record).length === 0) return null;
+  const renderModel = normalizePendingInteractionRenderModel(record.render_model);
+  if (!renderModel) return null;
+  return {
+    id: trimString(record.id),
+    kind: normalizePendingInteractionKind(record.kind, renderModel.mode),
+    status: "pending",
+    render_model: renderModel,
+  };
+}
+
+export function createPendingInteractionState(
+  rawState: Partial<PersistedPendingInteractionState>
+): PersistedPendingInteractionState {
+  return normalizePendingInteractionStateRecord({
+    id: rawState.id || "",
+    kind: rawState.kind || "",
+    render_model: {
+      ...DEFAULT_PENDING_INTERACTION_RENDER_MODEL,
+      ...(toRecord(rawState.render_model) as Record<string, unknown>),
+    },
+  }) || {
+    id: "",
+    kind: "text_compare",
+    status: "pending",
+    render_model: { ...DEFAULT_PENDING_INTERACTION_RENDER_MODEL },
+  };
+}
+
+export function readPendingInteractionState(raw: unknown): PersistedPendingInteractionState | null {
+  const record = toRecord(raw);
+  return normalizePendingInteractionStateRecord(record.pending_interaction_state);
+}
+
+export function hasRenderablePendingInteractionState(
+  compare: PersistedPendingInteractionState | null | undefined
+): boolean {
+  if (!compare) return false;
+  const renderModel = compare.render_model;
+  if (!trimString(renderModel.feedback_reason_text)) return false;
+  if (renderModel.mode === "list") {
+    return (
+      renderModel.user_items.length > 0 ||
+      renderModel.suggestion_items.length > 0 ||
+      (renderModel.units || []).length > 0
+    );
+  }
+  return Boolean(trimString(renderModel.user_text) && trimString(renderModel.suggestion_text));
+}
+
+export function patchPendingInteractionState(
+  raw: unknown,
+  statePatch: Partial<PersistedPendingInteractionState> | null
+): Record<string, unknown> {
+  const next = { ...toRecord(raw) };
+  if (!statePatch) {
+    delete next.pending_interaction_state;
+    return next;
+  }
+  const current = readPendingInteractionState(next) || createPendingInteractionState({});
+  next.pending_interaction_state = createPendingInteractionState({
+    ...current,
+    ...statePatch,
+    ...(statePatch.render_model
+      ? {
+          render_model: {
+            ...current.render_model,
+            ...toRecord(statePatch.render_model),
+          } as PendingInteractionCompareRenderModel,
+        }
+      : {}),
+  });
+  return next;
+}
+
+export function clearPendingInteractionState(raw: unknown): Record<string, unknown> {
+  const next = { ...toRecord(raw) };
+  delete next.pending_interaction_state;
+  return next;
+}
+
 function uiStatusIsReady(status: UiStringsStatus): boolean {
   return status === "ready";
 }
@@ -315,6 +554,7 @@ export const CanvasStateZod = z.object({
   // last output (used for proceed triggers / transitions)
   // FIX (Zod v4): record needs key + value schema
   last_specialist_result: z.record(z.string(), z.any()),
+  pending_interaction_state: z.record(z.string(), z.any()),
 
   // stable stored lines / finals
   step_0_final: z.string(),
@@ -367,7 +607,7 @@ export type CanvasState = z.infer<typeof CanvasStateZod>;
  * Current state schema version
  * Bump when you change defaults/fields in a way that needs migration.
  */
-export const CURRENT_STATE_VERSION = "14";
+export const CURRENT_STATE_VERSION = "15";
 export const DEFAULT_VIEW_CONTRACT_VERSION = "v3_ssot_rigid";
 const SUPPORTED_STATE_VERSION_MAX = Number.parseInt(CURRENT_STATE_VERSION, 10);
 export const SUPPORTED_STATE_VERSIONS = Array.from(
@@ -419,6 +659,7 @@ export function getDefaultState(): CanvasState {
     idempotency_error_code: "",
 
     last_specialist_result: {},
+    pending_interaction_state: {},
 
     step_0_final: "",
     dream_final: "",
@@ -606,6 +847,10 @@ export function normalizeState(raw: unknown): CanvasState {
     typeof r.last_specialist_result === "object" && r.last_specialist_result !== null
       ? (r.last_specialist_result as Record<string, any>)
       : {};
+  const canonical_last_specialist_result = clearPendingInteractionState(last_specialist_result);
+  const pending_interaction_state =
+    normalizePendingInteractionStateRecord((r as any).pending_interaction_state) ||
+    {};
 
   const step_0_final = String(r.step_0_final ?? d.step_0_final);
   const dream_final = String(r.dream_final ?? d.dream_final);
@@ -815,7 +1060,8 @@ export function normalizeState(raw: unknown): CanvasState {
     idempotency_outcome,
     idempotency_error_code,
 
-    last_specialist_result,
+    last_specialist_result: canonical_last_specialist_result,
+    pending_interaction_state,
 
     step_0_final,
     dream_final,
@@ -870,6 +1116,19 @@ export function migrateState(raw: unknown): CanvasState {
     throw new Error(`Unsupported state_version: ${String(s.state_version || "")}`);
   }
 
+  // v14 -> v15: move ordinary pending compare persistence to top-level state.
+  if (s.state_version === "14") {
+    const last = toRecord((s as any).last_specialist_result);
+    const pending = readPendingInteractionState(s) || readPendingInteractionState(last);
+    s = {
+      ...s,
+      state_version: "15",
+      pending_interaction_state: pending || {},
+      last_specialist_result: clearPendingInteractionState(last),
+    };
+    return CanvasStateZod.parse(s);
+  }
+
   // v13 -> v14: persist Dream Builder top-cluster statement detail across requests.
   if (s.state_version === "13") {
     s = {
@@ -879,7 +1138,7 @@ export function migrateState(raw: unknown): CanvasState {
         ? (s as any).dream_top_cluster_details
         : [],
     };
-    return CanvasStateZod.parse(s);
+    return migrateState(s);
   }
 
   // v12 -> v13: persist Dream Builder resume context across requests.

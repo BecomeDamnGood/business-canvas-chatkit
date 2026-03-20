@@ -50,8 +50,6 @@ type RunStepRuntimePreflightPorts<TPayload extends Record<string, unknown>> = {
     clickedActionCodeForNoRepeat: string;
     transientTextSubmit: string;
     inputMode: string;
-    inferCurrentMenuForStep: (state: CanvasState, stepId: string) => string;
-    labelForActionInMenu: (menuId: string, actionCode: string) => string;
   }) => {
     state: CanvasState;
     actionCodeRaw: string;
@@ -122,8 +120,6 @@ export async function runStepRuntimePreflightLayer<TPayload extends Record<strin
       reason: "session_upgrade_required" | "contract_violation" | "invalid_state",
       params: { requestedLang: string }
     ) => CanvasState;
-    inferCurrentMenuForStep: (state: CanvasState, stepId: string) => string;
-    labelForActionInMenu: (menuId: string, actionCode: string) => string;
   };
   language: {
     normalizeLangCode: (raw: string) => string;
@@ -187,8 +183,6 @@ export async function runStepRuntimePreflightLayer<TPayload extends Record<strin
     clickedActionCodeForNoRepeat,
     transientTextSubmit: runtime.transientTextSubmit,
     inputMode: constants.inputMode,
-    inferCurrentMenuForStep: behavior.inferCurrentMenuForStep,
-    labelForActionInMenu: behavior.labelForActionInMenu,
   });
 
   state = actionCodePreflight.state;

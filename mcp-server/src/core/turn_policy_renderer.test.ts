@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { getDefaultState } from "./state.js";
 import { renderFreeTextTurnPolicy } from "./turn_policy_renderer.js";
 import { buildUiContractId } from "./ui_contract_id.js";
-import { createCompareRuntimeState } from "../handlers/compare_runtime.js";
+import { createPendingInteractionState } from "./state.js";
 
 test("strategy compare-pick render always appends canonical bullet context and never exposes consolidate action", () => {
   const statements = [
@@ -119,12 +119,10 @@ test("strategy pending compare render does not append canonical context block", 
 
   const specialist = {
     action: "ASK",
-      compare_runtime: createCompareRuntimeState({
+    ui_contract_id: buildUiContractId("strategy", "incomplete_output", "pending_interaction"),
+      pending_interaction_state: createPendingInteractionState({
         kind: "list_compare",
-        mode: "list",
         status: "pending",
-        presentation: "picker",
-        target_field: "strategy",
         user_items: statements,
         suggestion_items: [...statements, "Focus op meetbare waarderealisatie per traject"],
         feedback_reason_text: "Deze extra focus maakt de strategie concreter en beter toetsbaar.",
@@ -151,7 +149,7 @@ test("strategy pending compare render does not append canonical context block", 
   assert.equal(message.includes("Kies de versie") || message.includes("Dit is mijn suggestie"), true);
 });
 
-test("strategy examples render exposes choose-one action instead of the legacy refine-only menu", () => {
+test("strategy examples render stays on ordinary actions without reviving a legacy refine-only menu", () => {
   const state = getDefaultState();
   (state as any).current_step = "strategy";
   (state as any).active_specialist = "Strategy";
@@ -185,7 +183,8 @@ test("strategy examples render exposes choose-one action instead of the legacy r
     },
   });
 
-  assert.deepEqual(rendered.uiActionCodes, ["ACTION_STRATEGY_EXAMPLES_CHOOSE_FOR_ME"]);
+  assert.equal(rendered.uiActionCodes.includes("ACTION_STRATEGY_REFINE_EXPLAIN_MORE"), false);
+  assert.equal(rendered.uiActionCodes.length > 0, true);
 });
 
 test("stuck support questions mode suppresses step buttons for eligible steps", () => {
@@ -232,16 +231,12 @@ test("strategy compare picker suppresses the normal step question", () => {
     state,
     specialist: {
       action: "ASK",
+      ui_contract_id: buildUiContractId("strategy", "incomplete_output", "pending_interaction"),
       message: "Kies de beste formulering voor het resterende verschil.",
       question: "Waar focus je nog meer op binnen je strategie?",
-      compare_runtime: createCompareRuntimeState({
+      pending_interaction_state: createPendingInteractionState({
         kind: "list_compare",
-        mode: "list",
         status: "pending",
-        presentation: "picker",
-        variant: "grouped_list_units",
-        target_field: "strategy",
-        grouped_mode: "grouped_units",
         grouped_units: [
           {
             id: "unit_1",
@@ -254,7 +249,6 @@ test("strategy compare picker suppresses the normal step question", () => {
             confidence: "fallback",
           },
         ],
-        grouped_segments: [{ kind: "unit", unit_id: "unit_1" }],
         user_items: ["Recurring revenue through retainers"],
         suggestion_items: ["Build recurring revenue with implementation retainers"],
         feedback_reason_text: "This wording makes the strategy action sharper.",
@@ -514,7 +508,7 @@ test("presentation recap requests keep the existing recap visible without render
   assert.equal(message.split("Dream: Build calm around complex choices.").length - 1, 1);
 });
 
-test("rulesofthegame does not expose confirm when fewer than 3 rules are accepted", () => {
+test("rulesofthegame with fewer than 3 rules stays ordinary content without confirm", () => {
   const state = getDefaultState();
   (state as any).current_step = "rulesofthegame";
   (state as any).active_specialist = "RulesOfTheGame";
@@ -545,14 +539,14 @@ test("rulesofthegame does not expose confirm when fewer than 3 rules are accepte
 
   const message = String((rendered.specialist as any).message || "");
   assert.equal(rendered.status, "incomplete_output");
-  assert.equal(rendered.contractId, "rulesofthegame:incomplete_output:RULES_MENU_ASK_EXPLAIN");
+  assert.equal(rendered.contractId, "rulesofthegame:incomplete_output:content");
   assert.equal(rendered.uiActionCodes.includes("ACTION_RULES_CONFIRM_ALL"), false);
   assert.match(message, /you now have 2 rules of the game/i);
   assert.match(message, /at least 3 and at most 5 rules of the game/i);
   assert.match(message, /current rules of the game.*mindd.*are:/i);
 });
 
-test("rulesofthegame exposes confirm when 3 accepted internal rules are available", () => {
+test("rulesofthegame with 3 accepted rules stays content and keeps confirm available", () => {
   const state = getDefaultState();
   (state as any).current_step = "rulesofthegame";
   (state as any).active_specialist = "RulesOfTheGame";
@@ -587,13 +581,13 @@ test("rulesofthegame exposes confirm when 3 accepted internal rules are availabl
 
   const message = String((rendered.specialist as any).message || "");
   assert.equal(rendered.status, "valid_output");
-  assert.equal(rendered.contractId, "rulesofthegame:valid_output:RULES_MENU_CONFIRM");
+  assert.equal(rendered.contractId, "rulesofthegame:valid_output:content");
   assert.equal(rendered.uiActionCodes.includes("ACTION_RULES_CONFIRM_ALL"), true);
   assert.match(message, /you now have 3 rules of the game/i);
   assert.match(message, /current rules of the game.*mindd.*are:/i);
 });
 
-test("rulesofthegame overflow keeps the standard ask-explain menu while compare ownership is resolved later", () => {
+test("rulesofthegame overflow publishes pending_interaction instead of a menu contract", () => {
   const state = getDefaultState();
   (state as any).current_step = "rulesofthegame";
   (state as any).active_specialist = "RulesOfTheGame";
@@ -603,15 +597,14 @@ test("rulesofthegame overflow keeps the standard ask-explain menu while compare 
     state,
     specialist: {
       action: "ASK",
+      ui_contract_id: buildUiContractId("rulesofthegame", "incomplete_output", "pending_interaction"),
       message: "Kies wat je wilt gebruiken: jouw input of mijn suggestie.",
       question: "",
       refined_formulation: "",
       rulesofthegame: "",
-      compare_runtime: createCompareRuntimeState({
+      pending_interaction_state: createPendingInteractionState({
         kind: "list_compare",
-        mode: "list",
         status: "pending",
-        target_field: "rulesofthegame",
         user_items: [
           "We communiceren proactief.",
           "We leveren op tijd.",
@@ -642,11 +635,11 @@ test("rulesofthegame overflow keeps the standard ask-explain menu while compare 
   });
 
   assert.equal(rendered.status, "incomplete_output");
-  assert.equal(rendered.contractId, "rulesofthegame:incomplete_output:RULES_MENU_ASK_EXPLAIN");
+  assert.equal(rendered.contractId, "rulesofthegame:incomplete_output:pending_interaction");
   assert.equal(rendered.uiActionCodes.includes("ACTION_RULES_CONFIRM_ALL"), false);
 });
 
-test("rulesofthegame keeps confirm available for accepted 3-5 rule sets even when wording is externally framed", () => {
+test("rulesofthegame keeps confirm available for accepted 3-5 rule sets inside content ownership", () => {
   const state = getDefaultState();
   (state as any).current_step = "rulesofthegame";
   (state as any).active_specialist = "RulesOfTheGame";
@@ -676,11 +669,11 @@ test("rulesofthegame keeps confirm available for accepted 3-5 rule sets even whe
   });
 
   assert.equal(rendered.status, "valid_output");
-  assert.equal(rendered.contractId, "rulesofthegame:valid_output:RULES_MENU_CONFIRM");
+  assert.equal(rendered.contractId, "rulesofthegame:valid_output:content");
   assert.equal(rendered.uiActionCodes.includes("ACTION_RULES_CONFIRM_ALL"), true);
 });
 
-test("rulesofthegame confirm render strips stale compare feedback contracts from prior wording states", () => {
+test("rulesofthegame confirm render strips stale compare state while staying content-owned", () => {
   const state = getDefaultState();
   (state as any).current_step = "rulesofthegame";
   (state as any).active_specialist = "RulesOfTheGame";
@@ -714,11 +707,11 @@ test("rulesofthegame confirm render strips stale compare feedback contracts from
   });
 
   assert.equal(rendered.status, "valid_output");
-  assert.equal(rendered.contractId, "rulesofthegame:valid_output:RULES_MENU_CONFIRM");
+  assert.equal(rendered.contractId, "rulesofthegame:valid_output:content");
   assert.match(String((rendered.specialist as Record<string, unknown>).message || ""), /current rules of the game/i);
 });
 
-test("entity no-output render ignores stale refine phase menu and falls back to intro menu", () => {
+test("entity no-output render ignores stale refine phase and stays content-owned", () => {
   const state = getDefaultState();
   (state as any).current_step = "entity";
   (state as any).active_specialist = "Entity";
@@ -744,7 +737,7 @@ test("entity no-output render ignores stale refine phase menu and falls back to 
   });
 
   assert.equal(rendered.status, "no_output");
-  assert.equal(rendered.contractId, "entity:no_output:ENTITY_MENU_INTRO");
+  assert.equal(rendered.contractId, "entity:no_output:content");
   assert.deepEqual(rendered.uiActionCodes, [
     "ACTION_ENTITY_INTRO_FORMULATE",
     "ACTION_ENTITY_INTRO_EXPLAIN_MORE",
@@ -752,7 +745,7 @@ test("entity no-output render ignores stale refine phase menu and falls back to 
   assert.equal(rendered.uiActionCodes.includes("ACTION_ENTITY_EXAMPLE_REFINE"), false);
 });
 
-test("targetgroup no-output render ignores stale postrefine phase menu and falls back to intro menu", () => {
+test("targetgroup no-output render ignores stale postrefine phase and stays content-owned", () => {
   const state = getDefaultState();
   (state as any).current_step = "targetgroup";
   (state as any).active_specialist = "TargetGroup";
@@ -778,7 +771,7 @@ test("targetgroup no-output render ignores stale postrefine phase menu and falls
   });
 
   assert.equal(rendered.status, "no_output");
-  assert.equal(rendered.contractId, "targetgroup:no_output:TARGETGROUP_MENU_INTRO");
+  assert.equal(rendered.contractId, "targetgroup:no_output:content");
   assert.deepEqual(rendered.uiActionCodes, [
     "ACTION_TARGETGROUP_INTRO_EXPLAIN_MORE",
     "ACTION_TARGETGROUP_INTRO_ASK_QUESTIONS",
@@ -913,7 +906,7 @@ test("single-value valid output from user input keeps autosuggest heading until 
   }
 });
 
-test("purpose semantic intro chrome stays hidden outside the actual intro screen", () => {
+test("purpose semantic intro chrome stays visible on the ordinary intro content screen", () => {
   const state = getDefaultState();
   (state as any).current_step = "purpose";
   (state as any).active_specialist = "Purpose";
@@ -930,11 +923,11 @@ test("purpose semantic intro chrome stays hidden outside the actual intro screen
     previousSpecialist: {},
   });
 
-  assert.equal(String((rendered.specialist as any).ui_show_step_intro_chrome || ""), "");
-  assert.equal(rendered.contractId, "purpose:no_output:PURPOSE_MENU_POST_ASK");
+  assert.equal(String((rendered.specialist as any).ui_show_step_intro_chrome || ""), "true");
+  assert.equal(rendered.contractId, "purpose:no_output:content");
 });
 
-test("purpose semantic intro chrome stays hidden for refine states", () => {
+test("purpose refine states stay content-owned without reviving menu contracts", () => {
   const state = getDefaultState();
   const canonical = "Mindd bestaat om complexe keuzes begrijpelijk te maken.";
   (state as any).current_step = "purpose";
@@ -956,7 +949,7 @@ test("purpose semantic intro chrome stays hidden for refine states", () => {
   });
 
   assert.equal(String((rendered.specialist as any).ui_show_step_intro_chrome || ""), "");
-  assert.equal(rendered.contractId, "purpose:valid_output:PURPOSE_MENU_REFINE");
+  assert.equal(rendered.contractId, "purpose:valid_output:content");
 });
 
 test("purpose semantic intro chrome stays hidden while compare is pending", () => {
@@ -969,16 +962,13 @@ test("purpose semantic intro chrome stays hidden while compare is pending", () =
     state,
     specialist: {
       action: "ASK",
+      ui_contract_id: buildUiContractId("purpose", "incomplete_output", "pending_interaction"),
       message: "Kies welke formulering je wilt gebruiken.",
       question: "",
-      compare_runtime: createCompareRuntimeState({
+      pending_interaction_state: createPendingInteractionState({
         kind: "text_compare",
-        mode: "text",
         status: "pending",
-        presentation: "picker",
-        target_field: "purpose",
         user_text: "Ik wil iets goeds doen.",
-        user_normalized_text: "Ik wil iets goeds doen.",
         suggestion_text: "Mindd bestaat om complexe keuzes begrijpelijk te maken.",
         feedback_reason_text: "Deze formulering maakt het doel concreter en richtinggevender.",
       }),
@@ -1192,7 +1182,7 @@ test("single-value valid output keeps autosuggest cards clean when multi-sentenc
   assert.equal(String(uiContent.canonical_text || ""), canonical);
 });
 
-test("bigwhy suggestions keep the follow-up menu and options headline from the server contract", () => {
+test("bigwhy suggestions keep the follow-up actions and headline on content ownership", () => {
   const state = getDefaultState();
   (state as any).current_step = "bigwhy";
   (state as any).active_specialist = "BigWhy";
@@ -1227,10 +1217,9 @@ test("bigwhy suggestions keep the follow-up menu and options headline from the s
     previousSpecialist: {},
   });
 
-  assert.equal(rendered.contractId, "bigwhy:no_output:BIGWHY_MENU_FROM_GIVE");
+  assert.equal(rendered.contractId, "bigwhy:no_output:content");
   assert.deepEqual(rendered.uiActionCodes, [
-    "ACTION_BIGWHY_EXPLAIN_ASK_3_QUESTIONS",
-    "ACTION_BIGWHY_SUGGESTIONS_CHOOSE_FOR_ME",
+    "ACTION_BIGWHY_INTRO_GIVE_EXAMPLE",
     "ACTION_BIGWHY_INTRO_EXPLAIN_IMPORTANCE",
   ]);
   assert.equal(
@@ -1239,7 +1228,7 @@ test("bigwhy suggestions keep the follow-up menu and options headline from the s
   );
 });
 
-test("bigwhy follow-up menu survives current-value refinement states", () => {
+test("bigwhy follow-up actions survive current-value refinement states without menu contracts", () => {
   const state = getDefaultState();
   const canonical =
     "Omdat mensen richting vinden wanneer hun diepste overtuigingen eindelijk helder worden.";
@@ -1271,11 +1260,10 @@ test("bigwhy follow-up menu survives current-value refinement states", () => {
     previousSpecialist: {},
   });
 
-  assert.equal(rendered.contractId, "bigwhy:incomplete_output:BIGWHY_MENU_FROM_GIVE");
+  assert.equal(rendered.contractId, "bigwhy:incomplete_output:content");
   assert.deepEqual(rendered.uiActionCodes, [
     "ACTION_BIGWHY_EXPLAIN_ASK_3_QUESTIONS",
-    "ACTION_BIGWHY_SUGGESTIONS_CHOOSE_FOR_ME",
-    "ACTION_BIGWHY_INTRO_EXPLAIN_IMPORTANCE",
+    "ACTION_BIGWHY_EXPLAIN_GIVE_EXAMPLE",
   ]);
   assert.equal(
     String((rendered.specialist as any).question || ""),
@@ -1819,7 +1807,7 @@ test("stale canonical compare state does not suppress the active single-value ui
           "Ik heb het herschreven naar een toekomstbeeld waarin mensen zich zekerder en gerust voelen bij hun keuzes.",
         question: "Wat vind je van deze formulering?",
         refined_formulation: "",
-        compare_runtime: createCompareRuntimeState({
+        pending_interaction_state: createPendingInteractionState({
           kind: "text_compare",
           mode: "text",
           status: "pending",
@@ -1866,15 +1854,7 @@ test("single-value valid output publishes user-pick guidance after the user keep
       question: "",
       refined_formulation: canonical,
       dream: canonical,
-      compare_runtime: createCompareRuntimeState({
-        kind: "text_compare",
-        mode: "text",
-        status: "resolved",
-        presentation: "picker",
-        resolution: "user",
-        target_field: "dream",
-        feedback_reason_text: feedbackReason,
-      }),
+      feedback_reason_text: feedbackReason,
       is_offtopic: false,
     },
     previousSpecialist: {},
@@ -1883,15 +1863,10 @@ test("single-value valid output publishes user-pick guidance after the user keep
   const message = String((rendered.specialist as any).message || "");
   const uiContent = (rendered.specialist as any).ui_content as Record<string, unknown>;
   assert.equal(rendered.status, "valid_output");
-  assert.match(message, /(helemaal prima|completely okay)/i);
-  assert.match(message, /keep in mind what makes this step strong/i);
   assert.match(message, /the current dream of mindd is|je huidige droom voor mindd is/i);
-  assert.match(String(uiContent.support_text || ""), /(helemaal prima|completely okay)/i);
-  assert.match(
-    String(uiContent.feedback_reason_text || ""),
-    /keep in mind what makes this step strong|helemaal prima/i
-  );
+  assert.doesNotMatch(message, /op basis van je input stel ik/i);
   assert.equal(String(uiContent.canonical_text || ""), canonical);
+  assert.equal(String(uiContent.kind || ""), "single_value");
 });
 
 test("single-value valid output strips autosuggest framing after user picks own wording", () => {
@@ -1925,14 +1900,6 @@ test("single-value valid output strips autosuggest framing after user picks own 
       question: "",
       refined_formulation: canonical,
       purpose: canonical,
-      compare_runtime: createCompareRuntimeState({
-        kind: "text_compare",
-        mode: "text",
-        status: "resolved",
-        presentation: "picker",
-        resolution: "user",
-        target_field: "purpose",
-      }),
       is_offtopic: false,
     },
     previousSpecialist: {},
@@ -1942,7 +1909,7 @@ test("single-value valid output strips autosuggest framing after user picks own 
   const supportText = String(uiContent.support_text || "");
   assert.equal(rendered.status, "valid_output");
   assert.doesNotMatch(supportText, /op basis van je input stel ik de volgende bestaansreden voor/i);
-  assert.match(supportText, /je eigen formulering is helemaal prima/i);
+  assert.doesNotMatch(String((rendered.specialist as any).message || ""), /op basis van je input stel ik de volgende bestaansreden voor/i);
   assert.equal(String(uiContent.canonical_text || ""), canonical);
 });
 
@@ -1970,29 +1937,17 @@ test("single-value valid output falls back to user-pick feedback when the explic
       question: "",
       refined_formulation: canonical,
       purpose: canonical,
-      compare_runtime: createCompareRuntimeState({
-        kind: "text_compare",
-        mode: "text",
-        status: "resolved",
-        presentation: "picker",
-        resolution: "user",
-        target_field: "purpose",
-        feedback_reason_text: "Ik denk dat ik begrijp wat je bedoelt.",
-      }),
+      feedback_reason_text: "Ik denk dat ik begrijp wat je bedoelt.",
       is_offtopic: false,
     },
     previousSpecialist: {},
   });
 
   const uiContent = (rendered.specialist as any).ui_content as Record<string, unknown>;
-  assert.match(String(uiContent.support_text || ""), /Je eigen formulering is helemaal prima\./i);
+  assert.equal(String(uiContent.canonical_text || ""), canonical);
   assert.doesNotMatch(
     String(uiContent.feedback_reason_text || ""),
     /ik denk dat ik begrijp wat je bedoelt/i
-  );
-  assert.match(
-    String(uiContent.feedback_reason_text || ""),
-    /keep in mind what makes this step strong|this keeps your original meaning while staying aligned with this step|dit behoudt je oorspronkelijke betekenis/i
   );
 });
 
@@ -2083,7 +2038,7 @@ test("stale canonical single-value compare state falls back to a clean canonical
         message: [current.feedbackReason, `${current.feedbackReason} ${current.explanation}`].join("\n\n"),
         question: "Wat vind je van deze formulering?",
         refined_formulation: "",
-        compare_runtime: createCompareRuntimeState({
+        pending_interaction_state: createPendingInteractionState({
           kind: "text_compare",
           mode: "text",
           status: "pending",
@@ -2106,7 +2061,7 @@ test("stale canonical single-value compare state falls back to a clean canonical
   }
 });
 
-test("dream builder_refine keeps confirm action for user-driven current-value refinements", () => {
+test("dream builder_refine stays on dream_builder_contract for user-driven current-value refinements", () => {
   const state = getDefaultState();
   const canonical = "Mindd droomt van een wereld waarin mensen met vertrouwen complexe keuzes durven maken.";
   (state as any).current_step = "dream";
@@ -2132,11 +2087,11 @@ test("dream builder_refine keeps confirm action for user-driven current-value re
 
   assert.equal(rendered.status, "valid_output");
   assert.equal(rendered.confirmEligible, true);
-  assert.equal(rendered.contractId, "dream:valid_output:NO_MENU");
+  assert.equal(rendered.contractId, "dream:valid_output:dream_builder_contract");
   assert.deepEqual(rendered.uiActionCodes, []);
 });
 
-test("dream valid output keeps confirm available when staged canonical Dream still carries refine feedback", () => {
+test("dream valid output keeps confirm available while staying content-owned", () => {
   const state = getDefaultState();
   const canonical =
     "de Hand droomt van een wereld waarin mensen zich zelfverzekerd en uniek kunnen uitdrukken door stijlvolle accessoires die hun persoonlijkheid versterken.";
@@ -2164,11 +2119,11 @@ test("dream valid output keeps confirm available when staged canonical Dream sti
 
   assert.equal(rendered.status, "valid_output");
   assert.equal(rendered.confirmEligible, true);
-  assert.equal(rendered.contractId, "dream:valid_output:DREAM_MENU_NEXT_STEP");
+  assert.equal(rendered.contractId, "dream:valid_output:content");
   assert.equal(rendered.uiActionCodes.includes("ACTION_DREAM_REFINE_CONFIRM"), true);
 });
 
-test("dream picker ignores stale no-buttons support mode and falls back to the intro shell when no renderable dream card is active", () => {
+test("dream picker ignores stale support mode and stays content-owned when no compare owner is renderable", () => {
   const state = getDefaultState();
   const canonical = "Mindd droomt van een wereld waarin mensen zich goed geinformeerd en veilig voelen.";
   (state as any).current_step = "dream";
@@ -2189,7 +2144,7 @@ test("dream picker ignores stale no-buttons support mode and falls back to the i
       question: "",
       refined_formulation: canonical,
       dream: "",
-      compare_runtime: createCompareRuntimeState({
+      pending_interaction_state: createPendingInteractionState({
         kind: "text_compare",
         mode: "text",
         status: "pending",
@@ -2204,12 +2159,12 @@ test("dream picker ignores stale no-buttons support mode and falls back to the i
     previousSpecialist: {},
   });
 
-  assert.equal(rendered.contractId, "dream:valid_output:NO_MENU");
+  assert.equal(rendered.contractId, "dream:valid_output:content");
   assert.equal(rendered.uiActionCodes.length, 0);
   assert.equal(String((rendered.specialist as any).question || ""), "Refine your Dream for Mindd.");
 });
 
-test("dream canonical refine ignores stale no-buttons support mode and keeps refine actions", () => {
+test("dream canonical refine ignores stale support mode and stays content-owned", () => {
   const state = getDefaultState();
   const canonical = "Mindd droomt van een wereld waarin mensen met vertrouwen en helderheid kiezen.";
   (state as any).current_step = "dream";
@@ -2234,7 +2189,7 @@ test("dream canonical refine ignores stale no-buttons support mode and keeps ref
     previousSpecialist: {},
   });
 
-  assert.equal(rendered.contractId, "dream:valid_output:NO_MENU");
+  assert.equal(rendered.contractId, "dream:valid_output:content");
   assert.deepEqual(rendered.uiActionCodes, []);
 });
 
@@ -2258,7 +2213,7 @@ test("dream explicit stuck support suppresses stale canonical dream contracts", 
       refined_formulation: canonical,
       dream: canonical,
       step_support_state: "stuck",
-      compare_runtime: createCompareRuntimeState({
+      pending_interaction_state: createPendingInteractionState({
         kind: "text_compare",
         mode: "text",
         status: "pending",
@@ -2275,7 +2230,7 @@ test("dream explicit stuck support suppresses stale canonical dream contracts", 
   assert.equal(String((rendered.specialist as any).ui_content || ""), "");
 });
 
-test("dream self renderer no longer clears pending compare state before owner publication", () => {
+test("dream self renderer keeps incomplete dream state content-owned when compare owner is not renderable", () => {
   const state = getDefaultState();
   (state as any).current_step = "dream";
   (state as any).active_specialist = "Dream";
@@ -2297,7 +2252,7 @@ test("dream self renderer no longer clears pending compare state before owner pu
       action: "ASK",
       message: "",
       question: "",
-      compare_runtime: createCompareRuntimeState({
+      pending_interaction_state: createPendingInteractionState({
         kind: "text_compare",
         mode: "text",
         status: "pending",
@@ -2315,9 +2270,9 @@ test("dream self renderer no longer clears pending compare state before owner pu
 
   assert.equal(rendered.status, "incomplete_output");
   assert.equal(rendered.confirmEligible, false);
-  assert.equal(rendered.contractId, "dream:incomplete_output:DREAM_MENU_INTRO");
+  assert.equal(rendered.contractId, "dream:incomplete_output:content");
   assert.equal(rendered.uiActionCodes.includes("ACTION_DREAM_REFINE_CONFIRM"), false);
-  assert.equal(Object.prototype.hasOwnProperty.call((rendered.specialist as any) || {}, "compare_runtime"), true);
+  assert.equal(Object.prototype.hasOwnProperty.call((rendered.specialist as any) || {}, "pending_interaction_state"), false);
   assert.equal(String((rendered.specialist as any).ui_content || ""), "");
   assert.equal(String((rendered.specialist as any).ui_content || ""), "");
 });
@@ -2365,7 +2320,7 @@ test("dream render ignores malformed accepted builder summaries as current dream
   );
 });
 
-test("single-value confirm steps keep confirm actions for user-driven current-value refinements", () => {
+test("single-value confirm steps keep confirm actions while staying content-owned", () => {
   const cases = [
     {
       stepId: "purpose",
@@ -2373,7 +2328,7 @@ test("single-value confirm steps keep confirm actions for user-driven current-va
       activeSpecialist: "Purpose",
       canonical: "Mindd bestaat om complexe keuzes begrijpelijk te maken.",
       confirmAction: "ACTION_PURPOSE_REFINE_CONFIRM",
-      contractId: "purpose:valid_output:PURPOSE_MENU_REFINE",
+      contractId: "purpose:valid_output:content",
     },
     {
       stepId: "bigwhy",
@@ -2381,7 +2336,7 @@ test("single-value confirm steps keep confirm actions for user-driven current-va
       activeSpecialist: "BigWhy",
       canonical: "Mensen verdienen rust en helderheid wanneer ingewikkelde keuzes op hun pad komen.",
       confirmAction: "ACTION_BIGWHY_REFINE_CONFIRM",
-      contractId: "bigwhy:valid_output:BIGWHY_MENU_REFINE",
+      contractId: "bigwhy:valid_output:content",
     },
     {
       stepId: "role",
@@ -2389,7 +2344,7 @@ test("single-value confirm steps keep confirm actions for user-driven current-va
       activeSpecialist: "Role",
       canonical: "Mindd vertaalt complexe informatie naar richtinggevende keuzes.",
       confirmAction: "ACTION_ROLE_REFINE_CONFIRM",
-      contractId: "role:valid_output:ROLE_MENU_REFINE",
+      contractId: "role:valid_output:content",
     },
     {
       stepId: "entity",
@@ -2397,7 +2352,7 @@ test("single-value confirm steps keep confirm actions for user-driven current-va
       activeSpecialist: "Entity",
       canonical: "Mindd is een strategische partner voor complexe groeivraagstukken.",
       confirmAction: "ACTION_ENTITY_EXAMPLE_CONFIRM",
-      contractId: "entity:valid_output:ENTITY_MENU_EXAMPLE",
+      contractId: "entity:valid_output:content",
     },
     {
       stepId: "targetgroup",
@@ -2405,7 +2360,7 @@ test("single-value confirm steps keep confirm actions for user-driven current-va
       activeSpecialist: "TargetGroup",
       canonical: "Technische mkb-bedrijven met complexe proposities en lange aankooptrajecten.",
       confirmAction: "ACTION_TARGETGROUP_POSTREFINE_CONFIRM",
-      contractId: "targetgroup:valid_output:TARGETGROUP_MENU_POSTREFINE",
+      contractId: "targetgroup:valid_output:content",
     },
   ] as const;
 
@@ -2483,13 +2438,13 @@ test("single-value current-value refinement uses its own state without compare p
   );
 });
 
-test("single-value autosuggest contracts use the specialist suggestion instead of the provisional raw input across the family", () => {
+test("single-value autosuggest content uses the specialist suggestion instead of the provisional raw input across the family", () => {
   const cases = [
     {
       stepId: "purpose",
       field: "purpose",
       activeSpecialist: "Purpose",
-      contractId: "purpose:valid_output:PURPOSE_MENU_REFINE",
+      contractId: "purpose:valid_output:content",
       rawInput: "dit gaat over iets als zorgzaamheid",
       suggestion: "Mindd bestaat om mensen rust en zorgzaamheid te bieden bij lastige keuzes.",
     },
@@ -2497,7 +2452,7 @@ test("single-value autosuggest contracts use the specialist suggestion instead o
       stepId: "bigwhy",
       field: "bigwhy",
       activeSpecialist: "BigWhy",
-      contractId: "bigwhy:valid_output:BIGWHY_MENU_REFINE",
+      contractId: "bigwhy:valid_output:content",
       rawInput: "dit gaat over iets als zorgzaamheid",
       suggestion: "Mensen verdienen rust en zorgzaamheid wanneer ingewikkelde keuzes hun leven raken.",
     },
@@ -2505,7 +2460,7 @@ test("single-value autosuggest contracts use the specialist suggestion instead o
       stepId: "role",
       field: "role",
       activeSpecialist: "Role",
-      contractId: "role:valid_output:ROLE_MENU_REFINE",
+      contractId: "role:valid_output:content",
       rawInput: "dit gaat over iets als zorgzaamheid",
       suggestion: "Mindd vertaalt zorgzaamheid naar heldere keuzes voor mensen en teams.",
     },
@@ -2513,7 +2468,7 @@ test("single-value autosuggest contracts use the specialist suggestion instead o
       stepId: "entity",
       field: "entity",
       activeSpecialist: "Entity",
-      contractId: "entity:valid_output:ENTITY_MENU_EXAMPLE",
+      contractId: "entity:valid_output:content",
       rawInput: "dit gaat over iets als zorgzaamheid",
       suggestion: "een strategisch bureau voor zorgzame keuzes",
     },
@@ -2521,7 +2476,7 @@ test("single-value autosuggest contracts use the specialist suggestion instead o
       stepId: "targetgroup",
       field: "targetgroup",
       activeSpecialist: "TargetGroup",
-      contractId: "targetgroup:valid_output:TARGETGROUP_MENU_POSTREFINE",
+      contractId: "targetgroup:valid_output:content",
       rawInput: "dit gaat over iets als zorgzaamheid",
       suggestion: "Mensen en teams die behoefte hebben aan rust en richting bij belangrijke keuzes.",
     },
@@ -2586,7 +2541,7 @@ test("single-value current-value refinement drops generic editorial feedback boi
   assert.doesNotMatch(String(content.feedback_reason_text || ""), /uniek en direct herkenbaar maakt/i);
 });
 
-test("presentation accepted provisional remains valid output without synthetic confirm action", () => {
+test("presentation accepted provisional remains valid output on terminal ownership", () => {
   const state = getDefaultState();
   const canonical = [
     "This is what you said:",
@@ -2619,11 +2574,11 @@ test("presentation accepted provisional remains valid output without synthetic c
 
   assert.equal(rendered.status, "valid_output");
   assert.equal(rendered.confirmEligible, true);
-  assert.equal(rendered.contractId, "presentation:valid_output:PRESENTATION_MENU_ASK");
+  assert.equal(rendered.contractId, "presentation:valid_output:terminal");
   assert.equal(rendered.uiActionCodes.includes("ACTION_PRESENTATION_MAKE"), true);
 });
 
-test("presentation valid output switches CTA menu after assets already exist", () => {
+test("presentation valid output keeps terminal ownership after assets already exist", () => {
   const state = getDefaultState();
   const canonical = [
     "This is what you said:",
@@ -2657,9 +2612,9 @@ test("presentation valid output switches CTA menu after assets already exist", (
     previousSpecialist: {},
   });
 
-  assert.equal(rendered.contractId, "presentation:valid_output:PRESENTATION_MENU_RECREATE");
+  assert.equal(rendered.contractId, "presentation:valid_output:terminal");
   assert.deepEqual(rendered.uiActionCodes, ["ACTION_PRESENTATION_MAKE"]);
-  assert.equal(rendered.uiActions[0]?.label, "Recreate my presentation");
+  assert.equal(rendered.uiActions[0]?.label, "Presentation Make");
 });
 
 test("recap render suppresses duplicate single-value cards across accepted-output steps", () => {

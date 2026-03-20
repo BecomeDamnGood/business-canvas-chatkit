@@ -1,5 +1,11 @@
 import { ACTIONCODE_REGISTRY } from "./actioncode_registry.js";
-import { getFinalFieldForStepId, type CanvasState } from "./state.js";
+import {
+  clearPendingInteractionState,
+  hasRenderablePendingInteractionState,
+  readPendingInteractionState,
+  getFinalFieldForStepId,
+  type CanvasState,
+} from "./state.js";
 import { currentTurnSupportMode } from "./stuck_support.js";
 import { actionCodeToIntent } from "./actioncode_intent.js";
 import type {
@@ -37,11 +43,6 @@ import {
 } from "../steps/rulesofthegame_runtime_policy.js";
 import { isStageableDreamCandidate } from "../steps/dream_runtime_policy.js";
 import { isStructuredPresentationRecap } from "../handlers/run_step_presentation_recap.js";
-import {
-  attachCompareRuntime,
-  hasRenderablePendingCompareState,
-  readCompareRuntime,
-} from "../handlers/compare_runtime.js";
 import {
   formatStepSectionTitle,
   hasGroupedCompareListSemantics,
@@ -190,8 +191,6 @@ function normalizeChoiceLine(value: string): string {
     .trim();
 }
 
-const hasRenderablePendingCompare = hasRenderablePendingCompareState;
-
 function stripStructuredChoiceLinesForPrompt(promptRaw: string, state: CanvasState): string {
   const blockedSet = new Set(
     [
@@ -267,7 +266,7 @@ function isSemanticPurposeIntroVisibleState(params: {
   return true;
 }
 
-function renderModeForStep(state: CanvasState, stepId: string): "menu" | "no_buttons" {
+function renderModeForStep(state: CanvasState, stepId: string): "actions" | "no_buttons" {
   const supportMode = currentTurnSupportMode({
     state,
     stepId,
@@ -280,7 +279,7 @@ function renderModeForStep(state: CanvasState, stepId: string): "menu" | "no_but
     (state as any).__ui_render_mode_by_step && typeof (state as any).__ui_render_mode_by_step === "object"
       ? ((state as any).__ui_render_mode_by_step as Record<string, unknown>)
       : {};
-  return String(phaseMap[stepId] || "").trim() === "no_buttons" ? "no_buttons" : "menu";
+  return String(phaseMap[stepId] || "").trim() === "no_buttons" ? "no_buttons" : "actions";
 }
 
 function resolveDreamSelfViewVariant(params: {
@@ -1339,8 +1338,8 @@ function computeStatus(
 
   if (stepId === "rulesofthegame") {
     const comparePending =
-      hasRenderablePendingCompare(readCompareRuntime(specialist)) ||
-      hasRenderablePendingCompare(readCompareRuntime(prev));
+      hasPendingInteractionOwnerOrRenderableCompare(state, specialist, stepId) ||
+      hasPendingInteractionOwnerOrRenderableCompare(state, prev, stepId);
     const rulesGate = evaluateRulesRuntimeGate({
       acceptedOutput,
       acceptedValue,
@@ -1492,6 +1491,21 @@ function labelsForActionCodes(actionCodes: string[], state: CanvasState): string
   });
 }
 
+function hasPendingInteractionOwnerOrRenderableCompare(
+  state: CanvasState,
+  specialist: Record<string, unknown> | null | undefined,
+  stepId: string
+): boolean {
+  const record =
+    specialist && typeof specialist === "object"
+      ? (specialist as Record<string, unknown>)
+      : {};
+  return (
+    parseUiContractOwnerForStep((record as any).ui_contract_id, stepId) === "pending_interaction" ||
+    hasRenderablePendingInteractionState(readPendingInteractionState(state))
+  );
+}
+
 function labelKeysForActionCodes(actionCodes: string[]): string[] {
   if (actionCodes.length <= 0) return [];
   return actionCodes.map((actionCode) => labelKeyForActionCode(actionCode));
@@ -1504,7 +1518,7 @@ function resolveActionSurface(params: {
   state: CanvasState;
   specialist: Record<string, unknown>;
   prev: Record<string, unknown>;
-  renderModeOverride?: "menu" | "no_buttons";
+  renderModeOverride?: "actions" | "no_buttons";
 }): { actionCodes: string[]; labels: string[]; labelKeys: string[] } {
   const { stepId, status, confirmEligible, state, specialist, prev, renderModeOverride } = params;
   if ((renderModeOverride || renderModeForStep(state, stepId)) === "no_buttons") {
@@ -1581,10 +1595,10 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     effectiveConfirmEligible = false;
   }
 
-  const specialistForDisplay: Record<string, unknown> = attachCompareRuntime(specialist);
+  const specialistForDisplay: Record<string, unknown> = clearPendingInteractionState(specialist);
   const recapRequested = isRecapRequestedSpecialist(specialistForDisplay);
-  const compareState = readCompareRuntime(specialistForDisplay);
-  const comparePending = hasRenderablePendingCompare(compareState);
+  const comparePending =
+    hasPendingInteractionOwnerOrRenderableCompare(state, specialistForDisplay, stepId);
   if (isOfftopic && stepId !== "step_0") {
     const field = stepId === "rulesofthegame" ? "rulesofthegame" : stepId;
     const finalField = getFinalFieldForStepId(stepId);
@@ -1794,7 +1808,7 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     dreamSelfViewVariant === "stuck_support"
       ? "no_buttons"
       : dreamSelfViewVariant === "picker"
-        ? "menu"
+        ? "actions"
         : undefined;
   const normalizedComparePending =
     dreamSelfViewVariant === "stuck_support" ? false : comparePending;
@@ -1825,7 +1839,6 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     safeLabels = retainedIndices.map((idx) => safeLabels[idx]);
     safeLabelKeys = retainedIndices.map((idx) => safeLabelKeys[idx]);
   }
-  const compareSelected = String(compareState?.resolution || "").trim();
   const comparePresentation: "picker" = "picker";
   const showStepIntroChrome =
     stepId === "purpose"
@@ -1875,21 +1888,12 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     rawReason: explicitFeedbackReasonForDisplay,
     resolveString: (key, fallback = "") => uiStringFromState(state, key, uiDefaultString(key, fallback)),
   });
-  const isUserPickedCompare =
-    String(compareState?.resolution || "").trim() === "user";
   const rawFeedbackReasonForDisplay = sanitizedExplicitFeedbackReasonForDisplay;
-  const feedbackReasonForDisplay =
-    isUserPickedCompare
-      ? formatUserPickFeedbackForDisplay({
-          stepId,
-          rawReason: rawFeedbackReasonForDisplay,
-          resolveString: (key, fallback = "") => uiStringFromState(state, key, uiDefaultString(key, fallback)),
-        })
-      : formatCompareFeedbackForDisplay({
-          stepId,
-          rawReason: rawFeedbackReasonForDisplay,
-          resolveString: (key, fallback = "") => uiStringFromState(state, key, uiDefaultString(key, fallback)),
-        });
+  const feedbackReasonForDisplay = formatCompareFeedbackForDisplay({
+    stepId,
+    rawReason: rawFeedbackReasonForDisplay,
+    resolveString: (key, fallback = "") => uiStringFromState(state, key, uiDefaultString(key, fallback)),
+  });
   const effectiveFeedbackReasonForDisplay = feedbackReasonForDisplay;
   const effectiveRawFeedbackReasonForDisplay = rawFeedbackReasonForDisplay;
   const rawMessageForSemanticContracts = String(message || "").trim();
@@ -1926,13 +1930,6 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
       ""
     )
       : message;
-  if (compareSelected === "user") {
-    messageForDisplay = stripSuggestionFramingForUserPick({
-      stepId,
-      state,
-      message: messageForDisplay,
-    });
-  }
   const useSingleValueConfirmSsot =
     shouldEnforceConfirmVisibility &&
     Boolean(canonicalAcceptedValue) &&
@@ -2014,7 +2011,7 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
   return {
     status: effectiveUiStatus,
     confirmEligible: effectiveConfirmEligible,
-    specialist: attachCompareRuntime(nextSpecialist),
+    specialist: nextSpecialist,
     uiActionCodes: safeActionCodes,
     uiActions: buildRenderedActions(safeActionCodes, safeLabels, safeLabelKeys),
     contractId,

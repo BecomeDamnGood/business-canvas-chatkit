@@ -49,7 +49,7 @@ import {
   UI_CONTRACT_VERSION,
   buildContractId,
   actionCodeToIntent,
-  UI_STRINGS_WITH_MENU_KEYS,
+  UI_STRINGS_DEFAULT,
 } from "./run_step_dependencies.js";
 import {
   buildFailClosedState,
@@ -82,7 +82,7 @@ import {
   runStepRuntimeSpecialRoutesLayer,
   runStepRuntimePostPipelineLayer,
 } from "./run_step_modules.js";
-import { clearCompareRuntime } from "./compare_runtime.js";
+import { clearPendingInteractionState } from "../core/state.js";
 import { pickDualChoiceSuggestion } from "./run_step_compare_heuristics_defaults.js";
 import {
   createRunStepI18nRuntimeHelpers,
@@ -143,7 +143,6 @@ import {
   envFlagEnabled,
   getDreamRuntimeMode,
   isForceEnglishLanguageMode,
-  isMenuLabelKeysV1Enabled,
   isUiBootstrapEventParityV1Enabled,
   isUiBootstrapPollActionV1Enabled,
   isUiBootstrapStateV1Enabled,
@@ -304,7 +303,7 @@ const {
 } = runtimeDreamHelpers;
 
 function uiDefaultString(key: string, fallback = ""): string {
-  const candidate = String(UI_STRINGS_WITH_MENU_KEYS[key] || "").trim();
+  const candidate = String(UI_STRINGS_DEFAULT[key] || "").trim();
   if (candidate) return candidate;
   return String(fallback || "").trim();
 }
@@ -326,10 +325,6 @@ const WIDGET_ESCAPE_ACTION_CODE_BAN = new Set<string>(
     .filter((code) => /_ESCAPE_/.test(code))
     .filter((code) => !DREAM_EXPLAINER_ESCAPE_ACTION_CODES.has(code))
 );
-
-function isWidgetSuppressedEscapeMenuId(_menuId: string): boolean {
-  return false;
-}
 
 function hasEscapeLabelPhrase(input: string): boolean {
   const text = String(input || "");
@@ -371,7 +366,7 @@ function sanitizeEscapeInWidget(specialist: unknown): Record<string, unknown> {
       .join("\n")
       .trim();
   }
-  Object.assign(safe, clearCompareRuntime(safe));
+  Object.assign(safe, clearPendingInteractionState(safe));
   safe.feedback_mode = "none";
   safe.feedback_reason_text = "";
   return safe;
@@ -426,12 +421,9 @@ const {
   promptFallbackForInteractiveAsk,
   enforcePromptInvariants,
 } = runStepRuntimeTextUiHelpers;
-const labelKeysForMenuActionCodes = labelKeysForActionCodes;
-const buildRenderedActionsFromMenu = buildRenderedActionsFromActionCodes;
 
 const runtimeTextHelpers = createRunStepRuntimeTextHelpers({
   dreamStepId: DREAM_STEP_ID,
-  parseMenuFromContractIdForStep: () => "",
   canonicalizeComparableText,
   compareSelectionMessage,
   mergeListItems: (userItems, suggestionItems) => mergeListItems(userItems, suggestionItems),
@@ -588,10 +580,8 @@ const uiPayloadHelpers = createRunStepUiPayloadHelpers({
   buildRenderedActionsFromActionCodes,
   buildQuestionTextFromActions,
   sanitizeEscapeInWidget,
-  isWidgetSuppressedEscapeMenuId,
   enforcePromptInvariants,
   isUiI18nV2Enabled,
-  isMenuLabelKeysV1Enabled,
   isUiI18nV3LangBootstrapEnabled,
   isUiLocaleMetaV1Enabled,
   isUiLangSourceResolverV1Enabled,
@@ -723,7 +713,6 @@ export {
   classifyPendingCompareTextIntent,
 };
 
-const resolveActionCodeMenuTransition = uiPayloadHelpers.resolveActionCodeMenuTransition;
 
 const SPECIALIST_INSTRUCTION_BLOCKS = {
   languageLockInstruction: LANGUAGE_LOCK_INSTRUCTION,
@@ -928,7 +917,7 @@ const runStepRuntimeExecuteDeps = {
   resolveModelForCall, shouldLogLocalDevDiagnostics, isUiTranslationFastModelV1Enabled,
   isUiI18nV3LangBootstrapEnabled, isUiStartTriggerLangResolveV1Enabled, isInteractiveLocaleReady,
   normalizeLangCode, ensureUiStringsForState, resolveLanguageForTurn,
-  labelKeysForMenuActionCodes, bumpUiI18nCounter, turnUsageFromAccumulator, getDreamRuntimeMode,
+  labelKeysForActionCodes, bumpUiI18nCounter, turnUsageFromAccumulator, getDreamRuntimeMode,
   DREAM_STEP_ID, DREAM_EXPLAINER_SPECIALIST, buildTextForWidget, pickPrompt, renderFreeTextTurnPolicy,
   validateRenderedContractOrRecover, applyUiPhaseByStep, runStepRuntimePreflightLayer, STEP_0_SPECIALIST,
   isUiLocaleReadyGateV1Enabled, hasUsableSpecialistForRetry, buildTransientFallbackSpecialist,

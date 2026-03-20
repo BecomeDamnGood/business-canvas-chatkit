@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { finalizeResponseContractInternals } from "./turn_contract.js";
-import { createCompareRuntimeState } from "./compare_runtime.js";
+import { createPendingInteractionState } from "../core/state.js";
 import {
   readCompareContractFailureReason,
   shouldSuppressMainCardForCompare,
@@ -16,14 +16,54 @@ type Fixture = {
 };
 
 function compareRuntime(overrides: Record<string, unknown>) {
-  return createCompareRuntimeState(overrides as any);
+  const kind = String(overrides.kind || "").trim() === "list_compare" ? "list_compare" : "text_compare";
+  return createPendingInteractionState({
+    id: String(overrides.id || ""),
+    kind,
+    render_model: {
+      mode: kind === "list_compare" ? "list" : "text",
+      instruction: String(overrides.compare_instruction || overrides.instruction || ""),
+      feedback_reason_text: String(overrides.feedback_reason_text || ""),
+      user_label: String(overrides.user_label || ""),
+      suggestion_label: String(overrides.suggestion_label || ""),
+      user_text: String(overrides.user_text || ""),
+      suggestion_text: String(overrides.suggestion_text || ""),
+      user_items: Array.isArray(overrides.user_items) ? overrides.user_items : [],
+      suggestion_items: Array.isArray(overrides.suggestion_items) ? overrides.suggestion_items : [],
+      ...(Array.isArray(overrides.units) ? { units: overrides.units as any } : {}),
+      ...(typeof overrides.retained_heading !== "undefined"
+        ? { retained_heading: String(overrides.retained_heading || "") }
+        : {}),
+      ...(Array.isArray(overrides.retained_items) ? { retained_items: overrides.retained_items as any } : {}),
+    },
+  } as any);
 }
 
 function finalizeFixture(response: Record<string, unknown>): Record<string, unknown> {
-  return finalizeResponseContractInternals(JSON.parse(JSON.stringify(response)) as any, {
+  const cloned = JSON.parse(JSON.stringify(response)) as Record<string, unknown>;
+  const specialist =
+    cloned.specialist && typeof cloned.specialist === "object"
+      ? (cloned.specialist as Record<string, unknown>)
+      : {};
+  const state =
+    cloned.state && typeof cloned.state === "object"
+      ? (cloned.state as Record<string, unknown>)
+      : {};
+  const pendingInteractionState =
+    state.pending_interaction_state ||
+    specialist.pending_interaction_state ||
+    {};
+  cloned.state = {
+    ...state,
+    pending_interaction_state: pendingInteractionState,
+  };
+  if (specialist.pending_interaction_state) {
+    const { pending_interaction_state: _pendingInteractionState, ...rest } = specialist;
+    cloned.specialist = rest;
+  }
+  return finalizeResponseContractInternals(cloned as any, {
     applyUiClientActionContract: () => {},
-    parseMenuFromContractIdForStep: () => "",
-    labelKeysForMenuActionCodes: () => [],
+    labelKeysForActionCodes: () => [],
     onUiParityError: () => {},
     attachRegistryPayload: (payload) => payload,
   }) as Record<string, unknown>;
@@ -51,7 +91,7 @@ function extractProof(result: Record<string, unknown>): Record<string, unknown> 
   const actionContract = toRecord(ui.action_contract);
   const content = toRecord(ui.content);
   const compareFailureReason = readCompareContractFailureReason(ui);
-  const pendingCompareActive = shouldSuppressMainCardForCompare(ui, String(view.variant || ""));
+  const pendingCompareActive = shouldSuppressMainCardForCompare(ui);
   const dreamBuilderCompareActive =
     String(dreamBuilderContract.phase || "").trim() === "compare" &&
     (
@@ -119,13 +159,11 @@ const fixtures: Fixture[] = [
       text: "",
       prompt: "",
       specialist: {
-        compare_runtime: compareRuntime({
+        pending_interaction_state: compareRuntime({
           kind: "text_compare",
-          mode: "text",
           status: "pending",
-          presentation: "picker",
           feedback_reason_text: "Je huidige droom is nog te algemeen en mist concreet menselijk effect.",
-          user_normalized_text: "Wij willen bedrijven helpen groeien.",
+          user_text: "Wij willen bedrijven helpen groeien.",
           suggestion_text: "Mindd droomt van bedrijven die vanuit betekenis echte verandering brengen.",
         }),
         compare_instruction: "Choose the version that fits best.",
@@ -159,16 +197,14 @@ const fixtures: Fixture[] = [
       text: "",
       prompt: "",
       specialist: {
-        compare_runtime: compareRuntime({
+        pending_interaction_state: compareRuntime({
           kind: "text_compare",
-          mode: "text",
           status: "pending",
-          presentation: "picker",
           feedback_reason_text:
             "Je input benoemt het probleem van verkeerde voorlichting, maar een Droom vraagt om een positief toekomstbeeld met duidelijk menselijk effect.",
           user_label: "Dit is jouw input:",
           suggestion_label: "Dit zou mijn suggestie zijn:",
-          user_normalized_text: "Dit gaat over dat mensen het beu zijn om verkeerd voorgelicht te worden.",
+          user_text: "Dit gaat over dat mensen het beu zijn om verkeerd voorgelicht te worden.",
           suggestion_text:
             "Mindd droomt van een wereld waarin mensen zich zeker voelen omdat ze eerlijk geinformeerd worden.",
         }),
@@ -241,11 +277,9 @@ const fixtures: Fixture[] = [
       text: "",
       prompt: "",
       specialist: {
-        compare_runtime: compareRuntime({
+        pending_interaction_state: compareRuntime({
           kind: "list_compare",
-          mode: "list",
           status: "pending",
-          presentation: "picker",
           feedback_reason_text: "Ik heb de resterende strategische keuze scherper gemaakt.",
           user_label: "Jouw compacte formulering",
           suggestion_label: "Mijn suggestie",
@@ -280,15 +314,13 @@ const fixtures: Fixture[] = [
       text: "",
       prompt: "",
       specialist: {
-        compare_runtime: compareRuntime({
+        pending_interaction_state: compareRuntime({
           kind: "text_compare",
-          mode: "text",
           status: "pending",
-          presentation: "picker",
           feedback_reason_text: "Je huidige formulering blijft te breed en laat de bijdrage nog niet duidelijk zien.",
           user_label: "Your input",
           suggestion_label: "My suggestion",
-          user_normalized_text: "We want to do something good.",
+          user_text: "We want to do something good.",
           suggestion_text: "We exist to make complex choices understandable.",
         }),
         compare_instruction: "Choose the wording that fits best.",
@@ -379,13 +411,11 @@ const fixtures: Fixture[] = [
       text: "",
       prompt: "",
       specialist: {
-        compare_runtime: compareRuntime({
+        pending_interaction_state: compareRuntime({
           kind: "text_compare",
-          mode: "text",
           status: "pending",
-          presentation: "picker",
           feedback_reason_text: "Deze suggestie maakt de droom scherper.",
-          user_normalized_text: "Wij willen bedrijven helpen groeien.",
+          user_text: "Wij willen bedrijven helpen groeien.",
           suggestion_text: "Mindd droomt van bedrijven die vanuit betekenis echte verandering brengen.",
         }),
         compare_instruction: "Choose the version that fits best.",
