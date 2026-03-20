@@ -65,6 +65,27 @@ import { getIsLoading, setSessionStarted, setSessionWelcomeShown } from "./ui_st
     const state = latestWidgetState();
     return String(latest?.lang || state.ui_strings_lang || state.language || "en").trim().toLowerCase();
   }
+  function buildStartupInitState() {
+    return {
+      state: {
+        current_step: "step_0",
+        started: "false",
+        ui_gate_status: "waiting_locale",
+        ui_strings_status: "pending"
+      },
+      ui: {
+        flags: {
+          bootstrap_waiting_locale: true,
+          bootstrap_interactive_ready: false,
+          interactive_fallback_active: false
+        },
+        view: {
+          mode: "waiting_locale",
+          waiting_locale: true
+        }
+      }
+    };
+  }
   function uiStringFromContract(key) {
     return String(t(latestWidgetLang(), key) || "").trim();
   }
@@ -174,6 +195,10 @@ import { getIsLoading, setSessionStarted, setSessionWelcomeShown } from "./ui_st
   function clearStartupGrace() {
     return;
   }
+  function renderStartupWaitShell(reason) {
+    console.log("[startup_wait_shell_rendered]", { reason });
+    render(buildStartupInitState());
+  }
   function readSetGlobalsPayloadFromHost() {
     const host = globalThis.openai;
     return applyToolResult({
@@ -246,6 +271,21 @@ import { getIsLoading, setSessionStarted, setSessionWelcomeShown } from "./ui_st
       if (method.startsWith("ui/")) {
         setBridgeEnabled(true);
         notifyHostTransportSignal("bridge_message");
+      }
+      if (method === "ui/initialize") {
+        try {
+          const initialized = applyToolResult(data.params);
+          if (initialized && typeof initialized === "object" && Object.keys(initialized).length > 0) {
+            ingestHostPayload(data.params, "host_notification");
+          } else if (!hasRenderedStateSnapshot()) {
+            renderStartupWaitShell("ui_initialize");
+          }
+        } catch (err) {
+          console.error(err);
+        } finally {
+          if (getIsLoading()) setLoading(false);
+        }
+        return;
       }
       if (method === "ui/notifications/tool-result") {
         try {
@@ -392,16 +432,7 @@ import { getIsLoading, setSessionStarted, setSessionWelcomeShown } from "./ui_st
           ingestHostPayload(payload, "set_globals");
           notifyHostTransportSignal("set_globals");
         } else {
-          if (hasRenderedStateSnapshot()) {
-            console.log("[startup_set_globals_empty_payload_ignored]", {
-              reason: "cached_state_available",
-              current_step: String(latestWidgetState().current_step || "")
-            });
-          } else {
-            console.log("[startup_set_globals_empty_payload_ignored]", {
-              reason: "awaiting_first_payload"
-            });
-          }
+          renderStartupWaitShell(hasRenderedStateSnapshot() ? "set_globals_empty_payload_with_cache" : "set_globals_empty_payload");
         }
       } catch (e) {
         console.error(e);
@@ -412,6 +443,9 @@ import { getIsLoading, setSessionStarted, setSessionWelcomeShown } from "./ui_st
   }
   ensureLocalDevOpenAiShim();
   const initialIngested = tryInitialIngestFromHost("set_globals");
+  if (!initialIngested) {
+    renderStartupWaitShell("initial_bootstrap_probe");
+  }
   if (!initialIngested && isLocalDev) {
     callToolViaLocalMcp("run_step", {
       current_step_id: "step_0",

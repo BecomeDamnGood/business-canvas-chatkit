@@ -951,14 +951,17 @@ test("bundled runtime renders rich body into cardDesc via formatter and keeps un
 test("bundled runtime startup and ACTION_START flow stay on the simple happy-path", () => {
   const source = fs.readFileSync(new URL("../ui/step-card.bundled.html", import.meta.url), "utf8");
 
-  // Startup: no fail-closed blocked fallback, ingest once and wait for the first real payload.
-  assert.doesNotMatch(source, /function renderStartupWaitShell\(/);
+  // Startup: standard bridge path may show a wait shell before the first real tool-result arrives.
+  assert.match(source, /function renderStartupWaitShell\(/);
   assert.match(source, /tryInitialIngestFromHost\("set_globals"\);/);
   assert.doesNotMatch(source, /startup_fail_closed_no_canonical_payload/);
-  assert.match(source, /window\.addEventListener\("openai:set_globals", \(\) => \{[\s\S]*ingestHostPayload\(payload, "set_globals"\);[\s\S]*if \(getIsLoading\(\)\) setLoading\(false\);[\s\S]*\}\);/);
-  assert.match(source, /console\.log\("\[startup_set_globals_empty_payload_ignored\]"/);
-  assert.doesNotMatch(source, /window\.addEventListener\("openai:set_globals", \(\) => \{[\s\S]*render\(\);/);
-  assert.doesNotMatch(source, /(?:const|var) initialIngested = tryInitialIngestFromHost\("set_globals"\);[\s\S]*render\(\);/);
+  assert.match(
+    source,
+    /window\.addEventListener\("openai:set_globals", \(\) => \{[\s\S]*ingestHostPayload\(payload, "set_globals"\);[\s\S]*renderStartupWaitShell\([\s\S]*set_globals_empty_payload[\s\S]*\);[\s\S]*if \(getIsLoading\(\)\) setLoading\(false\);[\s\S]*\}\);/
+  );
+  assert.match(source, /console\.log\("\[startup_wait_shell_rendered\]"/);
+  assert.match(source, /if \(!initialIngested\) \{\s*renderStartupWaitShell\("initial_bootstrap_probe"\);\s*\}/);
+  assert.match(source, /if \(method === "ui\/initialize"\) \{/);
 
   // Routing tolerates missing explicit view mode and keeps the interactive path live.
   assert.match(source, /const hasExplicitServerRouting =/);
@@ -2324,12 +2327,15 @@ test("template and bundle do not ship a visible startup loading shell", () => {
   assert.equal(bundled.includes('<div class="bootstrap-wait-title">Loading…</div>'), false);
 });
 
-test("main bootstrap no longer forces a render before the first host payload arrives", () => {
+test("main bootstrap renders a startup wait shell before the first host payload arrives", () => {
   const source = fs.readFileSync(new URL("../ui/lib/main.ts", import.meta.url), "utf8");
-  const setGlobalsListenerTail = source.slice(source.indexOf('window.addEventListener("openai:set_globals"'));
 
-  assert.equal(setGlobalsListenerTail.includes("\n        render();"), false);
-  assert.equal(source.trimEnd().endsWith("render();"), false);
+  assert.match(source, /function renderStartupWaitShell\(reason\)/);
+  assert.match(
+    source,
+    /window\.addEventListener\("openai:set_globals", \(\) => \{[\s\S]*renderStartupWaitShell\(hasRenderedStateSnapshot\(\) \? "set_globals_empty_payload_with_cache" : "set_globals_empty_payload"\);/
+  );
+  assert.match(source, /if \(!initialIngested\) \{\s*renderStartupWaitShell\("initial_bootstrap_probe"\);\s*\}/);
 });
 
 test("bundled runtime inline script parses without syntax errors", () => {
