@@ -70,7 +70,7 @@ const SESSION_SUMMARY_FILE = "TEMP-session-summary.log";
 export function sessionTokenFileLoggingEnabled(): boolean {
   const raw = String(process.env.BSC_SESSION_TOKEN_LOG_TO_DISK ?? "").trim().toLowerCase();
   if (raw) return !["0", "false", "off", "no"].includes(raw);
-  return process.env.LOCAL_DEV === "1" || String(process.env.NODE_ENV || "").trim().toLowerCase() === "test";
+  return false;
 }
 
 function normalizeToken(value: unknown): number | null {
@@ -157,7 +157,7 @@ function toDateParts(iso: string): { yyyyMmDd: string; hhmmss: string } {
 
 function defaultLogDir(): string {
   const raw = String(process.env.BSC_SESSION_LOG_DIR || "").trim();
-  if (!raw) return path.resolve(process.cwd(), "session-logs");
+  if (!raw) return path.resolve(process.cwd(), ".runtime-token-logs");
   return path.isAbsolute(raw) ? raw : path.resolve(process.cwd(), raw);
 }
 

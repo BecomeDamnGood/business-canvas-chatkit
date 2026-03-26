@@ -1,6 +1,6 @@
 import { readPendingInteractionState, type CanvasState } from "../core/state.js";
 import { ACTIONCODE_REGISTRY } from "../core/actioncode_registry.js";
-import { ACTION_LABEL_DEFAULTS, ACTION_PRETRANSITION_BY_ACTIONCODE, UI_CONTRACT_VERSION, labelKeyForActionCode } from "../core/ui_contract_matrix.js";
+import { ACTION_PRETRANSITION_BY_ACTIONCODE, UI_CONTRACT_VERSION, labelKeyForActionCode } from "../core/ui_contract_matrix.js";
 import { parseUiContractStatusForStep } from "../core/ui_contract_id.js";
 import { currentTurnSupportMode } from "../core/stuck_support.js";
 import { DREAM_STEP_ID } from "../steps/dream.js";
@@ -8,6 +8,7 @@ import type { RenderedAction, UiContentPayload } from "../contracts/ui_actions.j
 import type { TurnOutputStatus } from "../core/turn_policy_renderer.js";
 import { isSingleValueTextPickerState } from "./run_step_compare_picker_contract.js";
 import { readDreamBuilderCompareRuntime } from "./dream_builder_compare_runtime.js";
+import { UI_STRINGS_DEFAULT } from "../i18n/ui_strings_defaults.js";
 
 type CompareMode = "text" | "list";
 
@@ -452,7 +453,7 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
     const safeActionCode = String(actionCode || "").trim();
     if (!safeActionCode) return "";
     const labelKey = labelKeyForActionCode(safeActionCode);
-    return String(ACTION_LABEL_DEFAULTS[labelKey] || "").trim();
+    return String(UI_STRINGS_DEFAULT[labelKey] || "").trim();
   }
 
   function buildUiPayload(

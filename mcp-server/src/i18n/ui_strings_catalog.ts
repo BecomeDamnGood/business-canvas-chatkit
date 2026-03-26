@@ -19,8 +19,10 @@ import { UI_STRINGS_LOCALE_ZH_HANS } from "./ui_strings/locales/ui_strings_zh_ha
 import { UI_STRINGS_LOCALE_RU } from "./ui_strings/locales/ui_strings_ru.js";
 import { UI_STRINGS_LOCALE_HU } from "./ui_strings/locales/ui_strings_hu.js";
 import { UI_STRINGS_LOCALE_AR } from "./ui_strings/locales/ui_strings_ar.js";
+import { deriveActionLabelUiStrings } from "./ui_strings_defaults.js";
+import { UI_MENU_LABEL_OVERRIDES_BY_LOCALE } from "./ui_menu_label_catalog.js";
 
-export const UI_STRINGS_CATALOG_BY_LOCALE: Record<string, Record<string, string>> = {
+const UI_STRINGS_CATALOG_BASE_BY_LOCALE: Record<string, Record<string, string>> = {
   "en": UI_STRINGS_LOCALE_EN,
   "es": UI_STRINGS_LOCALE_ES,
   "pt-BR": UI_STRINGS_LOCALE_PT_BR,
@@ -37,6 +39,22 @@ export const UI_STRINGS_CATALOG_BY_LOCALE: Record<string, Record<string, string>
   "hu": UI_STRINGS_LOCALE_HU,
   "ar": UI_STRINGS_LOCALE_AR,
 } as const;
+
+export const UI_STRINGS_CATALOG_BY_LOCALE: Record<string, Record<string, string>> = Object.fromEntries(
+  Object.entries(UI_STRINGS_CATALOG_BASE_BY_LOCALE).map(([locale, strings]) => {
+    const menuLabels = UI_MENU_LABEL_OVERRIDES_BY_LOCALE[locale] || {};
+    const source = { ...strings, ...menuLabels };
+    const actionLabels = deriveActionLabelUiStrings(source);
+    return [
+      locale,
+      {
+        ...strings,
+        ...menuLabels,
+        ...actionLabels,
+      },
+    ];
+  })
+);
 
 export const UI_STRINGS_CATALOG_LOCALES: string[] = Object.keys(UI_STRINGS_CATALOG_BY_LOCALE);
 export const UI_STRINGS_CATALOG_KEYS: string[] = Object.keys(UI_STRINGS_CATALOG_BY_LOCALE.en || {});

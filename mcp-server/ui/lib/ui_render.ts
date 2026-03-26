@@ -321,9 +321,7 @@ export function shouldShowTextInputForCompare(params: {
   compareActive?: boolean;
   dreamBuilderTextInputActive?: boolean;
 }): boolean {
-  if (params.textSubmitAvailable !== true) return false;
-  if (params.compareActive === true) return true;
-  return params.dreamBuilderTextInputActive === true;
+  return params.textSubmitAvailable === true;
 }
 
 export function shouldDisableTextInputForCompare(): boolean {
@@ -1806,21 +1804,27 @@ export function render(overrideToolOutput?: unknown): void {
   const uiSubtitleFailureEl = document.getElementById("uiSubtitle");
 
   const hasSemanticCardContent = Boolean(singleValueContent) || Boolean(structuredSuggestionsContent);
+  const hasBodyContent = stripInlineText(String(body || "")).trim().length > 0;
+  const hasPromptContent = stripInlineText(String(promptSource || "")).trim().length > 0;
   const contractOwner = readUiContractOwner(result);
   const hasSpecialOwner = contractOwner === "no_feedback" || contractOwner === "terminal";
-  const hasOwnerBackedInteractiveContent =
+  const hasRenderableInteractiveContent =
     compareActive ||
     Boolean(dreamBuilderContract) ||
     hasSemanticCardContent ||
+    hasBodyContent ||
+    hasPromptContent ||
+    hasStructuredActions ||
     hasSpecialOwner;
-  const hasRenderableInteractiveContent = hasOwnerBackedInteractiveContent;
   if (!hasRenderableInteractiveContent) {
     console.warn("[ui_contract_interactive_content_absent]", {
       current_step: current,
       view_mode: viewMode || "",
       payload_source: resolved.source,
       reason_code: "interactive_content_absent",
-      has_owner_backed_content: hasOwnerBackedInteractiveContent,
+      has_body_content: hasBodyContent,
+      has_prompt_content: hasPromptContent,
+      has_structured_actions: hasStructuredActions,
       contract_owner: contractOwner,
     });
     inputWrap.style.display = "none";

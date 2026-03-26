@@ -14,13 +14,15 @@ import type {
   UiStructuredSuggestionsContent,
 } from "../contracts/ui_actions.js";
 import {
-  ACTION_LABEL_DEFAULTS,
   DEFAULT_ACTION_CODES_BY_STEP_STATUS,
+  MENU_LABEL_DEFAULTS,
   UI_CONTRACT_VERSION,
   buildContractId,
   buildContractTextKeys,
+  inferMenuIdForActionCodes,
   labelKeyForActionCode,
 } from "./ui_contract_matrix.js";
+import { labelKeyForMenuAction } from "./menu_contract.js";
 import { parseUiContractOwnerForStep } from "./ui_contract_id.js";
 import {
   buildStrategyContextBlock,
@@ -1483,10 +1485,14 @@ function buildKnownFactsRecap(state: CanvasState): string {
 
 function labelsForActionCodes(actionCodes: string[], state: CanvasState): string[] {
   if (actionCodes.length <= 0) return [];
-  return actionCodes.map((actionCode) => {
-    const labelKey = labelKeyForActionCode(actionCode);
+  const menuId = inferMenuIdForActionCodes(actionCodes);
+  return actionCodes.map((actionCode, idx) => {
+    const menuLabelKey = menuId ? labelKeyForMenuAction(menuId, actionCode, idx) : "";
+    const labelKey = menuLabelKey && String(MENU_LABEL_DEFAULTS[menuLabelKey] || "").trim()
+      ? menuLabelKey
+      : labelKeyForActionCode(actionCode);
     const localized = uiStringFromState(state, labelKey, "");
-    const fallback = String(ACTION_LABEL_DEFAULTS[labelKey] || "").trim();
+    const fallback = uiDefaultString(labelKey);
     return localized || fallback;
   });
 }
@@ -1508,7 +1514,14 @@ function hasPendingInteractionOwnerOrRenderableCompare(
 
 function labelKeysForActionCodes(actionCodes: string[]): string[] {
   if (actionCodes.length <= 0) return [];
-  return actionCodes.map((actionCode) => labelKeyForActionCode(actionCode));
+  const menuId = inferMenuIdForActionCodes(actionCodes);
+  if (!menuId) return actionCodes.map((actionCode) => labelKeyForActionCode(actionCode));
+  return actionCodes.map((actionCode, idx) => {
+    const menuLabelKey = labelKeyForMenuAction(menuId, actionCode, idx);
+    return String(MENU_LABEL_DEFAULTS[menuLabelKey] || "").trim()
+      ? menuLabelKey
+      : labelKeyForActionCode(actionCode);
+  });
 }
 
 function resolveActionSurface(params: {

@@ -7,6 +7,9 @@ import {
 import { safeString } from "../server_safe_string.js";
 
 import {
+  enforceRunStepViewContractGuard,
+} from "../handlers/turn_contract.js";
+import {
   attachBootstrapDiagnostics,
   attachIdempotencyDiagnostics,
   nextBootstrapResponseSeq,
@@ -562,6 +565,7 @@ async function runStepHandler(args: RunStepHandlerArgs): Promise<{ structuredCon
       reason_code: safeString(classification.type || classification.code || "run_step_error"),
     });
     fallbackResult = attachActionLivenessToResult(fallbackResult, fallbackLiveness);
+    enforceRunStepViewContractGuard(fallbackResult as never);
     logActionLivenessOutcome({
       context,
       stepId: currentStep,

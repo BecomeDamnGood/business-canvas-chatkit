@@ -2,8 +2,9 @@ import crypto from "node:crypto";
 
 import { ACTIONCODE_REGISTRY } from "../core/actioncode_registry.js";
 import { actionCodeToIntent } from "../core/actioncode_intent.js";
-import { ACTION_LABEL_DEFAULTS, labelKeyForActionCode } from "../core/ui_contract_matrix.js";
+import { labelKeyForActionCode } from "../core/ui_contract_matrix.js";
 import type { CanvasState } from "../core/state.js";
+import { UI_STRINGS_DEFAULT } from "../i18n/ui_strings_defaults.js";
 
 type LocaleHintSource =
   | "openai_locale"
@@ -396,7 +397,7 @@ export function createRunStepPreflightHelpers(deps: RunStepPreflightDeps) {
       });
       clickedActionCodeForNoRepeat = String(actionCodeRaw || "").trim().toUpperCase();
       const labelKey = labelKeyForActionCode(clickedActionCodeForNoRepeat);
-      clickedLabelForNoRepeat = String(ACTION_LABEL_DEFAULTS[labelKey] || "").trim();
+      clickedLabelForNoRepeat = String(UI_STRINGS_DEFAULT[labelKey] || "").trim();
       (state as any).__last_clicked_action_for_contract = clickedActionCodeForNoRepeat;
       (state as any).__last_clicked_label_for_contract = clickedLabelForNoRepeat;
     }

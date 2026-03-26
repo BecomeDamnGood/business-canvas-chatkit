@@ -2,7 +2,8 @@
  * SSOT default UI strings and i18n key set for server-side locale resolution.
  */
 import { ACTIONCODE_REGISTRY } from "../core/actioncode_registry.js";
-import { ACTION_LABEL_DEFAULTS, labelKeyForActionCode } from "../core/ui_contract_matrix.js";
+import { labelKeyForActionCode } from "../core/ui_contract_matrix.js";
+import { MENU_LABEL_DEFAULTS } from "../core/menu_contract.js";
 import { getStepRegistryEntry, getStepTitleKey } from "../steps/step_registry.js";
 const PRESTART_TEXT_DEFAULT = {
   headline: "Build a complete Business Model and Strategy Canvas step by step.",
@@ -58,6 +59,26 @@ const UI_STRINGS_BASE: Record<string, string> = {
   uiSubtitle: "Use The Business Strategy Canvas Builder widget to continue (not the chat box)",
   uiUseWidgetToContinue: "Use The Business Strategy Canvas Builder widget to continue (not the chat box).",
   btnGoToNextStep: "Go to next step",
+  "action.step0.readyStart": "Start with Dream",
+  "action.explainMore": "Explain more",
+  "action.giveExample": "Give an example",
+  "action.giveExamples": "Give examples",
+  "action.ask3Questions": "Ask 3 questions",
+  "action.askQuestions": "Ask questions",
+  "action.confirm": "I'm happy with this, continue",
+  "action.confirmAll": "Confirm all",
+  "action.adjust": "Adjust this",
+  "action.continue": "Continue",
+  "action.finishLater": "Finish later",
+  "action.write": "Write it myself",
+  "action.formulate": "Formulate it",
+  "action.formulateForMe": "Formulate it for me",
+  "action.iAmSatisfied": "I'm satisfied, continue",
+  "action.consolidate": "Consolidate this",
+  "action.createPresentation": "Create the presentation",
+  "action.change": "Change this",
+  "action.editBasics": "Edit the basics",
+  "action.chooseForMe": "Choose for me",
   byText: "A business model by:",
   startHint: "Click Start to begin.",
   inputPlaceholder: "Type your answer here (use The Business Strategy Canvas Builder widget, not the chat box)…",
@@ -333,9 +354,121 @@ const UI_STRINGS_BASE: Record<string, string> = {
   "sectionTitle.presentation": "Create your Presentation",
 };
 
-export const UI_STRINGS_DEFAULT: Record<string, string> = {
+export const ACTION_LABEL_SOURCE_KEY_BY_ACTION_CODE: Record<string, string> = {
+  ACTION_START: "btnStart",
+  ACTION_STEP0_META_RETURN: "menuLabel.STEP0_MENU_META_RETURN.ACTION_STEP0_META_RETURN",
+  ACTION_STEP0_READY_START: "menuLabel.STEP0_MENU_READY_START.ACTION_STEP0_READY_START",
+  ACTION_BIGWHY_ESCAPE_CONTINUE: "action.continue",
+  ACTION_BIGWHY_ESCAPE_FINISH_LATER: "action.finishLater",
+  ACTION_BIGWHY_EXPLAIN_ASK_3_QUESTIONS: "action.ask3Questions",
+  ACTION_BIGWHY_EXPLAIN_GIVE_EXAMPLE: "action.giveExample",
+  ACTION_BIGWHY_INTRO_EXPLAIN_IMPORTANCE: "action.explainMore",
+  ACTION_BIGWHY_INTRO_GIVE_EXAMPLE: "action.giveExample",
+  ACTION_BIGWHY_REFINE_ADJUST: "action.adjust",
+  ACTION_BIGWHY_REFINE_CONFIRM: "action.confirm",
+  ACTION_BIGWHY_SUGGESTIONS_CHOOSE_FOR_ME: "action.chooseForMe",
+  ACTION_COMPARE_PICK_SUGGESTION: "compare.chooseVersion",
+  ACTION_COMPARE_PICK_USER: "compare.chooseVersion",
+  ACTION_DREAM_ESCAPE_CONTINUE: "action.continue",
+  ACTION_DREAM_ESCAPE_FINISH_LATER: "action.finishLater",
+  ACTION_DREAM_EXPLAINER_CONTINUE: "action.continue",
+  ACTION_DREAM_EXPLAINER_FINISH_LATER: "action.finishLater",
+  ACTION_DREAM_EXPLAINER_NEXT_STEP: "btnGoToNextStep",
+  ACTION_DREAM_EXPLAINER_REFINE_ADJUST: "action.adjust",
+  ACTION_DREAM_EXPLAINER_REFINE_CONFIRM: "btnDreamConfirm",
+  ACTION_DREAM_EXPLAINER_SUBMIT_SCORES: "btnScoringContinue",
+  ACTION_DREAM_INTRO_EXPLAIN_MORE: "action.explainMore",
+  ACTION_DREAM_INTRO_START_EXERCISE: "dreamBuilder.startExercise",
+  ACTION_DREAM_REFINE_CONFIRM: "btnDreamConfirm",
+  ACTION_DREAM_REFINE_START_EXERCISE: "dreamBuilder.startExercise",
+  ACTION_DREAM_SUGGESTIONS_PICK_ONE: "action.chooseForMe",
+  ACTION_DREAM_SUGGESTIONS_START_EXERCISE: "dreamBuilder.startExercise",
+  ACTION_DREAM_SWITCH_TO_SELF: "btnSwitchToSelfDream",
+  ACTION_DREAM_WHY_GIVE_SUGGESTIONS: "action.chooseForMe",
+  ACTION_DREAM_WHY_START_EXERCISE: "dreamBuilder.startExercise",
+  ACTION_ENTITY_ESCAPE_CONTINUE: "action.continue",
+  ACTION_ENTITY_ESCAPE_FINISH_LATER: "action.finishLater",
+  ACTION_ENTITY_EXAMPLE_CONFIRM: "action.confirm",
+  ACTION_ENTITY_EXAMPLE_REFINE: "action.adjust",
+  ACTION_ENTITY_FORMULATE_FOR_ME: "action.formulateForMe",
+  ACTION_ENTITY_INTRO_EXPLAIN_MORE: "action.explainMore",
+  ACTION_ENTITY_INTRO_FORMULATE: "action.formulate",
+  ACTION_ENTITY_SUGGESTIONS_CHOOSE_FOR_ME: "action.chooseForMe",
+  ACTION_PRESENTATION_CHANGE: "action.change",
+  ACTION_PRESENTATION_ESCAPE_CONTINUE: "action.continue",
+  ACTION_PRESENTATION_ESCAPE_FINISH_LATER: "action.finishLater",
+  ACTION_PRESENTATION_MAKE: "action.createPresentation",
+  ACTION_PRODUCTSSERVICES_CONFIRM: "action.confirm",
+  ACTION_PURPOSE_CONFIRM_SINGLE: "action.confirm",
+  ACTION_PURPOSE_ESCAPE_CONTINUE: "action.continue",
+  ACTION_PURPOSE_ESCAPE_FINISH_LATER: "action.finishLater",
+  ACTION_PURPOSE_EXAMPLES_ASK_3_QUESTIONS: "action.ask3Questions",
+  ACTION_PURPOSE_EXAMPLES_CHOOSE_FOR_ME: "action.chooseForMe",
+  ACTION_PURPOSE_EXPLAIN_ASK_3_QUESTIONS: "action.ask3Questions",
+  ACTION_PURPOSE_EXPLAIN_GIVE_EXAMPLES: "action.giveExamples",
+  ACTION_PURPOSE_INTRO_EXPLAIN_MORE: "action.explainMore",
+  ACTION_PURPOSE_REFINE_ADJUST: "action.adjust",
+  ACTION_PURPOSE_REFINE_CONFIRM: "action.confirm",
+  ACTION_ROLE_ASK_GIVE_EXAMPLES: "action.giveExamples",
+  ACTION_ROLE_ESCAPE_CONTINUE: "action.continue",
+  ACTION_ROLE_ESCAPE_FINISH_LATER: "action.finishLater",
+  ACTION_ROLE_EXAMPLES_CHOOSE_FOR_ME: "action.chooseForMe",
+  ACTION_ROLE_INTRO_EXPLAIN_MORE: "action.explainMore",
+  ACTION_ROLE_INTRO_GIVE_EXAMPLES: "action.giveExamples",
+  ACTION_ROLE_REFINE_ADJUST: "action.adjust",
+  ACTION_ROLE_REFINE_CONFIRM: "action.confirm",
+  ACTION_RULES_ASK_EXPLAIN_MORE: "action.explainMore",
+  ACTION_RULES_ASK_GIVE_EXAMPLE: "action.giveExample",
+  ACTION_RULES_ASK_WRITE: "action.write",
+  ACTION_RULES_CONFIRM_ALL: "action.confirmAll",
+  ACTION_RULES_ESCAPE_CONTINUE: "action.continue",
+  ACTION_RULES_ESCAPE_FINISH_LATER: "action.finishLater",
+  ACTION_RULES_INTRO_EXPLAIN_MORE: "action.explainMore",
+  ACTION_RULES_INTRO_GIVE_EXAMPLE: "action.giveExample",
+  ACTION_RULES_INTRO_WRITE: "action.write",
+  ACTION_RULES_REFINE_ADJUST: "action.adjust",
+  ACTION_RULES_REFINE_CONFIRM: "action.confirm",
+  ACTION_STRATEGY_ASK_3_QUESTIONS: "action.ask3Questions",
+  ACTION_STRATEGY_ASK_GIVE_EXAMPLES: "action.giveExamples",
+  ACTION_STRATEGY_ASK_WRITE: "action.write",
+  ACTION_STRATEGY_CONFIRM_SATISFIED: "action.iAmSatisfied",
+  ACTION_STRATEGY_CONSOLIDATE: "action.consolidate",
+  ACTION_STRATEGY_ESCAPE_CONTINUE: "action.continue",
+  ACTION_STRATEGY_ESCAPE_FINISH_LATER: "action.finishLater",
+  ACTION_STRATEGY_EXAMPLES_CHOOSE_FOR_ME: "action.chooseForMe",
+  ACTION_STRATEGY_FINAL_CONTINUE: "btnGoToNextStep",
+  ACTION_STRATEGY_INTRO_EXPLAIN_MORE: "action.explainMore",
+  ACTION_STRATEGY_INTRO_FORMULATE: "action.write",
+  ACTION_STRATEGY_QUESTIONS_EXPLAIN_MORE: "action.explainMore",
+  ACTION_STRATEGY_REFINE_EXPLAIN_MORE: "action.explainMore",
+  ACTION_TARGETGROUP_EXPLAIN_ASK_QUESTIONS: "action.askQuestions",
+  ACTION_TARGETGROUP_INTRO_ASK_QUESTIONS: "action.askQuestions",
+  ACTION_TARGETGROUP_INTRO_EXPLAIN_MORE: "action.explainMore",
+  ACTION_TARGETGROUP_POSTREFINE_ASK_QUESTIONS: "action.askQuestions",
+  ACTION_TARGETGROUP_POSTREFINE_CONFIRM: "action.confirm",
+  ACTION_TEXT_SUBMIT: "sendTitle",
+};
+
+export function deriveActionLabelUiStrings(sourceStrings: Record<string, string>): Record<string, string> {
+  const derived: Record<string, string> = {};
+  for (const actionCode of Object.keys(ACTIONCODE_REGISTRY.actions)) {
+    const safeActionCode = String(actionCode || "").trim();
+    if (!safeActionCode) continue;
+    const labelKey = labelKeyForActionCode(safeActionCode);
+    const sourceKey = String(ACTION_LABEL_SOURCE_KEY_BY_ACTION_CODE[safeActionCode] || "").trim();
+    derived[labelKey] = sourceKey ? String(sourceStrings[sourceKey] || "").trim() : "";
+  }
+  return derived;
+}
+
+const UI_STRINGS_DEFAULT_SOURCE: Record<string, string> = {
   ...UI_STRINGS_BASE,
-  ...ACTION_LABEL_DEFAULTS,
+  ...MENU_LABEL_DEFAULTS,
+};
+
+export const UI_STRINGS_DEFAULT: Record<string, string> = {
+  ...UI_STRINGS_DEFAULT_SOURCE,
+  ...deriveActionLabelUiStrings(UI_STRINGS_DEFAULT_SOURCE),
 };
 
 export const UI_STRINGS_KEYS = Object.keys(UI_STRINGS_DEFAULT);

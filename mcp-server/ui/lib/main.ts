@@ -197,7 +197,8 @@ import { getIsLoading, setSessionStarted, setSessionWelcomeShown } from "./ui_st
   }
   function renderStartupWaitShell(reason) {
     console.log("[startup_wait_shell_rendered]", { reason });
-    render(buildStartupInitState());
+    // Keep the widget hidden until the first canonical payload arrives.
+    // Rendering a transient wait shell causes a visible blank/skeleton flash in ChatGPT.
   }
   function readSetGlobalsPayloadFromHost() {
     const host = globalThis.openai;

@@ -490,12 +490,17 @@ function hasRenderableUiContentOwner(uiPayload: Record<string, unknown>): boolea
 
 function hasRenderableResponseContent(response: RunStepContractResponse): boolean {
   const uiPayload = toRecord(response.ui);
+  const uiPrompt = toRecord(uiPayload.prompt);
   const uiPendingInteraction = toRecord(uiPayload.pending_interaction);
   const pendingKind = String(uiPendingInteraction.kind || "").trim().toLowerCase();
   const hasPendingCompare =
     (pendingKind === "text_compare" || pendingKind === "list_compare") &&
     String(uiPendingInteraction.status || "").trim().toLowerCase() === "pending";
   const specialist = toRecord(response.specialist);
+  const actionContract = toRecord(uiPayload.action_contract);
+  const hasActions =
+    (Array.isArray(actionContract.actions) && actionContract.actions.length > 0) ||
+    (Array.isArray(uiPayload.actions) && uiPayload.actions.length > 0);
   const contractIdCandidates = [
     uiPayload.contract_id,
     uiPayload.ui_contract_id,
@@ -507,7 +512,25 @@ function hasRenderableResponseContent(response: RunStepContractResponse): boolea
     ?.trim()
     .toLowerCase() || "";
   const hasSpecialOwner = contractOwner === "no_feedback" || contractOwner === "terminal";
-  return hasPendingCompare || hasDreamBuilderOwner(uiPayload) || hasRenderableUiContentOwner(uiPayload) || hasSpecialOwner;
+  const prompt = String(response.prompt || "").trim();
+  const body =
+    String(response.text || "").trim() ||
+    String(uiPrompt.body || "").trim() ||
+    String(specialist.message || "").trim() ||
+    String(specialist.refined_formulation || "").trim();
+  const question =
+    String(uiPayload.questionText || "").trim() ||
+    String(specialist.question || "").trim();
+  return (
+    hasActions ||
+    hasPendingCompare ||
+    hasDreamBuilderOwner(uiPayload) ||
+    hasRenderableUiContentOwner(uiPayload) ||
+    Boolean(prompt) ||
+    Boolean(body) ||
+    Boolean(question) ||
+    hasSpecialOwner
+  );
 }
 
 function synchronizeComparePickActionsFromOwner(response: RunStepContractResponse): void {
@@ -714,8 +737,8 @@ function ensureUnifiedUiActionContract(response: RunStepContractResponse, deps?:
     const surface = normalizeUiActionSurface(action.surface, defaultSurfaceForRole(role));
     const descriptor = buildStateActionDescriptor(state, role);
     const labelKey = String(action.label_key || descriptor?.labelKey || "").trim();
-    const label =
-      String(action.label || (labelKey ? uiLabelForKey(state, labelKey) : "") || descriptor?.label || "").trim();
+    const localizedLabel = labelKey ? uiLabelForKey(state, labelKey) : "";
+    const label = String(localizedLabel || action.label || descriptor?.label || "").trim();
     seenByActionCode.add(actionCode);
     unifiedActions.push({
       ...action,
@@ -780,10 +803,8 @@ function ensureUnifiedUiActionContract(response: RunStepContractResponse, deps?:
         if (String(entry.action_code || "").trim() !== normalizedCode) continue;
         entry.role = role;
         entry.surface = descriptor.surface;
-        if (role !== "dream_start_exercise") {
-          if (!String(entry.label_key || "").trim()) entry.label_key = descriptor.labelKey;
-          if (!String(entry.label || "").trim()) entry.label = descriptor.label;
-        }
+        entry.label_key = descriptor.labelKey;
+        entry.label = descriptor.label;
         if (role === "text_submit" && descriptor.payloadMode) {
           entry.payload_mode = descriptor.payloadMode;
         }
@@ -1115,6 +1136,12 @@ export function buildContractFailurePayload(
       message: resolveUiStringForState(state, "runtime.error.contract_warning"),
       reason: reasonCode,
       required_action: "continue_session",
+    },
+    ui: {
+      view: {
+        mode: "blocked",
+        waiting_locale: false,
+      },
     },
   };
 }

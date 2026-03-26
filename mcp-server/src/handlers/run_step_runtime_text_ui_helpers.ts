@@ -1,7 +1,8 @@
 import type { RenderedAction } from "../contracts/ui_actions.js";
 import type { StepIntent } from "../contracts/intents.js";
 import type { CanvasState } from "../core/state.js";
-import { ACTION_LABEL_DEFAULTS, labelKeyForActionCode } from "../core/ui_contract_matrix.js";
+import { inferMenuIdForActionCodes, labelKeyForActionCode } from "../core/ui_contract_matrix.js";
+import { MENU_LABEL_DEFAULTS, labelKeyForMenuAction } from "../core/menu_contract.js";
 import { hasRenderablePendingInteractionState, readPendingInteractionState } from "../core/state.js";
 
 type ActioncodeRegistryEntry = {
@@ -10,6 +11,7 @@ type ActioncodeRegistryEntry = {
 
 type ActioncodeRegistryShape = {
   actions: Record<string, ActioncodeRegistryEntry>;
+  menus: Record<string, string[]>;
 };
 
 export type PromptInvariantContext = {
@@ -61,8 +63,8 @@ export function createRunStepRuntimeTextUiHelpers(deps: CreateRunStepRuntimeText
 
   function step0ReadyActionLabel(state: CanvasState | null | undefined): string {
     if (deps.shouldSuppressFallbackText(state)) return "";
-    const key = labelKeyForActionCode("ACTION_STEP0_READY_START");
-    const fallback = String(ACTION_LABEL_DEFAULTS[key] || deps.uiDefaultString(key)).trim();
+    const key = labelKeyForMenuAction("STEP0_MENU_READY_START", "ACTION_STEP0_READY_START", 0);
+    const fallback = String(MENU_LABEL_DEFAULTS[key] || deps.uiDefaultString(key)).trim();
     return uiStringFromStateMap(state, key, fallback);
   }
 
@@ -133,14 +135,24 @@ export function createRunStepRuntimeTextUiHelpers(deps: CreateRunStepRuntimeText
 
   function labelKeysForActionCodes(actionCodes: string[]): string[] {
     const safeActionCodes = actionCodes.map((code) => String(code || "").trim()).filter(Boolean);
-    return safeActionCodes.map((actionCode) => labelKeyForActionCode(actionCode));
+    const menuId = inferMenuIdForActionCodes(safeActionCodes);
+    if (!menuId) {
+      return safeActionCodes.map((actionCode) => labelKeyForActionCode(actionCode));
+    }
+    return safeActionCodes.map((actionCode, idx) => {
+      const menuLabelKey = labelKeyForMenuAction(menuId, actionCode, idx);
+      return String(MENU_LABEL_DEFAULTS[menuLabelKey] || "").trim()
+        ? menuLabelKey
+        : labelKeyForActionCode(actionCode);
+    });
   }
 
   function labelsForActionCodes(actionCodes: string[]): string[] {
     const safeActionCodes = actionCodes.map((code) => String(code || "").trim()).filter(Boolean);
-    return safeActionCodes.map((actionCode) => {
-      const labelKey = labelKeyForActionCode(actionCode);
-      return String(ACTION_LABEL_DEFAULTS[labelKey] || "").trim();
+    const labelKeys = labelKeysForActionCodes(safeActionCodes);
+    return safeActionCodes.map((actionCode, idx) => {
+      const labelKey = String(labelKeys[idx] || labelKeyForActionCode(actionCode)).trim();
+      return deps.uiDefaultString(labelKey);
     });
   }
 
