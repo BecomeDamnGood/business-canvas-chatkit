@@ -255,13 +255,12 @@ export function resolveAllowedHostOrigin(): string {
     });
     return bridgeTargetOriginCache;
   }
-  const fallbackEnabled = uiFlagEnabled("UI_BRIDGE_ORIGIN_FALLBACK_V1", false);
-  bridgeTargetOriginCache = fallbackEnabled ? "*" : "";
-  bridgeTargetOriginSource = fallbackEnabled ? "fallback_wildcard" : "unresolved";
-  console.log("[bridge_target_origin_resolved]", {
+  bridgeTargetOriginCache = "";
+  bridgeTargetOriginSource = "unresolved";
+  console.warn("[bridge_target_origin_resolved]", {
     target_origin: bridgeTargetOriginCache,
     source: bridgeTargetOriginSource,
-    fallback_used: fallbackEnabled,
+    fallback_used: false,
   });
   return bridgeTargetOriginCache;
 }

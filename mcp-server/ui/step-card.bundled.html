@@ -3057,13 +3057,12 @@
       });
       return bridgeTargetOriginCache;
     }
-    const fallbackEnabled = uiFlagEnabled("UI_BRIDGE_ORIGIN_FALLBACK_V1", false);
-    bridgeTargetOriginCache = fallbackEnabled ? "*" : "";
-    bridgeTargetOriginSource = fallbackEnabled ? "fallback_wildcard" : "unresolved";
-    console.log("[bridge_target_origin_resolved]", {
+    bridgeTargetOriginCache = "";
+    bridgeTargetOriginSource = "unresolved";
+    console.warn("[bridge_target_origin_resolved]", {
       target_origin: bridgeTargetOriginCache,
       source: bridgeTargetOriginSource,
-      fallback_used: fallbackEnabled
+      fallback_used: false
     });
     return bridgeTargetOriginCache;
   }
@@ -4062,13 +4061,6 @@
   var ACTION_BOOTSTRAP_POLL = "ACTION_BOOTSTRAP_POLL";
   var bootstrapPollInFlight = false;
   var bootstrapPollInFlightSignature = "";
-  function uiFlagEnabled(name, defaultValue) {
-    const raw = globalThis[name];
-    if (typeof raw === "boolean") return raw;
-    const normalized = String(raw ?? "").trim().toLowerCase();
-    if (!normalized) return defaultValue;
-    return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on";
-  }
   function maybeScheduleBootstrapRetry(resolved) {
     return computeHydrationState2(resolved);
   }
@@ -5345,21 +5337,6 @@ ${String(item || "").trim()}`.trim())
     }
     callRunStep(action.actionCode);
   }
-  function dreamBuilderScoreSubmitActionForContract(contract, lang) {
-    const actionCode = String(contract?.scoring?.submitAction || "").trim();
-    if (!actionCode) return [];
-    return [
-      {
-        actionCode,
-        label: String(t(lang, "btnScoringContinue") || "").trim(),
-        labelKey: "btnScoringContinue",
-        payloadMode: "scores",
-        role: "score_submit",
-        surface: "primary",
-        primary: true
-      }
-    ].filter((action) => action.label);
-  }
   function renderActionSurfaceButtons(params) {
     const container = document.getElementById(params.containerId);
     if (!container) return;
@@ -5898,7 +5875,7 @@ ${String(item || "").trim()}`.trim())
     const startActionCode = actionCodeForRole(result, "start");
     const hasStartAction = startActionCode.length > 0;
     if (!hasExplicitServerRouting) {
-      console.warn("[ui_contract_missing_view_mode_tolerated]", {
+      console.warn("[ui_contract_missing_view_mode_fail_closed]", {
         payload_source: resolved.source,
         view_mode: viewMode || "",
         ui_gate_status: String(state?.ui_gate_status || "").trim().toLowerCase(),
@@ -5922,26 +5899,19 @@ ${String(item || "").trim()}`.trim())
       }
       if (sectionTitleEl2) sectionTitleEl2.textContent = getSectionTitle(lang, "step_0", "");
       btnStart2.style.display = "none";
-      renderActionSurfaceButtons({
-        containerId: "primaryActionWrap",
-        actions: surfaceActionsForResult(result, "primary", lang).filter((action) => action.role === "start"),
-        className: "btn primary"
-      });
-      if (auxiliaryActionWrap) auxiliaryActionWrap.style.display = "none";
-      startHint.textContent = uiText2(lang, "startHint", "");
-      startHint.style.display = startHint.textContent ? "block" : "none";
-      buildStepper(0, "", lang);
       if (badge) {
-        badge.textContent = "01";
-        badge.style.display = "block";
+        badge.textContent = "";
+        badge.style.display = "none";
       }
       if (cardDesc) {
-        const prestartEl = cardDesc;
-        prestartEl.classList.remove("has-grid");
-        prestartEl.classList.remove("is-step0-ask-layout");
-        if (startupPayloadMissing) renderPrestartContent(prestartEl, lang);
-        else renderPrestartContent(prestartEl, lang);
+        const blockedEl = cardDesc;
+        blockedEl.classList.remove("has-grid");
+        blockedEl.classList.remove("is-step0-ask-layout");
+        renderContractFailureState(blockedEl, lang, "ui_view_mode_missing", "");
       }
+      startHint.textContent = uiText2(lang, "error.contract.body", "");
+      startHint.style.display = startHint.textContent ? "block" : "none";
+      setInlineNotice(uiText2(lang, "error.contract.body", ""));
       if (isLoading) setLoading(false);
       return;
     }
@@ -6426,7 +6396,7 @@ ${String(item || "").trim()}`.trim())
       }
       renderActionSurfaceButtons({
         containerId: "primaryActionWrap",
-        actions: dreamBuilderScoreSubmitActionForContract(dreamBuilderContract, lang),
+        actions: surfaceActionsForResult(result, "primary", lang).filter((action) => action.role !== "start"),
         className: "btn primary"
       });
       renderActionSurfaceButtons({
@@ -6582,9 +6552,7 @@ ${String(item || "").trim()}`.trim())
       const choiceWrap = document.getElementById("choiceWrap");
       if (choiceWrap) choiceWrap.style.display = "none";
     }
-    const primaryActions = comparePanelVisible ? [] : surfaceActionsForResult(result, "primary", lang).filter(
-      (action) => action.role !== "start" && action.role !== "score_submit"
-    );
+    const primaryActions = comparePanelVisible ? [] : surfaceActionsForResult(result, "primary", lang).filter((action) => action.role !== "start");
     const auxiliaryActions = comparePanelVisible ? [] : surfaceActionsForResult(result, "auxiliary", lang);
     renderActionSurfaceButtons({
       containerId: "primaryActionWrap",

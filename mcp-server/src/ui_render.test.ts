@@ -515,6 +515,29 @@ test("surfaceActionsForResult keeps the action contract as the only render autho
   );
 });
 
+test("surfaceActionsForResult exposes score submit from the action contract on the primary surface", () => {
+  const result = {
+    state: { current_step: "dream", language: "en" },
+    ui: {
+      action_contract: {
+        actions: [
+          {
+            role: "score_submit",
+            surface: "primary",
+            action_code: "ACTION_DREAM_EXPLAINER_SUBMIT_SCORES",
+            label: "Continue",
+          },
+        ],
+      },
+    },
+  };
+
+  assert.deepEqual(
+    surfaceActionsForResult(result, "primary").map((action) => action.actionCode),
+    ["ACTION_DREAM_EXPLAINER_SUBMIT_SCORES"]
+  );
+});
+
 test("buildInitialDreamScoringScores reuses persisted dream scores when client cache is empty", () => {
   const scores = buildInitialDreamScoringScores({
     clientScores: [],

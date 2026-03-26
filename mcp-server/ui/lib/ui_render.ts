@@ -669,25 +669,6 @@ function dispatchContractAction(action: RenderableContractAction): void {
   callRunStep(action.actionCode);
 }
 
-function dreamBuilderScoreSubmitActionForContract(
-  contract: NormalizedDreamBuilderContract | null,
-  lang: string
-): RenderableContractAction[] {
-  const actionCode = String(contract?.scoring?.submitAction || "").trim();
-  if (!actionCode) return [];
-  return [
-    {
-      actionCode,
-      label: String(t(lang, "btnScoringContinue") || "").trim(),
-      labelKey: "btnScoringContinue",
-      payloadMode: "scores",
-      role: "score_submit",
-      surface: "primary",
-      primary: true,
-    },
-  ].filter((action) => action.label);
-}
-
 function renderActionSurfaceButtons(params: {
   containerId: string;
   actions: RenderableContractAction[];
@@ -1539,7 +1520,7 @@ export function render(overrideToolOutput?: unknown): void {
   const startActionCode = actionCodeForRole(result, "start");
   const hasStartAction = startActionCode.length > 0;
   if (!hasExplicitServerRouting) {
-    console.warn("[ui_contract_missing_view_mode_tolerated]", {
+    console.warn("[ui_contract_missing_view_mode_fail_closed]", {
       payload_source: resolved.source,
       view_mode: viewMode || "",
       ui_gate_status: String((state?.ui_gate_status || "")).trim().toLowerCase(),
@@ -1563,26 +1544,19 @@ export function render(overrideToolOutput?: unknown): void {
     }
     if (sectionTitleEl) sectionTitleEl.textContent = getSectionTitle(lang, "step_0", "");
     (btnStart as HTMLElement).style.display = "none";
-    renderActionSurfaceButtons({
-      containerId: "primaryActionWrap",
-      actions: surfaceActionsForResult(result, "primary", lang).filter((action) => action.role === "start"),
-      className: "btn primary",
-    });
-    if (auxiliaryActionWrap) (auxiliaryActionWrap as HTMLElement).style.display = "none";
-    startHint.textContent = uiText(lang, "startHint", "");
-    (startHint as HTMLElement).style.display = startHint.textContent ? "block" : "none";
-    buildStepper(0, "", lang);
     if (badge) {
-      badge.textContent = "01";
-      (badge as HTMLElement).style.display = "block";
+      badge.textContent = "";
+      (badge as HTMLElement).style.display = "none";
     }
     if (cardDesc) {
-      const prestartEl = cardDesc as HTMLElement;
-      prestartEl.classList.remove("has-grid");
-      prestartEl.classList.remove("is-step0-ask-layout");
-      if (startupPayloadMissing) renderPrestartContent(prestartEl, lang);
-      else renderPrestartContent(prestartEl, lang);
+      const blockedEl = cardDesc as HTMLElement;
+      blockedEl.classList.remove("has-grid");
+      blockedEl.classList.remove("is-step0-ask-layout");
+      renderContractFailureState(blockedEl, lang, "ui_view_mode_missing", "");
     }
+    startHint.textContent = uiText(lang, "error.contract.body", "");
+    (startHint as HTMLElement).style.display = startHint.textContent ? "block" : "none";
+    setInlineNotice(uiText(lang, "error.contract.body", ""));
     if (isLoading) setLoading(false);
     return;
   }
@@ -2168,7 +2142,7 @@ export function render(overrideToolOutput?: unknown): void {
 
     renderActionSurfaceButtons({
       containerId: "primaryActionWrap",
-      actions: dreamBuilderScoreSubmitActionForContract(dreamBuilderContract, lang),
+      actions: surfaceActionsForResult(result, "primary", lang).filter((action) => action.role !== "start"),
       className: "btn primary",
     });
     renderActionSurfaceButtons({
@@ -2355,9 +2329,7 @@ export function render(overrideToolOutput?: unknown): void {
   }
   const primaryActions = comparePanelVisible
     ? []
-    : surfaceActionsForResult(result, "primary", lang).filter(
-        (action) => action.role !== "start" && action.role !== "score_submit"
-      );
+    : surfaceActionsForResult(result, "primary", lang).filter((action) => action.role !== "start");
   const auxiliaryActions = comparePanelVisible
     ? []
     : surfaceActionsForResult(result, "auxiliary", lang);

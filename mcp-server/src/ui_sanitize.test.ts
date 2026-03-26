@@ -948,7 +948,7 @@ test("bundled runtime renders rich body into cardDesc via formatter and keeps un
   assert.doesNotMatch(source, /(?:ui\.error|errorEl)\.innerHTML\s*=/);
 });
 
-test("bundled runtime startup and ACTION_START flow stay on the simple happy-path", () => {
+test("bundled runtime startup stays strict and ACTION_START remains contract-owned", () => {
   const source = fs.readFileSync(new URL("../ui/step-card.bundled.html", import.meta.url), "utf8");
 
   // Startup: standard bridge path may show a wait shell before the first real tool-result arrives.
@@ -963,17 +963,28 @@ test("bundled runtime startup and ACTION_START flow stay on the simple happy-pat
   assert.match(source, /if \(!initialIngested\) \{\s*renderStartupWaitShell\("initial_bootstrap_probe"\);\s*\}/);
   assert.match(source, /if \(method === "ui\/initialize"\) \{/);
 
-  // Routing tolerates missing explicit view mode and keeps the interactive path live.
+  // Routing now fails closed when explicit server routing is missing.
   assert.match(source, /const hasExplicitServerRouting =/);
   assert.match(source, /if \(!hasExplicitServerRouting\) \{/);
-  assert.match(source, /\[ui_contract_missing_view_mode_tolerated\]/);
+  assert.match(source, /\[ui_contract_missing_view_mode_fail_closed\]/);
+  assert.doesNotMatch(source, /\[ui_contract_missing_view_mode_tolerated\]/);
+  assert.match(source, /renderContractFailureState\([^,]+,\s*lang,\s*"ui_view_mode_missing",\s*""\)/);
 
-  // ACTION_START: no strict liveness fail-closed path.
+  // ACTION_START remains contract-owned without synthetic recovery polling.
   assert.doesNotMatch(source, /scheduleStartAckRecoveryPoll\(/);
   assert.doesNotMatch(source, /result\?\.ack_status \|\| responseState\.ack_status \|\| responseLiveness\.ack_status/);
   assert.doesNotMatch(source, /result\?\.state_advanced \?\? responseState\.state_advanced \?\? responseLiveness\.state_advanced/);
   assert.doesNotMatch(source, /\[ui_start_dispatch_not_advanced_fail_closed\]/);
   assert.match(source, /\[ui_contract_interactive_content_absent\]/);
+});
+
+test("bundled runtime keeps bridge origin checks fail-closed without wildcard postMessage fallback", () => {
+  const source = fs.readFileSync(new URL("../ui/step-card.bundled.html", import.meta.url), "utf8");
+
+  assert.match(source, /throw new Error\("bridge target origin unavailable"\)/);
+  assert.match(source, /reason:\s*"allowed_origin_unresolved"/);
+  assert.doesNotMatch(source, /fallback_used:\s*true/);
+  assert.doesNotMatch(source, /window\.parent\.postMessage\([^,]+,\s*"\\*"\)/);
 });
 
 test("canonical widget payload prefers _meta.widget_result authority over fallback shapes", () => {

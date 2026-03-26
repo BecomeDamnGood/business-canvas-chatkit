@@ -228,24 +228,6 @@ type ChooseForMeConfig = {
   field: ChooseForMeField;
 };
 
-function parseMenuIdFromContractId(contractIdRaw: unknown): string {
-  const parts = String(contractIdRaw || "").trim().split(":");
-  return String(parts[2] || "").trim().toUpperCase();
-}
-
-function currentMenuIdForStep(state: CanvasState, stepId: string): string {
-  const phaseByStep =
-    state &&
-    typeof (state as Record<string, unknown>).__ui_phase_by_step === "object" &&
-    (state as Record<string, unknown>).__ui_phase_by_step !== null
-      ? ((state as Record<string, unknown>).__ui_phase_by_step as Record<string, unknown>)
-      : {};
-  const fromPhase = parseMenuIdFromContractId(phaseByStep[stepId]);
-  if (fromPhase) return fromPhase;
-  const last = asRecord((state as Record<string, unknown>).last_specialist_result || {});
-  return parseMenuIdFromContractId(last.ui_contract_id);
-}
-
 function suggestionStateForStep(
   state: CanvasState,
   stepId: string
