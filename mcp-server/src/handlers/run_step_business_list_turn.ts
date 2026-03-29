@@ -6,7 +6,7 @@ import {
   normalizeLightUserInput,
   parseListItems,
   tokenizeWords,
-} from "./run_step_compare_heuristics.js";
+} from "./run_step_compare_text_utils.js";
 
 export const BUSINESS_LIST_ROUTE_REMOVE = "__BUSINESS_LIST_REMOVE__";
 export const BUSINESS_LIST_ROUTE_REPLACE = "__BUSINESS_LIST_REPLACE__";

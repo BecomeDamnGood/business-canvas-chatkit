@@ -14,6 +14,7 @@ import type {
   UiStructuredSuggestionsContent,
 } from "../contracts/ui_actions.js";
 import {
+  ACTION_MENU_ID_BY_ACTIONCODE,
   DEFAULT_ACTION_CODES_BY_STEP_STATUS,
   MENU_LABEL_DEFAULTS,
   UI_CONTRACT_VERSION,
@@ -255,17 +256,6 @@ function shouldEnforceSingleValueConfirmVisibility(params: {
 
 function hasSingleValueStructuredContent(stepId: string): boolean {
   return isSingleValueCompareStep(stepId);
-}
-
-function isSemanticPurposeIntroVisibleState(params: {
-  stepId: string;
-  status: TurnOutputStatus;
-  comparePending: boolean;
-}): boolean {
-  if (params.stepId !== "purpose") return false;
-  if (params.comparePending) return false;
-  if (params.status === "valid_output") return false;
-  return true;
 }
 
 function renderModeForStep(state: CanvasState, stepId: string): "actions" | "no_buttons" {
@@ -825,6 +815,7 @@ function stripStrategySummaryParagraphs(answerText: string, statements: string[]
     /^you now have\s+\d+\s+focus points within your strategy:?$/i,
     /^i advise you to formulate at least 4 but maximum 7 focus points\.?$/i,
     /^your current strategy for\b/i,
+    /^the current strategy of\b/i,
   ];
   const paragraphs = String(answerText || "")
     .replace(/\r/g, "\n")
@@ -1549,7 +1540,15 @@ function resolveActionSurface(params: {
   }
   const defaults = DEFAULT_ACTION_CODES_BY_STEP_STATUS[stepId];
   if (!defaults) return { actionCodes: [], labels: [], labelKeys: [] };
-  let allActions = Array.isArray(defaults[status]) ? defaults[status] : [];
+  const lastActionCode = String((state as any).__turn_last_routing_action_code || "").trim().toUpperCase();
+  const explicitMenuId = String(ACTION_MENU_ID_BY_ACTIONCODE[lastActionCode] || "").trim();
+  const explicitMenuActions = explicitMenuId
+    ? (Array.isArray(ACTIONCODE_REGISTRY.menus[explicitMenuId]) ? ACTIONCODE_REGISTRY.menus[explicitMenuId] : [])
+        .map((code) => String(code || "").trim())
+        .filter(Boolean)
+    : [];
+  let allActions =
+    explicitMenuActions.length > 0 ? explicitMenuActions : Array.isArray(defaults[status]) ? defaults[status] : [];
   if (
     (status === "no_output" || (stepId === "dream" && status === "incomplete_output")) &&
     shouldEnforceSingleValueConfirmVisibility({ stepId, state, specialist })
@@ -1672,7 +1671,7 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     stepId === "strategy" ? strategyStatementsFromSources(state, statusSource, prev, { provisionalForStep }) : [];
   const strategyContextBlock =
     !isOfftopic && stepId === "strategy" && strategyStatements.length > 0 && !comparePending
-      ? buildStrategyContextBlock(state, strategyStatements, { uiStringFromState, companyNameForPrompt })
+      ? buildStrategyContextBlock(state, strategyStatements, { uiStringFromState })
       : "";
   const rulesContext =
     !isOfftopic && stepId === "rulesofthegame" && recapText && !comparePending
@@ -1853,14 +1852,7 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     safeLabelKeys = retainedIndices.map((idx) => safeLabelKeys[idx]);
   }
   const comparePresentation: "picker" = "picker";
-  const showStepIntroChrome =
-    stepId === "purpose"
-      ? isSemanticPurposeIntroVisibleState({
-        stepId,
-        status: effectiveStatus,
-        comparePending: normalizedComparePending,
-      }) || legacyShowStepIntroChrome
-      : legacyShowStepIntroChrome;
+  const showStepIntroChrome = legacyShowStepIntroChrome;
   const headline = contractHeadlineForState({
     state,
     stepId,

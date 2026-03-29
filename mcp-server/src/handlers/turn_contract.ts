@@ -848,7 +848,6 @@ function applyDeterministicUiActionRenderPolicy(response: RunStepContractRespons
   const variant = String(view.variant || "").trim().toLowerCase();
   const currentStep = String(response.current_step_id || state.current_step || "").trim();
   const bypassInteractiveStep0RoleGate = mode === "interactive" && currentStep === STEP_0_ID;
-  const hasRenderableContentOwner = hasRenderableUiContentOwner(ui);
   const hasChoiceActions = actions.some(
     (action) => normalizeUiActionRole(action.role, "choice") === "choice"
   );
@@ -861,6 +860,7 @@ function applyDeterministicUiActionRenderPolicy(response: RunStepContractRespons
   const dreamBuilderPhase = String(toRecord(ui.dream_builder_contract).phase || "").trim();
   const dreamBuilderCompareActive = dreamBuilderPhase === "compare";
   const ordinaryCompareInputActive = hasActiveNormalCompareSource(response);
+  const ordinaryInteractiveTextInputActive = Boolean(String(state.ui_action_text_submit || "").trim());
   const dreamBuilderTextInputActive = dreamBuilderPhase === "collect" || dreamBuilderPhase === "refine";
   const dreamBuilderScoringActive = dreamBuilderPhase === "scoring";
   const compareSurfaceActive =
@@ -868,7 +868,7 @@ function applyDeterministicUiActionRenderPolicy(response: RunStepContractRespons
   if (mode === "prestart") {
     allowedRoles.add("start");
   } else if (mode === "interactive") {
-    if (ordinaryCompareInputActive || dreamBuilderTextInputActive) {
+    if (ordinaryInteractiveTextInputActive || dreamBuilderTextInputActive) {
       allowedRoles.add("text_submit");
     }
     if (dreamBuilderScoringActive) {
@@ -880,7 +880,7 @@ function applyDeterministicUiActionRenderPolicy(response: RunStepContractRespons
         allowedRoles.add("dream_start_exercise");
       }
     }
-    if (hasChoiceActions && hasRenderableContentOwner) {
+    if (hasChoiceActions && !compareSurfaceActive) {
       allowedRoles.add("choice");
     } else if (compareSurfaceActive) {
       allowedRoles.add("compare_pick_user");

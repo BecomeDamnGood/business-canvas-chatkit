@@ -44,8 +44,14 @@ function buildModelSafeResult(result: Record<string, unknown>): Record<string, u
       ? (ui.flags as Record<string, unknown>)
       : {};
   const currentStep = safeString(result.current_step_id || state.current_step || "step_0");
+  const uiView =
+    ui.view && typeof ui.view === "object"
+      ? (ui.view as Record<string, unknown>)
+      : {};
+  const uiViewMode = safeString(uiView.mode || "").trim().toLowerCase();
   const started = safeString(state.started || "");
   const isStarted = started.toLowerCase() === "true";
+  const isPrestartView = currentStep === "step_0" && (uiViewMode === "prestart" || (!uiViewMode && !isStarted));
   const startHint = uiStringForState(state, "startHint");
   const openAppToContinue = uiStringForState(state, "app.open_to_continue");
   const initialUserMessage = safeString(state.initial_user_message || "");
@@ -160,7 +166,11 @@ function buildModelSafeResult(result: Record<string, unknown>): Record<string, u
   const safeState: Record<string, unknown> = {
     current_step: currentStep || "step_0",
   };
-  if (started) safeState.started = started;
+  const normalizedStarted =
+    isPrestartView
+      ? (started || "false")
+      : "true";
+  safeState.started = normalizedStarted;
   if (initialUserMessage) safeState.initial_user_message = initialUserMessage;
   if (locale) safeState.locale = locale;
   if (language) safeState.language = language;
@@ -201,7 +211,10 @@ function buildModelSafeResult(result: Record<string, unknown>): Record<string, u
   if (runStepInputSchemaVersion) safeState.run_step_input_schema_version = runStepInputSchemaVersion;
   if (runStepOutputSchemaVersion) safeState.run_step_output_schema_version = runStepOutputSchemaVersion;
   // Keep model-visible transport renderable for fallback paths without exposing rich content.
-  const modelSafePrompt = !isStarted ? (startHint || openAppToContinue) : "";
+  // Keep the model-safe fallback aligned with the actual turn phase.
+  // Outside the real prestart shell, emitting "Click Start to begin." creates a false downgrade
+  // for any client path that temporarily falls back to structuredContent.result.
+  const modelSafePrompt = isPrestartView ? (startHint || openAppToContinue) : openAppToContinue;
   const modelSafeText = result.ok === true ? modelSafePrompt : openAppToContinue;
   return {
     model_result_shape_version: RUN_STEP_MODEL_RESULT_SHAPE_VERSION,

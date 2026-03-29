@@ -6,6 +6,7 @@ import type { UiI18nTelemetryCounters } from "./run_step_i18n_runtime.js";
 import type { TurnResponseEngine } from "./run_step_turn_response_engine.js";
 import type { UiContractMeta, CompareUiPayload } from "./run_step_ui_payload.js";
 import type { AcceptedOutputUserTurnClassification } from "./run_step_accepted_output_semantics.js";
+import type { RunStepTurnSemanticClassification } from "./run_step_turn_semantics.js";
 
 export type RunStepSpecialistRouting = {
   enabled: boolean;
@@ -272,7 +273,6 @@ export type RunStepPipelineStatePorts = {
     userMessage: string;
     specialistResult: any;
   }) => boolean;
-  shouldTreatAsStepContributingInput: (userMessage: string, stepId: string) => boolean;
   hasDreamSpecialistCandidate: (specialistResult: any) => boolean;
   buildDreamRefineFallbackSpecialist: (base: any, userInput: string, state: CanvasState) => any;
   strategyStatementsForConsolidateGuard: (result: any, state: CanvasState) => string[];
@@ -303,6 +303,15 @@ export type RunStepPipelineRenderPorts = {
 };
 
 export type RunStepComparePipelinePorts = {
+  classifyUserTurnSemantics: (params: {
+    model: string;
+    stepId: string;
+    userMessage: string;
+    currentAcceptedValue?: string;
+    pendingSuggestion?: string;
+    pendingUserVariant?: string;
+    language?: string;
+  }) => Promise<RunStepTurnSemanticClassification>;
   classifyAcceptedOutputUserTurn: (params: {
     model: string;
     stepId: string;

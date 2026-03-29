@@ -10,19 +10,17 @@ import { PRODUCTSSERVICES_STEP_ID } from "../steps/productsservices.js";
 import { RULESOFTHEGAME_STEP_ID } from "../steps/rulesofthegame.js";
 import { PRESENTATION_STEP_ID } from "../steps/presentation.js";
 import {
-  createRunStepCompareHeuristicHelpers,
+  createRunStepCompareSuggestionHelpers,
   normalizeLightUserInput,
   normalizeListUserInput,
   normalizeUserInputAgainstSuggestion,
   tokenizeWords,
   isMaterialRewriteCandidate,
-  isClearlyGeneralOfftopicInput,
-  shouldTreatAsStepContributingInput,
   parseListItems,
   splitSentenceItems,
   canonicalizeComparableText,
   areEquivalentCompareVariants,
-} from "./run_step_compare_heuristics.js";
+} from "./run_step_compare_text_utils.js";
 
 function ensureSentenceEnd(raw: string): string {
   const text = String(raw || "").trim();
@@ -60,7 +58,7 @@ function fieldForStep(stepId: string): string {
   return "";
 }
 
-const compareHeuristicHelpers = createRunStepCompareHeuristicHelpers({
+const compareSuggestionHelpers = createRunStepCompareSuggestionHelpers({
   entityStepId: ENTITY_STEP_ID,
   dreamStepId: DREAM_STEP_ID,
   bigwhyStepId: BIGWHY_STEP_ID,
@@ -70,11 +68,11 @@ const compareHeuristicHelpers = createRunStepCompareHeuristicHelpers({
   ensureSentenceEnd,
 });
 
-export const pickDualChoiceSuggestion = compareHeuristicHelpers.pickDualChoiceSuggestion;
-export const pickDreamSuggestionFromPreviousState = compareHeuristicHelpers.pickDreamSuggestionFromPreviousState;
-export const pickBigWhySuggestionFromPreviousState = compareHeuristicHelpers.pickBigWhySuggestionFromPreviousState;
-export const pickEntitySuggestionFromPreviousState = compareHeuristicHelpers.pickEntitySuggestionFromPreviousState;
-export const pickRoleSuggestionFromPreviousState = compareHeuristicHelpers.pickRoleSuggestionFromPreviousState;
+export const pickDualChoiceSuggestion = compareSuggestionHelpers.pickDualChoiceSuggestion;
+export const pickDreamSuggestionFromPreviousState = compareSuggestionHelpers.pickDreamSuggestionFromPreviousState;
+export const pickBigWhySuggestionFromPreviousState = compareSuggestionHelpers.pickBigWhySuggestionFromPreviousState;
+export const pickEntitySuggestionFromPreviousState = compareSuggestionHelpers.pickEntitySuggestionFromPreviousState;
+export const pickRoleSuggestionFromPreviousState = compareSuggestionHelpers.pickRoleSuggestionFromPreviousState;
 
 export {
   normalizeLightUserInput,
@@ -82,8 +80,6 @@ export {
   normalizeUserInputAgainstSuggestion,
   tokenizeWords,
   isMaterialRewriteCandidate,
-  isClearlyGeneralOfftopicInput,
-  shouldTreatAsStepContributingInput,
   parseListItems,
   splitSentenceItems,
   canonicalizeComparableText,

@@ -467,6 +467,17 @@ function isAcceptedOutputSingleValueStep(stepId: string): boolean {
   return isSingleValueFeedbackStep(stepId);
 }
 
+function isSemanticallyContributingAcceptedOutputTurn(
+  classification: AcceptedOutputUserTurnClassification | null | undefined
+): boolean {
+  const turnKind = String(classification?.turn_kind || "").trim();
+  return (
+    turnKind === "step_variant" ||
+    turnKind === "raw_source_content" ||
+    turnKind === "feedback_on_existing_content"
+  );
+}
+
 async function resolveEffectiveStepSupportState(params: {
   state: CanvasState;
   stepId: string;
@@ -517,6 +528,21 @@ export async function shouldTreatTurnAsCurrentValueFeedback(params: {
   model: string;
   language?: string;
   dreamRuntimeModeRaw?: unknown;
+  classifyUserTurnSemantics: (params: {
+    model: string;
+    stepId: string;
+    userMessage: string;
+    currentAcceptedValue?: string;
+    pendingSuggestion?: string;
+    pendingUserVariant?: string;
+    language?: string;
+  }) => Promise<{
+    is_clearly_general_offtopic: boolean;
+    is_step_contributing: boolean;
+    pending_compare_intent: string;
+    pending_compare_anchor: string;
+    current_value_feedback_intent: string;
+  }>;
   classifyAcceptedOutputUserTurn: (params: {
     model: string;
     stepId: string;
@@ -541,6 +567,16 @@ export async function shouldTreatTurnAsCurrentValueFeedback(params: {
   }
   const currentValue = pickCurrentStepValueForFeedback(params.state, stepId);
   if (!currentValue) return false;
+  const turnSemantics = await params.classifyUserTurnSemantics({
+    model: params.model,
+    stepId,
+    userMessage,
+    currentAcceptedValue: currentValue,
+    language: params.language,
+  });
+  if (turnSemantics.current_value_feedback_intent === "feedback_on_current_value") {
+    return true;
+  }
   const classification = await params.classifyAcceptedOutputUserTurn({
     model: params.model,
     stepId,
@@ -875,6 +911,7 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
       model: params.model,
       language: params.lang,
       dreamRuntimeModeRaw: deps.getDreamRuntimeMode(state),
+      classifyUserTurnSemantics: deps.classifyUserTurnSemantics,
       classifyAcceptedOutputUserTurn: deps.classifyAcceptedOutputUserTurn,
       actionCodeRaw: params.actionCodeRaw,
       submittedTextIntent,
@@ -1222,7 +1259,13 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
         userMessage,
         specialistResult,
       });
-      const hasContributingInput = deps.shouldTreatAsStepContributingInput(String(userMessage || ""), deps.dreamStepId);
+      const dreamTurnClassification = await deps.classifyAcceptedOutputUserTurn({
+        model: params.model,
+        stepId: deps.dreamStepId,
+        userMessage: String(userMessage || "").trim(),
+        language: params.lang,
+      });
+      const hasContributingInput = isSemanticallyContributingAcceptedOutputTurn(dreamTurnClassification);
       const candidateMissing = !deps.hasDreamSpecialistCandidate(specialistResult);
       if (!isOfftopic && !isMetaFallback && hasContributingInput && candidateMissing) {
         const repairSeed = String(userMessage || "").trim();

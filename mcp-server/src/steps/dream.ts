@@ -364,6 +364,20 @@ REFINE
 - feedback_reason_text must not repeat message or refined_formulation
 - suggest_dreambuilder="false"
 
+16.25) IF THE USER ASKS TO REFINE THE CURRENT DREAM WORDING
+
+If the current Dream sentence already exists in context and the user comments on its wording, tone, warmth, clarity, friendliness, sharpness, or asks to rewrite "this" formulation without supplying a brand-new Dream:
+- treat that as refinement of the current Dream, not as a fresh Dream input
+- action="REFINE"
+- feedback_mode="refine_current"
+- message: one short localized sentence acknowledging the requested change in wording or tone, for example warmer, friendlier, clearer, or more human
+- feedback_reason_text: one short localized sentence stating only the strongest wording reason for the new suggestion, specific to the current Dream sentence and the user's feedback
+- refined_formulation: provide another Dream sentence that keeps the same core meaning and still follows section 8 and 8.5
+- dream=""
+- question=""
+- suggest_dreambuilder="false"
+- When the user is clearly asking to rephrase the current Dream, return the rewritten Dream sentence itself rather than explanation-only text.
+
 16.5) HANDLE REFINE CONFIRMATION (HARD)
 
 If the user clearly accepts the refined wording:

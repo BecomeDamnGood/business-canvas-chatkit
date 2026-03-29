@@ -16,7 +16,7 @@ import { applyRulesRuntimePolicy } from "../steps/rulesofthegame_runtime_policy.
 import { applyDreamRuntimePolicy } from "../steps/dream_runtime_policy.js";
 import { PRESENTATION_STEP_ID } from "../steps/presentation.js";
 import { createRunStepStateUpdateHelpers } from "./run_step_state_update.js";
-import { parseListItems } from "./run_step_compare_heuristics.js";
+import { parseListItems } from "./run_step_compare_text_utils.js";
 
 type DreamRuntimeMode = "self" | "builder_collect" | "builder_scoring" | "builder_refine";
 

@@ -2,7 +2,6 @@ import { UI_STRINGS_DEFAULT } from "../../i18n/ui_strings_defaults.js";
 import type { CanvasState } from "../state.js";
 
 type UiStringResolver = (state: CanvasState, key: string, fallback: string) => string;
-type CompanyNameResolver = (state: CanvasState) => string;
 type ProvisionalResolver = (state: CanvasState, stepId: string) => string;
 
 function comparableText(raw: string): string {
@@ -82,30 +81,11 @@ function strategyOverflowWarningLine(state: CanvasState, uiStringFromState: UiSt
   return /[.!?]$/.test(line) ? line : `${line}.`;
 }
 
-function strategyCurrentHeading(
-  state: CanvasState,
-  uiStringFromState: UiStringResolver,
-  companyNameForPrompt: CompanyNameResolver
-): string {
-  const template = uiStringFromState(
-    state,
-    "strategy.current.template",
-    String(UI_STRINGS_DEFAULT["strategy.current.template"] || "")
-  );
-  const line = String(template || "")
-    .replace("{0}", companyNameForPrompt(state))
-    .trim();
-  if (!line) return "";
-  const base = line.replace(/[.!?。！？]+$/g, "").replace(/\s*:\s*$/g, "").trim();
-  return base ? `${base}:` : "";
-}
-
 export function buildStrategyContextBlock(
   state: CanvasState,
   statements: string[],
   deps: {
     uiStringFromState: UiStringResolver;
-    companyNameForPrompt: CompanyNameResolver;
   }
 ): string {
   const deduped = dedupeStatements(statements);
@@ -114,7 +94,6 @@ export function buildStrategyContextBlock(
   if (deduped.length > 7) {
     parts.push(strategyOverflowWarningLine(state, deps.uiStringFromState));
   }
-  parts.push(strategyCurrentHeading(state, deps.uiStringFromState, deps.companyNameForPrompt));
   parts.push(...deduped.map((line) => `- ${line}`));
   return parts.join("\n");
 }

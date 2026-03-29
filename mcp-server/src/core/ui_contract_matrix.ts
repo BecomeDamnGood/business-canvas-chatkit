@@ -68,16 +68,16 @@ export const MENU_LABELS: Record<string, string[]> = {
     "I'm happy with this wording, please continue to step 4 the Big Why.",
   ],
   BIGWHY_MENU_INTRO: [
-    "Give me an example of the Big Why",
+    "Give me 3 examples of the Big Why",
     "Explain the importance of a Big Why",
   ],
   BIGWHY_MENU_FROM_EXPLAIN: [
     "Ask 3 tough questions to find the Big Why.",
-    "Give me an example of the Big Why",
+    "Give me 3 examples of the Big Why",
   ],
   BIGWHY_MENU_FROM_GIVE: [
     "Ask 3 tough questions to find the Big Why.",
-    "Explain the importance of a Big Why",
+    "Choose one for me",
   ],
   BIGWHY_MENU_REFINE: [
     "I'm happy with this wording, continue to step 5 Role",
@@ -99,7 +99,7 @@ export const MENU_LABELS: Record<string, string[]> = {
     "Choose one for me",
   ],
   ENTITY_MENU_INTRO: [
-    "Give me an example how my entity could sound",
+    "Give me 3 examples how my entity could sound",
     "Explain why having an Entity matters",
   ],
   ENTITY_MENU_EXAMPLE: [
@@ -110,12 +110,16 @@ export const MENU_LABELS: Record<string, string[]> = {
     "I'm happy with this wording, continue to step 7 Strategy.",
   ],
   ENTITY_MENU_FORMULATE: [
-    "Formulate my entity for me",
+    "Choose one for me",
+    "Explain why having an Entity matters",
   ],
-  STRATEGY_MENU_INTRO: ["Explain why a Strategy matters"],
+  STRATEGY_MENU_INTRO: [
+    "Ask me some questions to clarify my Strategy",
+    "Show me 3 examples of a Strategy for my business",
+  ],
   STRATEGY_MENU_ASK: [
     "Ask me some questions to clarify my Strategy",
-    "Show me an example of a Strategy for my business",
+    "Choose one for me",
   ],
   STRATEGY_MENU_REFINE: ["Explain why a Strategy matters"],
   STRATEGY_MENU_QUESTIONS: ["Explain why a Strategy matters"],
@@ -281,6 +285,33 @@ export const ACTION_PRETRANSITION_BY_ACTIONCODE: Record<string, UiActionPretrans
   ACTION_PRESENTATION_MAKE: { targetStepId: "presentation", renderMode: "no_buttons" },
 };
 
+export const ACTION_MENU_ID_BY_ACTIONCODE: Record<string, string> = {
+  ACTION_DREAM_INTRO_EXPLAIN_MORE: "DREAM_MENU_WHY",
+  ACTION_DREAM_WHY_GIVE_SUGGESTIONS: "DREAM_MENU_SUGGESTIONS",
+  ACTION_DREAM_SUGGESTIONS_PICK_ONE: "DREAM_MENU_REFINE",
+  ACTION_PURPOSE_INTRO_EXPLAIN_MORE: "PURPOSE_MENU_EXPLAIN",
+  ACTION_PURPOSE_EXPLAIN_ASK_3_QUESTIONS: "PURPOSE_MENU_POST_ASK",
+  ACTION_PURPOSE_EXAMPLES_ASK_3_QUESTIONS: "PURPOSE_MENU_POST_ASK",
+  ACTION_PURPOSE_EXPLAIN_GIVE_EXAMPLES: "PURPOSE_MENU_EXAMPLES",
+  ACTION_PURPOSE_EXAMPLES_CHOOSE_FOR_ME: "PURPOSE_MENU_AFTER_CHOOSE",
+  ACTION_BIGWHY_INTRO_EXPLAIN_IMPORTANCE: "BIGWHY_MENU_FROM_EXPLAIN",
+  ACTION_BIGWHY_INTRO_GIVE_EXAMPLE: "BIGWHY_MENU_FROM_GIVE",
+  ACTION_BIGWHY_EXPLAIN_ASK_3_QUESTIONS: "BIGWHY_MENU_INTRO",
+  ACTION_BIGWHY_EXPLAIN_GIVE_EXAMPLE: "BIGWHY_MENU_FROM_GIVE",
+  ACTION_BIGWHY_SUGGESTIONS_CHOOSE_FOR_ME: "BIGWHY_MENU_REFINE",
+  ACTION_ROLE_INTRO_EXPLAIN_MORE: "ROLE_MENU_ASK",
+  ACTION_ROLE_INTRO_GIVE_EXAMPLES: "ROLE_MENU_EXAMPLES",
+  ACTION_ROLE_ASK_GIVE_EXAMPLES: "ROLE_MENU_EXAMPLES",
+  ACTION_ENTITY_INTRO_EXPLAIN_MORE: "ENTITY_MENU_FORMULATE",
+  ACTION_ENTITY_INTRO_FORMULATE: "ENTITY_MENU_FORMULATE",
+  ACTION_ENTITY_SUGGESTIONS_CHOOSE_FOR_ME: "ENTITY_MENU_EXAMPLE",
+  ACTION_STRATEGY_ASK_3_QUESTIONS: "STRATEGY_MENU_QUESTIONS",
+  ACTION_STRATEGY_ASK_GIVE_EXAMPLES: "STRATEGY_MENU_ASK",
+  ACTION_TARGETGROUP_INTRO_EXPLAIN_MORE: "TARGETGROUP_MENU_EXPLAIN_MORE",
+  ACTION_TARGETGROUP_INTRO_ASK_QUESTIONS: "TARGETGROUP_MENU_EXPLAIN_ONLY",
+  ACTION_TARGETGROUP_EXPLAIN_ASK_QUESTIONS: "TARGETGROUP_MENU_EXPLAIN_ONLY",
+};
+
 export const DEFAULT_ACTION_CODES_BY_STEP_STATUS: Record<string, Record<TurnOutputStatus, string[]>> = {
   step_0: {
     no_output: [],
@@ -309,12 +340,12 @@ export const DEFAULT_ACTION_CODES_BY_STEP_STATUS: Record<string, Record<TurnOutp
   },
   entity: {
     no_output: ["ACTION_ENTITY_INTRO_FORMULATE", "ACTION_ENTITY_INTRO_EXPLAIN_MORE"],
-    incomplete_output: ["ACTION_ENTITY_FORMULATE_FOR_ME"],
+    incomplete_output: ["ACTION_ENTITY_SUGGESTIONS_CHOOSE_FOR_ME", "ACTION_ENTITY_INTRO_EXPLAIN_MORE"],
     valid_output: ["ACTION_ENTITY_EXAMPLE_CONFIRM", "ACTION_ENTITY_EXAMPLE_REFINE"],
   },
   strategy: {
-    no_output: ["ACTION_STRATEGY_INTRO_EXPLAIN_MORE"],
-    incomplete_output: ["ACTION_STRATEGY_ASK_3_QUESTIONS", "ACTION_STRATEGY_ASK_GIVE_EXAMPLES"],
+    no_output: ["ACTION_STRATEGY_ASK_3_QUESTIONS", "ACTION_STRATEGY_ASK_GIVE_EXAMPLES"],
+    incomplete_output: ["ACTION_STRATEGY_ASK_3_QUESTIONS", "ACTION_STRATEGY_EXAMPLES_CHOOSE_FOR_ME"],
     valid_output: ["ACTION_STRATEGY_REFINE_EXPLAIN_MORE", "ACTION_STRATEGY_CONFIRM_SATISFIED"],
   },
   targetgroup: {

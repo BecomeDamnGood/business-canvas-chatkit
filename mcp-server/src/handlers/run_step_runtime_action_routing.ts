@@ -14,7 +14,8 @@ import type {
   PendingCompareIntentResolution,
   PendingCompareTextAnchor,
   PendingCompareTextIntent,
-} from "./run_step_compare_heuristics.js";
+  RunStepTurnSemanticClassification,
+} from "./run_step_turn_semantics.js";
 import {
   BIGWHY_MAX_WORDS,
   buildActionCodeStepTransitions,
@@ -124,14 +125,15 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
       provisionalSource: "action_route" | "system_generated" | "user_input";
     }) => CanvasState;
     isUiStateHygieneSwitchV1Enabled: () => boolean;
-    isClearlyGeneralOfftopicInput: (userMessage: string) => boolean;
-    shouldTreatAsStepContributingInput: (userMessage: string, stepId: string) => boolean;
-    resolvePendingCompareIntent: (params: {
-      userMessage: string;
+    classifyUserTurnSemantics: (params: {
+      model: string;
       stepId: string;
-      pendingSuggestion: string;
-      pendingUserInput: string;
-    }) => Promise<PendingCompareIntentResolution> | PendingCompareIntentResolution;
+      userMessage: string;
+      currentAcceptedValue?: string;
+      pendingSuggestion?: string;
+      pendingUserVariant?: string;
+      language?: string;
+    }) => Promise<RunStepTurnSemanticClassification>;
     bumpUiI18nCounter: (telemetry: unknown, key: string) => void;
     classifyAcceptedOutputUserTurn: (params: {
       model: string;
@@ -181,6 +183,10 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
       isOfftopic: boolean;
       forcePending?: boolean;
       dreamRuntimeModeRaw?: unknown;
+      submittedTextIntent?: string;
+      submittedTextAnchor?: string;
+      submittedFeedbackText?: string;
+      acceptedOutputUserTurnClassification?: AcceptedOutputUserTurnClassification | null;
     }) => {
       specialist: Record<string, unknown>;
       compare?: CompareUiPayload | null;
@@ -846,8 +852,6 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     currentStepId === ids.rulesofthegameStepId &&
     looksLikeProceedTextIntent(userMessage) &&
     String((pendingBeforeTurn as Record<string, unknown>).proceed_request_intent || "").trim() === "next_step";
-  const isGeneralOfftopicInput = statePorts.isClearlyGeneralOfftopicInput(userMessage);
-  const isStepContributingInput = statePorts.shouldTreatAsStepContributingInput(userMessage, currentStepId);
   const hasFreeTextWhilePending =
     Boolean(String(userMessage || "").trim()) &&
     !String(userMessage || "").trim().startsWith("ACTION_") &&
@@ -1098,6 +1102,22 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     writeLastSpecialist(state, suspended);
     pendingBeforeTurn = suspended;
   }
+  const pendingCompareStateForSemantics = hasPendingCompare ? readPendingInteractionState(state) : null;
+  const pendingRenderModelForSemantics = pendingCompareStateForSemantics?.render_model;
+  const turnSemantics =
+    hasPendingCompare && Boolean(String(userMessage || "").trim()) && !compare.isComparePickRouteToken(userMessage)
+      ? await statePorts.classifyUserTurnSemantics({
+          model: runtime.model,
+          stepId: currentStepId,
+          userMessage,
+          pendingSuggestion: String(
+            pendingRenderModelForSemantics?.suggestion_text || pendingBeforeTurn.refined_formulation || ""
+          ).trim(),
+          pendingUserVariant: String(pendingRenderModelForSemantics?.user_text || "").trim(),
+        })
+      : null;
+  const isGeneralOfftopicInput = Boolean(turnSemantics?.is_clearly_general_offtopic);
+  const isStepContributingInput = Boolean(turnSemantics?.is_step_contributing);
   if (shouldResolvePendingCompareFromTextIntent) {
     const pendingCompareState = readPendingInteractionState(state);
     const pendingRenderModel = pendingCompareState?.render_model;
@@ -1121,12 +1141,10 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
           ? { intent: "feedback_on_suggestion" as const, anchor: "suggestion" as const }
           : acceptedOutputUserTurnClassification.turn_kind === "rejection_without_replacement"
             ? { intent: "reject_suggestion_explicit" as const, anchor: "suggestion" as const }
-            : await statePorts.resolvePendingCompareIntent({
-                userMessage,
-                stepId: currentStepId,
-                pendingSuggestion,
-                pendingUserInput,
-              });
+            : ({
+                intent: turnSemantics?.pending_compare_intent || "content_input",
+                anchor: turnSemantics?.pending_compare_anchor || "user_input",
+              } as PendingCompareIntentResolution);
     submittedTextIntent = pendingIntentResolution.intent;
     submittedTextAnchor = pendingIntentResolution.anchor;
     if (pendingIntentResolution.intent !== "accept_suggestion_explicit") {
@@ -1206,6 +1224,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
           userTextRaw: userMessage,
           isOfftopic: false,
           dreamRuntimeModeRaw: action.getDreamRuntimeMode(state),
+          acceptedOutputUserTurnClassification,
         });
         const rebuiltSpecialist = rebuilt.compare
           ? normalizePendingPickerSpecialistContract({

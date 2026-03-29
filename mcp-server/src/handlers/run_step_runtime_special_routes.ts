@@ -4,7 +4,7 @@ import type { LLMUsage } from "./run_step_dependencies.js";
 import type {
   PendingCompareTextAnchor,
   PendingCompareTextIntent,
-} from "./run_step_compare_heuristics.js";
+} from "./run_step_turn_semantics.js";
 
 import type { RunStepContext } from "./run_step_context.js";
 import type { RunStepRoutePorts } from "./run_step_ports.js";

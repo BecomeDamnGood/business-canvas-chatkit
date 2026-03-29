@@ -3,7 +3,7 @@ import type { CanvasState } from "../core/state.js";
 import type {
   PendingCompareTextAnchor,
   PendingCompareTextIntent,
-} from "./run_step_compare_heuristics.js";
+} from "./run_step_turn_semantics.js";
 
 export type RunStepInputMode = "widget" | "chat";
 

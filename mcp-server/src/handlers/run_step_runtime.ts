@@ -83,7 +83,7 @@ import {
   runStepRuntimePostPipelineLayer,
 } from "./run_step_modules.js";
 import { clearPendingInteractionState } from "../core/state.js";
-import { pickDualChoiceSuggestion } from "./run_step_compare_heuristics_defaults.js";
+import { pickDualChoiceSuggestion } from "./run_step_compare_defaults.js";
 import {
   createRunStepI18nRuntimeHelpers,
   type UiI18nTelemetryCounters,
@@ -105,15 +105,11 @@ import {
   normalizeListUserInput,
   normalizeUserInputAgainstSuggestion,
   isMaterialRewriteCandidate,
-  shouldTreatAsStepContributingInput,
-  isClearlyGeneralOfftopicInput,
   parseListItems,
   splitSentenceItems,
   canonicalizeComparableText,
   areEquivalentCompareVariants,
-  resolvePendingCompareIntent,
-  classifyPendingCompareTextIntent,
-} from "./run_step_compare_heuristics.js";
+} from "./run_step_compare_text_utils.js";
 import {
   LANGUAGE_LOCK_INSTRUCTION,
   UNIVERSAL_META_OFFTOPIC_POLICY,
@@ -191,6 +187,7 @@ import { createRunStepRuntimeTextUiHelpers } from "./run_step_runtime_text_ui_he
 import { createRunStepRuntimeSemanticHelpers } from "./run_step_runtime_semantic_helpers.js";
 import { classifyAcceptedOutputUserTurn as classifyAcceptedOutputUserTurnRaw } from "./run_step_accepted_output_semantics.js";
 import { classifyStepStuckTurn as classifyStepStuckTurnRaw } from "./run_step_stuck_turn_semantics.js";
+import { classifyRunStepTurnSemantics as classifyRunStepTurnSemanticsRaw } from "./run_step_turn_semantics.js";
 import { createRunStepRuntimeSpecialistHelpers } from "./run_step_runtime_specialist_helpers.js";
 import { runStepRuntimeExecute } from "./run_step_runtime_execute.js";
 import { correctUserInputSurface } from "./run_step_surface_correction.js";
@@ -670,7 +667,6 @@ const wordingHelpers = createRunStepCompareHelpers({
   stripChoiceInstructionNoise,
   tokenizeWords,
   isMaterialRewriteCandidate,
-  shouldTreatAsStepContributingInput,
   pickDualChoiceSuggestion,
   areEquivalentCompareVariants: areEquivalentCompareVariants,
   normalizeEntityPhrase,
@@ -707,10 +703,6 @@ export const buildCompareFromTurn = wordingHelpers.buildCompareFromTurn;
 export {
   isMaterialRewriteCandidate,
   areEquivalentCompareVariants,
-  isClearlyGeneralOfftopicInput,
-  shouldTreatAsStepContributingInput,
-  resolvePendingCompareIntent,
-  classifyPendingCompareTextIntent,
 };
 
 
@@ -833,6 +825,19 @@ async function classifyAcceptedOutputUserTurn(params: {
   return result.classification;
 }
 
+async function classifyUserTurnSemantics(params: {
+  model: string;
+  stepId: string;
+  userMessage: string;
+  currentAcceptedValue?: string;
+  pendingSuggestion?: string;
+  pendingUserVariant?: string;
+  language?: string;
+}) {
+  const result = await classifyRunStepTurnSemanticsRaw(params);
+  return result.classification;
+}
+
 async function classifyStepStuckTurn(params: {
   model: string;
   stepId: string;
@@ -928,14 +933,14 @@ const runStepRuntimeExecuteDeps = {
   ACTION_PRETRANSITION_BY_ACTIONCODE, DREAM_START_EXERCISE_ACTION_CODES, resolveActionCodeTransition,
   setUiRenderModeByStep, buildContractId, processActionCode, firstConfirmActionCodeForStep, firstGuidanceActionCodeForStep, shouldPretransitionActionCode, setDreamRuntimeMode, provisionalValueForStep,
   clearProvisionalValue, clearStepInteractiveState, isUiStateHygieneSwitchV1Enabled,
-  isClearlyGeneralOfftopicInput, isCompareEligibleContext, buildCompareFromPendingSpecialist,
+  isCompareEligibleContext, buildCompareFromPendingSpecialist,
   applyComparePickSelection, isComparePickRouteToken, isRefineAdjustRouteToken, buildCompareFromTurn,
   pickCompareAgentBase, copyPendingCompareState, normalizeNonStep0OfftopicSpecialist,
   uiStringFromStateMap, uiDefaultString, attachRegistryPayload, langFromState, UI_CONTRACT_VERSION,
   DREAM_FORCE_REFINE_ROUTE_PREFIX, DREAM_EXPLAINER_OVERLAP_REPAIR_ROUTE_PREFIX, DREAM_EXPLAINER_MULTI_REWRITE_REPAIR_ROUTE_PREFIX, STRATEGY_CONSOLIDATE_ROUTE_TOKEN, DREAM_SPECIALIST, PURPOSE_SPECIALIST, BIGWHY_SPECIALIST, ENTITY_SPECIALIST, STRATEGY_SPECIALIST,
   callSpecialistStrictSafe, normalizeLocalizedConceptTerms, normalizeEntitySpecialistResult, applyCentralMetaTopicRouter,
   normalizeStep0AskDisplayContract, hasValidStep0Final, applyPostSpecialistStateMutations,
-  isMetaOfftopicFallbackTurn, shouldTreatAsStepContributingInput, resolvePendingCompareIntent, hasDreamSpecialistCandidate,
+  isMetaOfftopicFallbackTurn, hasDreamSpecialistCandidate,
   buildDreamRefineFallbackSpecialist, strategyStatementsForConsolidateGuard, enforceDreamBuilderQuestionProgress,
   applyMotivationQuotesContractV11, compareSelectionMessage, applyStateUpdate, parseStep0Final,
   inferStep0SeedFromInitialMessage, step0ReadinessQuestion, step0CardDescForState, step0QuestionForState, generatePresentationAssets,
@@ -946,7 +951,7 @@ const runStepRuntimeExecuteDeps = {
   STRATEGY_CHOOSE_FOR_ME_ROUTE_TOKEN,
   PRESENTATION_MAKE_ROUTE_TOKEN, SWITCH_TO_SELF_DREAM_TOKEN,
   DREAM_START_EXERCISE_ROUTE_TOKEN, deriveSuggestionStateForWidget,
-  correctUserInputSurface, classifyAcceptedOutputUserTurn, classifyStepStuckTurn,
+  correctUserInputSurface, classifyAcceptedOutputUserTurn, classifyUserTurnSemantics, classifyStepStuckTurn,
 };
 
 export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunStepError> {

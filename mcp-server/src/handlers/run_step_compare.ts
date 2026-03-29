@@ -132,7 +132,6 @@ type RunStepCompareDeps = {
   stripChoiceInstructionNoise: (input: string) => string;
   tokenizeWords: (input: string) => string[];
   isMaterialRewriteCandidate: (userRaw: string, suggestionRaw: string) => boolean;
-  shouldTreatAsStepContributingInput: (input: string, stepId: string) => boolean;
   pickDualChoiceSuggestion: (
     stepId: string,
     specialistResult: unknown,
@@ -2156,7 +2155,11 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
       ? String(previousCompare?.render_model.user_text || "").trim()
       : "";
     const userRaw = String(userTextRaw || fallbackUserRaw).trim();
-    if (!forcePending && !deps.shouldTreatAsStepContributingInput(userRaw, stepId)) {
+    const isSemanticallyContributingTurn =
+      acceptedOutputUserTurnClassification?.turn_kind === "step_variant" ||
+      acceptedOutputUserTurnClassification?.turn_kind === "raw_source_content" ||
+      acceptedOutputUserTurnClassification?.turn_kind === "feedback_on_existing_content";
+    if (!forcePending && !isSemanticallyContributingTurn) {
       return { specialist: specialistResult, compare: null, pendingState: null };
     }
     const submittedIntent = normalizePendingSuggestionIntent(params.submittedTextIntent);
