@@ -46,7 +46,9 @@ import {
   applyBusinessListTurnResolution,
   isBusinessListStep,
   readBusinessListReferenceItems,
-  resolveBusinessListTurn,
+  readBusinessListSpecialistItems,
+  resolveBusinessListTurnFromSemanticClassification,
+  withBusinessListItems,
   type BusinessListTurnResolution,
 } from "./run_step_business_list_turn.js";
 import { isSingleValueFeedbackStep } from "../core/feedback_policy.js";
@@ -776,6 +778,26 @@ function rulesItemCount(specialistResult: Record<string, unknown>): number {
   return 0;
 }
 
+function canonicalListSet(items: string[]): string[] {
+  return items
+    .map((item) => String(item || "").trim().toLowerCase())
+    .filter(Boolean)
+    .sort();
+}
+
+function businessListItemsEqual(left: string[], right: string[]): boolean {
+  const a = canonicalListSet(left);
+  const b = canonicalListSet(right);
+  if (a.length !== b.length) return false;
+  return a.every((item, index) => item === b[index]);
+}
+
+function businessListPreservesCommittedCoverage(previousItems: string[], nextItems: string[]): boolean {
+  if (previousItems.length === 0) return true;
+  const nextSet = new Set(canonicalListSet(nextItems));
+  return canonicalListSet(previousItems).every((item) => nextSet.has(item));
+}
+
 function stepLabelForAutoSuggest(stepId: string, state: CanvasState): string {
   const uiStrings = asRecord((state as Record<string, unknown>).ui_strings);
   const keyByStep: Record<string, string> = {
@@ -942,14 +964,30 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
             __current_turn_step_support_state: "stuck",
           } as CanvasState)
         : stateForSpecialist;
-    const businessListTurnResolution: BusinessListTurnResolution | null =
+    const businessListReferenceItems =
+      isBusinessListStep(currentStepId)
+        ? readBusinessListReferenceItems(stateForSpecialistWithSupportContext, currentStepId)
+        : [];
+    const businessListTurnClassification =
       isBusinessListStep(currentStepId) &&
       !String(params.actionCodeRaw || "").trim() &&
-      String(userMessage || "").trim() !== ""
-        ? resolveBusinessListTurn({
+      String(userMessage || "").trim() !== "" &&
+      businessListReferenceItems.length > 0
+        ? await deps.classifyBusinessListTurn({
+            model: params.model,
             stepId: currentStepId,
             userMessage,
-            referenceItems: readBusinessListReferenceItems(stateForSpecialistWithSupportContext, currentStepId),
+            referenceItems: businessListReferenceItems,
+            language: params.lang,
+          })
+        : null;
+    const businessListTurnResolution: BusinessListTurnResolution | null =
+      businessListTurnClassification
+        ? resolveBusinessListTurnFromSemanticClassification({
+            stepId: currentStepId,
+            userMessage,
+            referenceItems: businessListReferenceItems,
+            classification: businessListTurnClassification,
           })
         : null;
     const userMessageForSpecialist =
@@ -988,6 +1026,35 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
         specialistResult,
       });
       specialistResult.__business_list_turn_preclassified = "true";
+    }
+    if (isBusinessListStep(currentStepId) && businessListReferenceItems.length > 0) {
+      const nextBusinessListItems = readBusinessListSpecialistItems(currentStepId, specialistResult);
+      const businessListIntent = String(businessListTurnClassification?.intent || "").trim();
+      const localMutationWasPreclassified =
+        Boolean(businessListTurnResolution) && businessListTurnResolution?.kind !== "add";
+      if (
+        businessListIntent === "none" &&
+        nextBusinessListItems.length > 0 &&
+        businessListItemsEqual(businessListReferenceItems, nextBusinessListItems)
+      ) {
+        specialistResult = withBusinessListItems({
+          stepId: currentStepId,
+          specialistResult,
+          items: businessListReferenceItems,
+          clearMessage: true,
+        });
+      } else if (
+        !localMutationWasPreclassified &&
+        nextBusinessListItems.length > 0 &&
+        !businessListPreservesCommittedCoverage(businessListReferenceItems, nextBusinessListItems)
+      ) {
+        specialistResult = withBusinessListItems({
+          stepId: currentStepId,
+          specialistResult,
+          items: businessListReferenceItems,
+          clearMessage: true,
+        });
+      }
     }
 
     let autoSuggestApplied = false;

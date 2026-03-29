@@ -170,6 +170,9 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
       handled: boolean;
       specialist: Record<string, unknown>;
       nextState: CanvasState;
+      actionCodes?: string[];
+      renderedActions?: import("../contracts/ui_actions.js").RenderedAction[];
+      contractMeta?: import("./run_step_ui_payload.js").UiContractMeta | null;
     };
     isComparePickRouteToken: (raw: string) => boolean;
     isRefineAdjustRouteToken: (raw: string) => boolean;
@@ -1467,22 +1470,14 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
   if (compareSelection.handled) {
     const stateWithUi = await behavior.ensureUiStrings(compareSelection.nextState, userMessage);
     state = stateWithUi;
-    const payload = behavior.attachRegistryPayload(
-      {
-        ok: true,
-        tool: "run_step",
-        current_step_id: String(stateWithUi.current_step),
-        active_specialist: String((stateWithUi as Record<string, unknown>).active_specialist || ""),
-        text: behavior.buildTextForWidget({ specialist: compareSelection.specialist, state: stateWithUi }),
-        prompt: behavior.pickPrompt(compareSelection.specialist),
-        specialist: compareSelection.specialist,
-        state: stateWithUi,
-      },
-      compareSelection.specialist
-    );
-
     return {
-      response: behavior.finalizeResponse(payload),
+      response: behavior.turnResponseEngine.attachAndFinalize({
+        state: stateWithUi,
+        specialist: compareSelection.specialist,
+        actionCodesOverride: compareSelection.actionCodes || [],
+        renderedActionsOverride: compareSelection.renderedActions || [],
+        contractMetaOverride: compareSelection.contractMeta || null,
+      }),
       state,
       userMessage,
       submittedTextIntent,

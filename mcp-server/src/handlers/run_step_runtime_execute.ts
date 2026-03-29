@@ -40,7 +40,7 @@ export async function runStepRuntimeExecute(
     buildDreamRefineFallbackSpecialist, strategyStatementsForConsolidateGuard, enforceDreamBuilderQuestionProgress,
     applyMotivationQuotesContractV11, compareSelectionMessage, applyStateUpdate, parseStep0Final,
     inferStep0SeedFromInitialMessage, step0ReadinessQuestion, step0CardDescForState, step0QuestionForState, generatePresentationAssets,
-    classifyAcceptedOutputUserTurn, classifyUserTurnSemantics,
+    classifyAcceptedOutputUserTurn, classifyBusinessListTurn, classifyUserTurnSemantics,
     runStepRuntimeSpecialRoutesLayer, runStepRuntimePostPipelineLayer,
     looksLikeMetaInstruction, ROLE_SPECIALIST, PRESENTATION_SPECIALIST, DREAM_PICK_ONE_ROUTE_TOKEN,
     PURPOSE_CHOOSE_FOR_ME_ROUTE_TOKEN, BIGWHY_CHOOSE_FOR_ME_ROUTE_TOKEN, ROLE_CHOOSE_FOR_ME_ROUTE_TOKEN, ENTITY_CHOOSE_FOR_ME_ROUTE_TOKEN,
@@ -479,6 +479,7 @@ export async function runStepRuntimeExecute(
     state: { applyPostSpecialistStateMutations, getDreamRuntimeMode, isMetaOfftopicFallbackTurn, hasDreamSpecialistCandidate, buildDreamRefineFallbackSpecialist, strategyStatementsForConsolidateGuard, pickBigWhyCandidate: actionRoutingLayer.pickBigWhyCandidate, countWords: actionRoutingLayer.countWords, buildBigWhyTooLongFeedback: actionRoutingLayer.buildBigWhyTooLongFeedback, enforceDreamBuilderQuestionProgress, applyMotivationQuotesContractV11 },
     render: { renderFreeTextTurnPolicy, validateRenderedContractOrRecover, applyUiPhaseByStep, buildContractId },
     compare: {
+      classifyBusinessListTurn,
       classifyUserTurnSemantics,
       classifyAcceptedOutputUserTurn,
       isCompareEligibleContext,

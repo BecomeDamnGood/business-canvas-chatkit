@@ -20,6 +20,7 @@ export const EntityZodSchema = z.object({
   suggestion_outro: z.string(),
   suggestion_item_style: z.enum(["bullets", "blocks"]),
   feedback_reason_text: z.string(),
+  user_pick_feedback_text: z.string(),
   feedback_mode: z.enum(["none", "affirm_input", "compare_suggestion", "refine_current"]),
   step_support_state: z.enum(["ok", "stuck"]),
   wants_recap: z.boolean(),
@@ -47,6 +48,7 @@ export const EntityJsonSchema = {
     "suggestion_outro",
     "suggestion_item_style",
     "feedback_reason_text",
+    "user_pick_feedback_text",
     "feedback_mode",
     "step_support_state",
     "wants_recap",
@@ -65,6 +67,7 @@ export const EntityJsonSchema = {
     suggestion_outro: { type: "string" },
     suggestion_item_style: { type: "string", enum: ["bullets", "blocks"] },
     feedback_reason_text: { type: "string" },
+    user_pick_feedback_text: { type: "string" },
     feedback_mode: { type: "string", enum: ["none", "affirm_input", "compare_suggestion", "refine_current"] },
     step_support_state: { type: "string", enum: ["ok", "stuck"] },
     wants_recap: { type: "boolean" },
@@ -99,7 +102,7 @@ ${lang ? `LANGUAGE: ${lang}\n` : ""}PLANNER_INPUT: ${plannerInput}`;
  * IMPORTANT: This string is intentionally identical to the spec you provided.
  */
 export const ENTITY_INSTRUCTIONS = `Role and voice
-You speak as Ben Steenstra in first person ONLY inside the "message" field. Calm, grounded, precise, supportive, and direct. One strong question at a time. Practical. No hype. No filler.
+You speak as Ben Steenstra in first person ONLY inside the "message" field. Calm, grounded, precise, warm, and supportive. Clear and lightly guiding, never pushy or commanding. One clear, invitational question at a time. Practical. No hype. No filler.
 Purpose of this step
 This step defines the Entity as the business container type the venture operates through, plus a short qualifier that makes the container instantly understandable to an outsider.
 Entity answers: “What kind of business vehicle is this, and what kind exactly?”

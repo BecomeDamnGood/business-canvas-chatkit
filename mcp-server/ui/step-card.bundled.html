@@ -1813,23 +1813,23 @@
             <div class="scoringIntro" id="scoringIntro"></div>
             <div id="scoringClusters"></div>
           </div>
-          <div class="wordingChoiceWrap" id="wordingChoiceWrap" style="display:none">
-            <div class="wordingChoiceFeedback" id="wordingChoiceFeedback" style="display:none"></div>
-            <div class="wordingChoiceCard" id="wordingChoiceUserCard">
-              <div class="wordingChoiceText" id="wordingChoiceUserText"></div>
-              <ul class="wordingChoiceList" id="wordingChoiceUserList"></ul>
-              <button class="choiceBtn wordingChoiceSelectBtn" id="wordingChoicePickUser" type="button"></button>
+          <div class="wordingChoiceWrap" id="compareWrap" style="display:none">
+            <div class="wordingChoiceFeedback" id="compareFeedback" style="display:none"></div>
+            <div class="wordingChoiceCard" id="compareUserCard">
+              <div class="wordingChoiceText" id="compareUserText"></div>
+              <ul class="wordingChoiceList" id="compareUserList"></ul>
+              <button class="choiceBtn wordingChoiceSelectBtn" id="comparePickUser" type="button"></button>
             </div>
-            <div class="wordingChoiceCard" id="wordingChoiceSuggestionCard">
-              <div class="wordingChoiceText" id="wordingChoiceSuggestionText"></div>
-              <ul class="wordingChoiceList" id="wordingChoiceSuggestionList"></ul>
-              <button class="choiceBtn wordingChoiceSelectBtn" id="wordingChoicePickSuggestion" type="button"></button>
+            <div class="wordingChoiceCard" id="compareSuggestionCard">
+              <div class="wordingChoiceText" id="compareSuggestionText"></div>
+              <ul class="wordingChoiceList" id="compareSuggestionList"></ul>
+              <button class="choiceBtn wordingChoiceSelectBtn" id="comparePickSuggestion" type="button"></button>
             </div>
-            <div class="wordingChoiceRetained" id="wordingChoiceRetained" style="display:none">
-              <div class="wordingChoiceRetainedHeading" id="wordingChoiceRetainedHeading"></div>
-              <ul class="wordingChoiceRetainedList" id="wordingChoiceRetainedList"></ul>
+            <div class="wordingChoiceRetained" id="compareRetained" style="display:none">
+              <div class="wordingChoiceRetainedHeading" id="compareRetainedHeading"></div>
+              <ul class="wordingChoiceRetainedList" id="compareRetainedList"></ul>
             </div>
-            <div class="wordingChoiceInstruction" id="wordingChoiceInstruction"></div>
+            <div class="wordingChoiceInstruction" id="compareInstruction"></div>
           </div>
           <div class="prompt" id="prompt"></div>
           <div class="inputWrap" id="inputWrap" style="display:none">
@@ -2879,9 +2879,13 @@
   var bridgeTargetOriginSource = "";
   var pendingWidgetScrollTarget = "";
   var pendingWidgetScrollTimer = null;
+  var pendingViewportSettleTimer = null;
+  var pendingViewportSettleFallbackTimer = null;
   var DESKTOP_WIDGET_SCROLL_OFFSET_PX = 10;
   var MOBILE_WIDGET_SCROLL_DELAY_MS = 60;
   var MOBILE_WIDGET_MAX_WIDTH_PX = 480;
+  var MOBILE_VIEWPORT_SETTLE_DELAY_MS = 120;
+  var MOBILE_VIEWPORT_SETTLE_MAX_WAIT_MS = 900;
   function initActionsConfig(config) {
     _render = config.render;
     _t = config.t;
@@ -2953,6 +2957,62 @@
       setTimeout(() => applyDesktopOffset(), 0);
     }
   }
+  function clearViewportSettleTimers() {
+    if (pendingViewportSettleTimer) {
+      clearTimeout(pendingViewportSettleTimer);
+      pendingViewportSettleTimer = null;
+    }
+    if (pendingViewportSettleFallbackTimer) {
+      clearTimeout(pendingViewportSettleFallbackTimer);
+      pendingViewportSettleFallbackTimer = null;
+    }
+  }
+  function scheduleWidgetTopScrollAfterViewportSettles() {
+    if (typeof window === "undefined") return;
+    if (!shouldUseMobileScrollBehavior()) {
+      scrollWidgetTop();
+      return;
+    }
+    const visualViewport = window.visualViewport;
+    if (!visualViewport) {
+      pendingWidgetScrollTimer = setTimeout(() => {
+        pendingWidgetScrollTimer = null;
+        scrollWidgetTop();
+      }, MOBILE_VIEWPORT_SETTLE_DELAY_MS);
+      return;
+    }
+    clearViewportSettleTimers();
+    let cleanedUp = false;
+    const cleanup = () => {
+      if (cleanedUp) return;
+      cleanedUp = true;
+      clearViewportSettleTimers();
+      visualViewport.removeEventListener("resize", onViewportChange);
+      visualViewport.removeEventListener("scroll", onViewportChange);
+      window.removeEventListener("scroll", onViewportChange);
+    };
+    const finalize = () => {
+      cleanup();
+      scrollWidgetTop();
+    };
+    const onViewportChange = () => {
+      if (pendingViewportSettleTimer) {
+        clearTimeout(pendingViewportSettleTimer);
+      }
+      pendingViewportSettleTimer = setTimeout(() => {
+        pendingViewportSettleTimer = null;
+        finalize();
+      }, MOBILE_VIEWPORT_SETTLE_DELAY_MS);
+    };
+    visualViewport.addEventListener("resize", onViewportChange);
+    visualViewport.addEventListener("scroll", onViewportChange);
+    window.addEventListener("scroll", onViewportChange, { passive: true });
+    pendingViewportSettleFallbackTimer = setTimeout(() => {
+      pendingViewportSettleFallbackTimer = null;
+      finalize();
+    }, MOBILE_VIEWPORT_SETTLE_MAX_WAIT_MS);
+    onViewportChange();
+  }
   function scrollPresentationPreviewIntoView() {
     if (typeof document === "undefined") return false;
     const preview = document.getElementById("presentationPreview");
@@ -2979,14 +3039,19 @@
     if (hadFocusedInput && shouldUseMobileScrollBehavior()) {
       pendingWidgetScrollTimer = setTimeout(() => {
         pendingWidgetScrollTimer = null;
-        scrollWidgetTop();
+        scheduleWidgetTopScrollAfterViewportSettles();
       }, MOBILE_WIDGET_SCROLL_DELAY_MS);
     } else {
       scrollWidgetTop();
     }
-    pendingWidgetScrollTarget = isPresentationMakeAction(normalized) ? "presentation_preview" : "";
+    pendingWidgetScrollTarget = isPresentationMakeAction(normalized) ? "presentation_preview" : "widget_top";
   }
   function applyPendingWidgetScroll() {
+    if (pendingWidgetScrollTarget === "widget_top") {
+      pendingWidgetScrollTarget = "";
+      scheduleWidgetTopScrollAfterViewportSettles();
+      return;
+    }
     if (pendingWidgetScrollTarget !== "presentation_preview") return;
     if (scrollPresentationPreviewIntoView()) pendingWidgetScrollTarget = "";
   }
@@ -3260,7 +3325,8 @@
   var STEP0_CONTINUITY_FIELDS = [
     "business_name",
     "step_0_final",
-    "step0_bootstrap"
+    "step0_bootstrap",
+    "initial_user_message"
   ];
   var CANONICAL_CONTINUITY_STEP_IDS = [
     "dream",
@@ -3471,10 +3537,12 @@
     const businessNameFromBootstrap = isKnownBusinessName(bootstrap.name) ? String(bootstrap.name).replace(/\s+/g, " ").trim() : "";
     const step0FinalFromState = String(source.step_0_final || "").replace(/\s+/g, " ").trim();
     const step0FinalFromBootstrap = composeStep0FinalFromBootstrap(bootstrap);
+    const initialUserMessage = String(source.initial_user_message || "").replace(/\s+/g, " ").trim();
     return {
       ...Object.keys(bootstrap).length > 0 ? { step0_bootstrap: bootstrap } : {},
       ...businessNameFromState || businessNameFromBootstrap ? { business_name: businessNameFromState || businessNameFromBootstrap } : {},
-      ...step0FinalFromState || step0FinalFromBootstrap ? { step_0_final: step0FinalFromState || step0FinalFromBootstrap } : {}
+      ...step0FinalFromState || step0FinalFromBootstrap ? { step_0_final: step0FinalFromState || step0FinalFromBootstrap } : {},
+      ...initialUserMessage ? { initial_user_message: initialUserMessage } : {}
     };
   }
   function retainStep0Continuity(preferred, ...fallbacks) {
@@ -3502,7 +3570,8 @@
       ...next,
       ...Object.keys(toRecord2(normalizedContext.step0_bootstrap)).length ? { step0_bootstrap: normalizedContext.step0_bootstrap } : {},
       ...String(normalizedContext.business_name || "").trim() ? { business_name: normalizedContext.business_name } : {},
-      ...String(normalizedContext.step_0_final || "").trim() ? { step_0_final: normalizedContext.step_0_final } : {}
+      ...String(normalizedContext.step_0_final || "").trim() ? { step_0_final: normalizedContext.step_0_final } : {},
+      ...String(normalizedContext.initial_user_message || "").trim() ? { initial_user_message: normalizedContext.initial_user_message } : {}
     };
   }
   function retainCanonicalStepContinuity(preferred, ...fallbacks) {
@@ -3585,6 +3654,7 @@
       business_name: void 0,
       step_0_final: void 0,
       step0_bootstrap: void 0,
+      initial_user_message: void 0,
       provisional_by_step: void 0,
       provisional_source_by_step: void 0
     } : {};
@@ -3595,6 +3665,9 @@
     if (String(retainedContext.business_name || "").trim()) patch.business_name = retainedContext.business_name;
     if (String(retainedContext.step_0_final || "").trim()) patch.step_0_final = retainedContext.step_0_final;
     if (Object.keys(toRecord2(retainedContext.step0_bootstrap)).length) patch.step0_bootstrap = retainedContext.step0_bootstrap;
+    if (String(retainedContext.initial_user_message || "").trim()) {
+      patch.initial_user_message = retainedContext.initial_user_message;
+    }
     for (const stepId of CANONICAL_CONTINUITY_STEP_IDS) {
       const finalField = CANONICAL_FINAL_FIELD_BY_STEP_ID[stepId];
       const retainedFinalValue = String(retainedCanonicalContext.finals[finalField] || "").trim();
@@ -6220,7 +6293,6 @@ ${String(item || "").trim()}`.trim())
         previewImg.src = String(presentationAssets.png_url);
         previewLink.href = String(presentationAssets.pdf_url);
         previewDownload.href = String(presentationAssets.pdf_url);
-        applyPendingWidgetScroll();
       } else {
         previewWrap.classList.remove("visible");
         previewImg.removeAttribute("src");
@@ -6228,6 +6300,7 @@ ${String(item || "").trim()}`.trim())
         previewDownload.removeAttribute("href");
       }
     }
+    applyPendingWidgetScroll();
     const purposeInstructionHintEl = document.getElementById("purposeInstructionHint");
     if (purposeInstructionHintEl) {
       const showPurposeHint = current === "purpose" && uiFlags.showPurposeHint === true;

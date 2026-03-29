@@ -1,6 +1,7 @@
 import type { CanvasState } from "../core/state.js";
 import { STEP_FINAL_FIELD_BY_STEP_ID } from "../core/state.js";
 import { hasGroupedCompareListSemantics } from "../steps/step_registry.js";
+import type { BusinessListTurnSemanticClassification } from "./run_step_business_list_semantics.js";
 import {
   canonicalizeComparableText,
   normalizeLightUserInput,
@@ -244,6 +245,20 @@ function parseCandidateList(stepId: string, specialistResult: Record<string, unk
   const fieldItems = dedupeItems(parseListItems(String(specialistResult[field] || "")));
   if (fieldItems.length > 0) return fieldItems;
   return dedupeItems(parseListItems(String(specialistResult.refined_formulation || "")));
+}
+
+function normalizedTargetIndexes(referenceItems: string[], indexes: unknown): number[] {
+  if (!Array.isArray(indexes)) return [];
+  const seen = new Set<number>();
+  const next: number[] = [];
+  for (const rawIndex of indexes) {
+    if (!Number.isInteger(rawIndex)) continue;
+    const index = Number(rawIndex);
+    if (index < 0 || index >= referenceItems.length || seen.has(index)) continue;
+    seen.add(index);
+    next.push(index);
+  }
+  return next.sort((left, right) => left - right);
 }
 
 function rewriteRoutePrompt(params: {
@@ -526,6 +541,198 @@ export function resolveBusinessListTurn(params: {
   return defaultAdd;
 }
 
+function clarifyResolution(params: {
+  stepId: string;
+  userMessage: string;
+  referenceItems: string[];
+  targetIndexes?: number[];
+  reason: ClarifyReason;
+}): BusinessListTurnResolution {
+  const targetIndexes = normalizedTargetIndexes(params.referenceItems, params.targetIndexes || []);
+  const targetItems = targetIndexes.map((index) => params.referenceItems[index]).filter(Boolean);
+  return {
+    kind: "clarify",
+    stepId: params.stepId,
+    userMessage: params.userMessage,
+    referenceItems: params.referenceItems,
+    routePrompt: rewriteRoutePrompt({
+      token: BUSINESS_LIST_ROUTE_CLARIFY,
+      stepId: params.stepId,
+      userMessage: params.userMessage,
+      referenceItems: params.referenceItems,
+      extraLines: [
+        `CLARIFY_REASON: ${params.reason}`,
+        `TARGET_ITEMS_JSON: ${JSON.stringify(targetItems)}`,
+      ],
+    }),
+    reason: params.reason,
+    targetItems,
+  };
+}
+
+export function resolveBusinessListTurnFromSemanticClassification(params: {
+  stepId: string;
+  userMessage: string;
+  referenceItems: string[];
+  classification: BusinessListTurnSemanticClassification;
+}): BusinessListTurnResolution {
+  const stepId = String(params.stepId || "").trim();
+  const userMessage = String(params.userMessage || "").trim();
+  const referenceItems = dedupeItems(params.referenceItems || []);
+  const classification = params.classification || {
+    intent: "add",
+    target_indexes: [],
+    replacement_text: "",
+    clarify_reason: "none",
+  };
+  const defaultAdd: BusinessListTurnResolution = {
+    kind: "add",
+    stepId,
+    userMessage,
+    referenceItems,
+    routePrompt: userMessage,
+  };
+  if (!isBusinessListStep(stepId) || !userMessage || referenceItems.length === 0) return defaultAdd;
+
+  const targetIndexes = normalizedTargetIndexes(referenceItems, classification.target_indexes);
+  const intent = String(classification.intent || "").trim();
+  const clarifyReasonRaw = String(classification.clarify_reason || "none").trim();
+  const clarifyReason: ClarifyReason =
+    clarifyReasonRaw === "missing_target" ||
+    clarifyReasonRaw === "ambiguous_target" ||
+    clarifyReasonRaw === "missing_replacement" ||
+    clarifyReasonRaw === "missing_instruction"
+      ? clarifyReasonRaw
+      : "missing_instruction";
+
+  if (intent === "remove") {
+    if (targetIndexes.length > 0) {
+      const updatedItems = referenceItems.filter((_, index) => !targetIndexes.includes(index));
+      const targetItems = targetIndexes.map((index) => referenceItems[index]).filter(Boolean);
+      return {
+        kind: "remove",
+        stepId,
+        userMessage,
+        referenceItems,
+        routePrompt: rewriteRoutePrompt({
+          token: BUSINESS_LIST_ROUTE_REMOVE,
+          stepId,
+          userMessage,
+          referenceItems,
+          extraLines: [
+            `TARGET_INDEXES_JSON: ${JSON.stringify(targetIndexes)}`,
+            `TARGET_ITEMS_JSON: ${JSON.stringify(targetItems)}`,
+            `UPDATED_ITEMS_JSON: ${JSON.stringify(updatedItems)}`,
+          ],
+        }),
+        targetIndexes,
+        targetItems,
+        updatedItems,
+      };
+    }
+    return clarifyResolution({
+      stepId,
+      userMessage,
+      referenceItems,
+      targetIndexes,
+      reason: clarifyReasonRaw === "ambiguous_target" ? "ambiguous_target" : "missing_target",
+    });
+  }
+
+  if (intent === "replace") {
+    const replacementNormalized = normalizeLightUserInput(String(classification.replacement_text || "")).trim();
+    const replacementText =
+      stepId === "rulesofthegame"
+        ? replacementNormalized
+        : replacementNormalized.replace(/[.!?]+$/, "").trim();
+    if (targetIndexes.length === 1 && replacementText) {
+      const targetIndex = targetIndexes[0];
+      const targetItem = String(referenceItems[targetIndex] || "").trim();
+      const updatedItems = referenceItems.map((item, index) => (index === targetIndex ? replacementText : item));
+      return {
+        kind: "edit",
+        stepId,
+        userMessage,
+        referenceItems,
+        routePrompt: rewriteRoutePrompt({
+          token: BUSINESS_LIST_ROUTE_REPLACE,
+          stepId,
+          userMessage,
+          referenceItems,
+          extraLines: [
+            `TARGET_INDEX: ${targetIndex}`,
+            `TARGET_ITEM: ${targetItem}`,
+            `REPLACEMENT_ITEM: ${replacementText}`,
+            `UPDATED_ITEMS_JSON: ${JSON.stringify(updatedItems)}`,
+          ],
+        }),
+        targetIndex,
+        targetItem,
+        editInstruction: userMessage,
+        replacementText,
+        updatedItems,
+        operation: "replace",
+      };
+    }
+    return clarifyResolution({
+      stepId,
+      userMessage,
+      referenceItems,
+      targetIndexes,
+      reason: !replacementText ? "missing_replacement" : (targetIndexes.length > 1 ? "ambiguous_target" : "missing_target"),
+    });
+  }
+
+  if (intent === "edit") {
+    if (targetIndexes.length === 1) {
+      const targetIndex = targetIndexes[0];
+      const targetItem = String(referenceItems[targetIndex] || "").trim();
+      return {
+        kind: "edit",
+        stepId,
+        userMessage,
+        referenceItems,
+        routePrompt: rewriteRoutePrompt({
+          token: BUSINESS_LIST_ROUTE_EDIT,
+          stepId,
+          userMessage,
+          referenceItems,
+          extraLines: [
+            `TARGET_INDEX: ${targetIndex}`,
+            `TARGET_ITEM: ${targetItem}`,
+            `EDIT_INSTRUCTION: ${userMessage}`,
+          ],
+        }),
+        targetIndex,
+        targetItem,
+        editInstruction: userMessage,
+        replacementText: "",
+        updatedItems: null,
+        operation: "rewrite",
+      };
+    }
+    return clarifyResolution({
+      stepId,
+      userMessage,
+      referenceItems,
+      targetIndexes,
+      reason: targetIndexes.length > 1 ? "ambiguous_target" : (clarifyReasonRaw === "missing_instruction" ? "missing_instruction" : "missing_target"),
+    });
+  }
+
+  if (intent === "clarify") {
+    return clarifyResolution({
+      stepId,
+      userMessage,
+      referenceItems,
+      targetIndexes,
+      reason: clarifyReason,
+    });
+  }
+
+  return defaultAdd;
+}
+
 function singleChangedIndex(referenceItems: string[], candidateItems: string[]): number {
   if (referenceItems.length !== candidateItems.length) return -1;
   let changedIndex = -1;
@@ -639,4 +846,30 @@ export function applyBusinessListTurnResolution(params: {
     items: resolution.referenceItems,
     forceAsk: false,
   });
+}
+
+export function readBusinessListSpecialistItems(
+  stepId: string,
+  specialistResult: Record<string, unknown>
+): string[] {
+  return parseCandidateList(stepId, specialistResult);
+}
+
+export function withBusinessListItems(params: {
+  stepId: string;
+  specialistResult: Record<string, unknown>;
+  items: string[];
+  clearMessage?: boolean;
+  forceAsk?: boolean;
+}): Record<string, unknown> {
+  const next = normalizeResolvedSpecialist({
+    stepId: params.stepId,
+    specialistResult: params.specialistResult,
+    items: params.items,
+    forceAsk: params.forceAsk,
+  });
+  if (params.clearMessage) {
+    next.message = "";
+  }
+  return next;
 }

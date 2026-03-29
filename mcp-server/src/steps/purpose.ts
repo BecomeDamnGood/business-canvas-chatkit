@@ -20,6 +20,7 @@ export const PurposeZodSchema = z.object({
   suggestion_outro: z.string(),
   suggestion_item_style: z.enum(["bullets", "blocks"]),
   feedback_reason_text: z.string(),
+  user_pick_feedback_text: z.string(),
   feedback_mode: z.enum(["none", "affirm_input", "compare_suggestion", "refine_current"]),
   step_support_state: z.enum(["ok", "stuck"]),
   wants_recap: z.boolean(),
@@ -47,6 +48,7 @@ export const PurposeJsonSchema = {
     "suggestion_outro",
     "suggestion_item_style",
     "feedback_reason_text",
+    "user_pick_feedback_text",
     "feedback_mode",
     "step_support_state",
     "wants_recap",
@@ -65,6 +67,7 @@ export const PurposeJsonSchema = {
     suggestion_outro: { type: "string" },
     suggestion_item_style: { type: "string", enum: ["bullets", "blocks"] },
     feedback_reason_text: { type: "string" },
+    user_pick_feedback_text: { type: "string" },
     feedback_mode: { type: "string", enum: ["none", "affirm_input", "compare_suggestion", "refine_current"] },
     step_support_state: { type: "string", enum: ["ok", "stuck"] },
     wants_recap: { type: "boolean" },
@@ -105,8 +108,8 @@ export const PURPOSE_INSTRUCTIONS = `PURPOSE AGENT (STEP: PURPOSE, BEN STEENSTRA
 Role and voice
 - You are Ben Steenstra, a senior executive business coach.
 - You speak in first person ONLY inside the "message" field.
-- Tone: calm, grounded, precise, supportive, and direct. No hype. No filler.
-- Ask one clear question at a time.
+- Tone: calm, grounded, precise, warm, and supportive. Clear and lightly guiding, never pushy or commanding. No hype. No filler.
+- Ask one clear, invitational question at a time.
 
 Not user-facing
 - Your only job is to output strict JSON that the Steps Integrator will render.
@@ -139,6 +142,7 @@ All fields are required. If not applicable, return an empty string "".
   "refined_formulation": "string",
   "purpose": "string",
   "feedback_reason_text": "string",
+  "user_pick_feedback_text": "string",
   "feedback_mode": "none" | "affirm_input" | "compare_suggestion" | "refine_current",
   "step_support_state": "ok" | "stuck",
 }
@@ -158,6 +162,8 @@ All fields are required. If not applicable, return an empty string "".
   - "affirm_input" when the user's Purpose is already strong and you are only sharpening it
   - "refine_current" when rewriting an already chosen current Purpose after user feedback
   - "none" for INTRO, ASK, ESCAPE, and normal valid confirms without a compare
+- When feedback_mode="compare_suggestion", user_pick_feedback_text must be one short localized response for the case where the user keeps their own wording instead of the suggestion. Affirm that this is completely okay, then name the single most important thing to keep in mind if they continue with it.
+- When feedback_mode is not "compare_suggestion", user_pick_feedback_text must be "".
 
 3) One question per turn.
 - Ask one clear question at a time.

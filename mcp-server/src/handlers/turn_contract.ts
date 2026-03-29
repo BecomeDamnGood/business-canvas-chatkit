@@ -58,6 +58,7 @@ type PendingInteractionAllowedAction = {
 
 type PendingInteractionCompareRenderModel = {
   mode: "text" | "list";
+  list_semantics?: "delta" | "full" | "overlap_merge";
   instruction: string;
   feedback_reason_text: string;
   user_label: string;
@@ -228,6 +229,12 @@ function buildNormalCompareRenderModel(
   if (!feedbackReasonText || !hasComparableValues) return null;
   return {
     mode,
+    ...(mode === "list" &&
+    (String(renderModel.list_semantics || "").trim() === "delta" ||
+      String(renderModel.list_semantics || "").trim() === "full" ||
+      String(renderModel.list_semantics || "").trim() === "overlap_merge")
+      ? { list_semantics: String(renderModel.list_semantics || "").trim() as "delta" | "full" | "overlap_merge" }
+      : {}),
     instruction: parsedInstruction.instructionText,
     feedback_reason_text: feedbackReasonText,
     user_label: String(renderModel.user_label || "").trim() || defaultUserLabel,

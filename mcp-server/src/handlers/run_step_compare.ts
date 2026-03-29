@@ -11,8 +11,11 @@ import {
   formatCompareFeedbackForDisplay,
   formatUserPickFeedbackForDisplay,
   sanitizeFeedbackReasonForDisplay,
+  sanitizeUserPickFeedbackTextForDisplay,
 } from "../core/feedback_display.js";
-import type { CompareUiPayload } from "./run_step_ui_payload.js";
+import type { TurnPolicyRenderResult } from "../core/turn_policy_renderer.js";
+import type { RenderedAction } from "../contracts/ui_actions.js";
+import type { CompareUiPayload, UiContractMeta } from "./run_step_ui_payload.js";
 import type { AcceptedOutputUserTurnClassification } from "./run_step_accepted_output_semantics.js";
 import type { PendingInteractionCompareRenderModel } from "./run_step_runtime_types.js";
 import { resolveBusinessListTurn } from "./run_step_business_list_turn.js";
@@ -23,7 +26,7 @@ import {
 } from "./dream_builder_compare_runtime.js";
 
 type CompareMode = "text" | "list";
-type CompareListSemantics = "delta" | "full";
+type CompareListSemantics = "delta" | "full" | "overlap_merge";
 type FeedbackMode = "none" | "affirm_input" | "compare_suggestion" | "refine_current";
 type CompareCompareMode = "" | "grouped";
 type CompareCompareResolution = "user" | "suggestion" | "";
@@ -35,13 +38,6 @@ type PendingSuggestionIntent =
   | "content_input"
   | "";
 type PendingSuggestionAnchor = "suggestion" | "user_input" | "";
-
-type RenderFreeTextTurnPolicyResult = {
-  specialist: Record<string, unknown>;
-  contractId: string;
-  contractVersion: string;
-  textKeys: string[];
-};
 
 type EquivalentCompareVariantsParams = {
   mode: CompareMode;
@@ -74,6 +70,15 @@ type ComparePickSelectionParams = {
   routeToken: string;
   state: CanvasState;
   telemetry?: unknown;
+};
+
+type ComparePickSelectionResult = {
+  handled: boolean;
+  specialist: Record<string, unknown>;
+  nextState: CanvasState;
+  actionCodes?: string[];
+  renderedActions?: RenderedAction[];
+  contractMeta?: UiContractMeta | null;
 };
 
 type CompareCompareUnit = {
@@ -154,7 +159,7 @@ type RunStepCompareDeps = {
     state: CanvasState;
     specialist: Record<string, unknown>;
     previousSpecialist: Record<string, unknown>;
-  }) => RenderFreeTextTurnPolicyResult;
+  }) => TurnPolicyRenderResult;
   applyUiPhaseByStep: (state: CanvasState, stepId: string, contractId: string) => void;
   isUiCompareFeedbackKeyedV1Enabled: () => boolean;
   isCompareIntentV1Enabled: () => boolean;
@@ -1469,6 +1474,53 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
     };
   }
 
+  function buildBusinessListOverlapComparePlan(params: {
+    baseItems: string[];
+    incomingItems: string[];
+    suggestionItems: string[];
+  }): BusinessListComparePlan | null {
+    const baseItems = mergeListItems([], params.baseItems);
+    const incomingItems = mergeListItems([], params.incomingItems);
+    const suggestionItems = mergeListItems([], params.suggestionItems);
+    if (baseItems.length === 0 || incomingItems.length !== 1 || suggestionItems.length !== 1) return null;
+
+    const incomingItem = incomingItems[0];
+    const suggestionItem = suggestionItems[0];
+    const suggestionComparable = deps.canonicalizeComparableText(suggestionItem);
+    if (!suggestionComparable) return null;
+
+    let bestIndex = -1;
+    let bestScore = 0;
+    let secondBestScore = 0;
+    for (let index = 0; index < baseItems.length; index += 1) {
+      const baseItem = baseItems[index];
+      const baseComparable = deps.canonicalizeComparableText(baseItem);
+      if (!baseComparable) continue;
+      if (baseComparable === suggestionComparable) return null;
+      const score = Math.max(
+        itemSimilarity(baseItem, suggestionItem),
+        itemSimilarity(baseItem, incomingItem)
+      );
+      if (score > bestScore) {
+        secondBestScore = bestScore;
+        bestScore = score;
+        bestIndex = index;
+      } else if (score > secondBestScore) {
+        secondBestScore = score;
+      }
+    }
+
+    if (bestIndex < 0 || bestScore < 0.42) return null;
+    if (secondBestScore > 0 && bestScore - secondBestScore < 0.08) return null;
+
+    return buildDreamBuilderOverlapComparePlan({
+      baseItems,
+      existingItem: baseItems[bestIndex],
+      incomingItem,
+      suggestionItem,
+    });
+  }
+
   function buildDreamBuilderPendingCompareSpecialist(params: {
     specialistResult: Record<string, unknown>;
     comparePlan: BusinessListComparePlan;
@@ -1762,6 +1814,21 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
     return /[.!?]$/.test(normalized) ? normalized : `${normalized}.`;
   }
 
+  function fallbackPendingCompareFeedbackReason(params: {
+    stepId: string;
+    state: CanvasState;
+    pendingMessage: string;
+  }): string {
+    const compact = normalizeCompactFeedbackSentence(String(params.pendingMessage || "").trim(), "");
+    if (!compact) return "";
+    return sanitizeFeedbackReasonForDisplay({
+      stepId: params.stepId,
+      rawReason: compact,
+      resolveString: (key, fallback = "") =>
+        deps.uiStringFromStateMap(params.state, key, fallback || deps.uiDefaultString(key, fallback)),
+    });
+  }
+
   function resolveFeedbackReasonFromSpecialist(state: CanvasState, prev: Record<string, unknown>): string {
     const resolveString = (key: string, fallback = "") =>
       deps.uiStringFromStateMap(state, key, fallback || deps.uiDefaultString(key, fallback));
@@ -1947,6 +2014,7 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
     stepId: string;
     state: CanvasState | null | undefined;
     mode: CompareMode;
+    listSemantics?: CompareListSemantics;
     feedbackReasonText: string;
     userLabel: string;
     suggestionLabel: string;
@@ -1964,6 +2032,9 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
       : "";
     return {
       mode: params.mode,
+      ...(params.mode === "list" && params.listSemantics
+        ? { list_semantics: params.listSemantics }
+        : {}),
       instruction: String(params.instruction || "").trim(),
       feedback_reason_text: String(params.feedbackReasonText || "").trim(),
       user_label: String(params.userLabel || "").trim(),
@@ -2032,6 +2103,12 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
     const compare = readPendingInteractionState(prev);
     const selectedValue = String(compare?.render_model.user_text || prev.refined_formulation || "").trim();
     const selection = deps.compareSelectionMessage(stepId, state, activeSpecialist, selectedValue);
+    const explicitUserPickFeedback = sanitizeUserPickFeedbackTextForDisplay(
+      String(prev.user_pick_feedback_text || "").trim()
+    );
+    if (explicitUserPickFeedback) {
+      return [explicitUserPickFeedback, selection].filter((part) => String(part || "").trim()).join("\n\n").trim();
+    }
     const rawFeedbackReason = userPickFeedbackReason(state, prev);
     const resolveString = (key: string, fallback = "") =>
       deps.uiStringFromStateMap(state, key, fallback || deps.uiDefaultString(key, fallback));
@@ -2062,6 +2139,33 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
       dream_builder_statements: canonicalItems,
       ...(canonicalItems.length >= 20 ? { dream_scoring_statements: canonicalItems } : {}),
     } as CanvasState;
+  }
+
+  function retainedItemsForAcceptedListSelection(params: {
+    listSemantics: CompareListSemantics;
+    committedItems: string[];
+    retainedItems: string[];
+    currentItems: string[];
+  }): string[] {
+    if (params.listSemantics === "full") return [];
+    if (params.listSemantics === "delta") return mergeListItems([], params.committedItems);
+
+    const explicitRetained = mergeListItems([], params.retainedItems);
+    if (explicitRetained.length > 0) return explicitRetained;
+
+    const overlapKeys = new Set(
+      mergeListItems([], params.currentItems)
+        .map((line) => deps.canonicalizeComparableText(line))
+        .filter(Boolean)
+    );
+    if (overlapKeys.size === 0) return mergeListItems([], params.committedItems);
+    return mergeListItems(
+      [],
+      params.committedItems.filter((line) => {
+        const key = deps.canonicalizeComparableText(line);
+        return !key || !overlapKeys.has(key);
+      })
+    );
   }
 
   function pickCompareSuggestionList(currentSpecialist: Record<string, unknown>, fallbackText: string): string[] {
@@ -2155,13 +2259,6 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
       ? String(previousCompare?.render_model.user_text || "").trim()
       : "";
     const userRaw = String(userTextRaw || fallbackUserRaw).trim();
-    const isSemanticallyContributingTurn =
-      acceptedOutputUserTurnClassification?.turn_kind === "step_variant" ||
-      acceptedOutputUserTurnClassification?.turn_kind === "raw_source_content" ||
-      acceptedOutputUserTurnClassification?.turn_kind === "feedback_on_existing_content";
-    if (!forcePending && !isSemanticallyContributingTurn) {
-      return { specialist: specialistResult, compare: null, pendingState: null };
-    }
     const submittedIntent = normalizePendingSuggestionIntent(params.submittedTextIntent);
     const submittedAnchor = normalizePendingSuggestionAnchor(params.submittedTextAnchor);
     const dreamBuilderContext = isDreamBuilderContext(stepId, dreamRuntimeModeRaw);
@@ -2183,6 +2280,15 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
     }
     const mode: CompareMode =
       isListChoiceScope(stepId, activeSpecialist) || dreamBuilderContext ? "list" : "text";
+    const isSemanticallyContributingTurn =
+      mode === "list"
+        ? Boolean(userRaw)
+        : acceptedOutputUserTurnClassification?.turn_kind === "step_variant" ||
+          acceptedOutputUserTurnClassification?.turn_kind === "raw_source_content" ||
+          acceptedOutputUserTurnClassification?.turn_kind === "feedback_on_existing_content";
+    if (!forcePending && !isSemanticallyContributingTurn) {
+      return { specialist: specialistResult, compare: null, pendingState: null };
+    }
     const targetField = deps.fieldForStep(stepId);
     const stateRecord = state as Record<string, unknown>;
     const provisionalByStep =
@@ -2254,6 +2360,21 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
             suggestionItem: suggestionFullItems[0],
           })
         : null;
+    const businessListOverlapComparePlan =
+      !dreamBuilderContext &&
+      mode === "list" &&
+      compareDeltaListSemantics === "delta" &&
+      localUserItems.length === 1 &&
+      suggestionFullItems.length === 1
+        ? buildBusinessListOverlapComparePlan({
+            baseItems,
+            incomingItems: localUserItems,
+            suggestionItems: suggestionFullItems,
+          })
+        : null;
+    if (businessListOverlapComparePlan) {
+      listSemantics = "overlap_merge";
+    }
     const groupedListCompareEnabled =
       mode === "list" &&
       shouldUseGroupedListCompare({
@@ -2368,6 +2489,7 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
         : false;
     const rawComparePlan =
       dreamBuilderOverlapComparePlan ||
+      businessListOverlapComparePlan ||
       (groupedListCompareEnabled
         ? (
           dreamBuilderContext
@@ -2394,9 +2516,22 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
           state,
         })
       : null;
+    const fallbackFeedbackReason = fallbackPendingCompareFeedbackReason({
+      stepId,
+      state,
+      pendingMessage,
+    });
+    const explicitUserPickFeedback = sanitizeUserPickFeedbackTextForDisplay(
+      String(specialistResult.user_pick_feedback_text || "").trim()
+    );
+    const shouldRequireAgentDrivenListCompare =
+      mode === "list" &&
+      isBusinessListIntentScope(stepId) &&
+      Boolean(comparePlan || businessListOverlapComparePlan || groupedListCompareEnabled);
     const effectiveFeedbackReason =
       String(feedbackReason || "").trim() ||
-      String(comparePlan?.initialUnit.feedback_reason_text || "").trim();
+      String(comparePlan?.initialUnit.feedback_reason_text || "").trim() ||
+      (shouldRequireAgentDrivenListCompare ? "" : fallbackFeedbackReason);
     const pendingSuggestionSeedSource = seedSourceForPendingSuggestion({
       intent: submittedIntent,
       anchor: submittedAnchor,
@@ -2425,6 +2560,7 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
           stepId,
           state,
           mode,
+          listSemantics: listSemantics,
           feedbackReasonText: String(comparePlan.initialUnit.feedback_reason_text || effectiveFeedbackReason || "").trim(),
           userLabel: wordingLabels.userLabel || "",
           suggestionLabel: wordingLabels.suggestionLabel || "",
@@ -2440,6 +2576,7 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
           stepId,
           state,
           mode,
+          listSemantics: listSemantics,
           feedbackReasonText: effectiveFeedbackReason,
           userLabel: wordingLabels.userLabel || "",
           suggestionLabel: wordingLabels.suggestionLabel || "",
@@ -2468,14 +2605,21 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
     }
     enriched.refined_formulation =
       committedText || String(previousSpecialist.refined_formulation || "").trim();
-    if (!effectiveFeedbackReason) {
+    if (!effectiveFeedbackReason || (shouldRequireAgentDrivenListCompare && !explicitUserPickFeedback)) {
+      if (shouldRequireAgentDrivenListCompare && previousSpecialist && typeof previousSpecialist === "object") {
+        return {
+          specialist: clearCompareForResolvedDisplay(previousSpecialist as Record<string, unknown>),
+          compare: null,
+          pendingState: null,
+        };
+      }
       return {
         specialist: clearCompareForResolvedDisplay(enriched),
         compare: null,
         pendingState: null,
       };
     }
-    if (comparePlan && !String(comparePlan.initialUnit.feedback_reason_text || "").trim()) {
+    if (comparePlan && !String(comparePlan.initialUnit.feedback_reason_text || effectiveFeedbackReason || "").trim()) {
       return {
         specialist: clearCompareForResolvedDisplay(enriched),
         compare: null,
@@ -2556,14 +2700,10 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
     return { specialist: enriched, compare, pendingState };
   }
 
-  function applyComparePickSelection(params: ComparePickSelectionParams): {
-    handled: boolean;
-    specialist: Record<string, unknown>;
-    nextState: CanvasState;
-  } {
+  function applyComparePickSelection(params: ComparePickSelectionParams): ComparePickSelectionResult {
     const { stepId, routeToken, state } = params;
     if (!isComparePickRouteToken(routeToken)) {
-      return { handled: false, specialist: {}, nextState: state };
+        return { handled: false, specialist: {}, nextState: state };
     }
     const stripStaleUiContractFields = (
       value: Record<string, unknown>
@@ -2618,9 +2758,11 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
       const selectedWithCompare = clearCompareForResolvedDisplay(selected);
       const targetField = deps.fieldForStep(stepId);
       const provisionalValue = targetField ? String(selectedWithCompare[targetField] || "").trim() : "";
-      const stateForRender = provisionalValue
-        ? deps.withProvisionalValue(state, stepId, provisionalValue, "compare_pick" as ProvisionalSource)
-        : state;
+      const stateForRender = clearPendingInteractionState(
+        provisionalValue
+          ? deps.withProvisionalValue(state, stepId, provisionalValue, "compare_pick" as ProvisionalSource)
+          : state
+      ) as CanvasState;
       const rendered = deps.renderFreeTextTurnPolicy({
         stepId,
         state: stateForRender,
@@ -2651,6 +2793,13 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
         handled: true,
         specialist: selectedWithContract,
         nextState,
+        actionCodes: Array.isArray(rendered.uiActionCodes) ? rendered.uiActionCodes : [],
+        renderedActions: Array.isArray(rendered.uiActions) ? rendered.uiActions : [],
+        contractMeta: {
+          contractId: String(rendered.contractId || selectedWithContract.ui_contract_id || ""),
+          contractVersion: String(rendered.contractVersion || selectedWithContract.ui_contract_version || ""),
+          textKeys: Array.isArray(rendered.textKeys) ? rendered.textKeys : [],
+        },
       };
     }
     const prevCompare = readPendingInteractionState(state);
@@ -2675,6 +2824,12 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
           stepId,
           state,
           mode: "list",
+          listSemantics:
+            prevRenderModel.list_semantics === "full"
+              ? "full"
+              : prevRenderModel.list_semantics === "overlap_merge"
+                ? "overlap_merge"
+                : "delta",
           feedbackReasonText: String(nextUnit.feedback_reason_text || "").trim(),
           userLabel: prevRenderModel.user_label,
           suggestionLabel: prevRenderModel.suggestion_label,
@@ -2722,9 +2877,11 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
       const selectedCompare = clearCompareForResolvedDisplay(selected);
       const targetField = deps.fieldForStep(stepId);
       const provisionalValue = targetField ? String(selected[targetField] || "").trim() : "";
-      const stateForRender = provisionalValue
-        ? deps.withProvisionalValue(state, stepId, provisionalValue, "compare_pick" as ProvisionalSource)
-        : state;
+      const stateForRender = clearPendingInteractionState(
+        provisionalValue
+          ? deps.withProvisionalValue(state, stepId, provisionalValue, "compare_pick" as ProvisionalSource)
+          : state
+      ) as CanvasState;
       const rendered = deps.renderFreeTextTurnPolicy({
         stepId,
         state: stateForRender,
@@ -2755,7 +2912,18 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
         last_specialist_result: clearPendingInteractionState(selectedWithContract),
       };
       deps.applyUiPhaseByStep(nextState, stepId, selectedContractId);
-      return { handled: true, specialist: selectedWithContract, nextState };
+      return {
+        handled: true,
+        specialist: selectedWithContract,
+        nextState,
+        actionCodes: Array.isArray(rendered.uiActionCodes) ? rendered.uiActionCodes : [],
+        renderedActions: Array.isArray(rendered.uiActions) ? rendered.uiActions : [],
+        contractMeta: {
+          contractId: String(rendered.contractId || selectedWithContract.ui_contract_id || ""),
+          contractVersion: String(rendered.contractVersion || selectedWithContract.ui_contract_version || ""),
+          textKeys: Array.isArray(rendered.textKeys) ? rendered.textKeys : [],
+        },
+      };
     }
     const activeSpecialist = String((state as any)?.active_specialist || "").trim();
     const fallbackPickedRaw = pickedUser
@@ -2773,8 +2941,29 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
           return deps.parseListItems(fallbackPickedText);
         })()
       : [];
+    const acceptedListSemantics: CompareListSemantics =
+      mode === "list" &&
+      (prevRenderModel.list_semantics === "full" || prevRenderModel.list_semantics === "overlap_merge")
+        ? prevRenderModel.list_semantics
+        : "delta";
+    const committedItems = mode === "list" ? extractCommittedListItems(stepId, prevRaw) : [];
+    const retainedItemsForAcceptedSelection = mode === "list"
+      ? retainedItemsForAcceptedListSelection({
+        listSemantics: acceptedListSemantics,
+        committedItems,
+        retainedItems: toTrimmedStringArray(prevRenderModel.retained_items),
+        currentItems: toTrimmedStringArray(prevRenderModel.user_items),
+      })
+      : [];
     const mergedPickedItems = mode === "list"
-      ? mergeListItems([], pickedItems)
+      ? mergeListItems(
+        acceptedListSemantics === "full"
+          ? []
+          : acceptedListSemantics === "overlap_merge"
+            ? retainedItemsForAcceptedSelection
+            : committedItems,
+        pickedItems
+      )
       : [];
     const rawChosen = mode === "list"
       ? mergedPickedItems.join("\n")
@@ -2801,9 +2990,11 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
     const selectedCompare = clearCompareForResolvedDisplay(selected);
     const targetField = deps.fieldForStep(stepId);
     const provisionalValue = targetField ? String(selected[targetField] || "").trim() : "";
-    const stateForRender = provisionalValue
-      ? deps.withProvisionalValue(state, stepId, provisionalValue, "compare_pick" as ProvisionalSource)
-      : state;
+    const stateForRender = clearPendingInteractionState(
+      provisionalValue
+        ? deps.withProvisionalValue(state, stepId, provisionalValue, "compare_pick" as ProvisionalSource)
+        : state
+    ) as CanvasState;
     const rendered = deps.renderFreeTextTurnPolicy({
       stepId,
       state: stateForRender,
@@ -2834,7 +3025,18 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
       last_specialist_result: clearPendingInteractionState(selectedWithContract),
     };
     deps.applyUiPhaseByStep(nextState, stepId, selectedContractId);
-    return { handled: true, specialist: selectedWithContract, nextState };
+    return {
+      handled: true,
+      specialist: selectedWithContract,
+      nextState,
+      actionCodes: Array.isArray(rendered.uiActionCodes) ? rendered.uiActionCodes : [],
+      renderedActions: Array.isArray(rendered.uiActions) ? rendered.uiActions : [],
+      contractMeta: {
+        contractId: String(rendered.contractId || selectedWithContract.ui_contract_id || ""),
+        contractVersion: String(rendered.contractVersion || selectedWithContract.ui_contract_version || ""),
+        textKeys: Array.isArray(rendered.textKeys) ? rendered.textKeys : [],
+      },
+    };
   }
 
   function buildCompareFromPendingSpecialist(

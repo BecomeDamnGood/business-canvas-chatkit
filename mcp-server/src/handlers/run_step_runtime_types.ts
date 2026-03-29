@@ -14,6 +14,7 @@ export type PendingInteractionAllowedAction = {
 
 export type PendingInteractionCompareRenderModel = {
   mode: "text" | "list";
+  list_semantics?: "delta" | "full" | "overlap_merge";
   instruction: string;
   feedback_reason_text: string;
   user_label: string;

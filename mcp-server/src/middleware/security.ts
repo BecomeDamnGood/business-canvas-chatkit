@@ -35,7 +35,6 @@ const DEFAULT_CSP_OPTIONS: CSPOptions = {
     connects: [],
     frames: [
       "'self'",
-      "https://app.heygen.com",
     ],
   },
 };

@@ -6,6 +6,7 @@ import type { UiI18nTelemetryCounters } from "./run_step_i18n_runtime.js";
 import type { TurnResponseEngine } from "./run_step_turn_response_engine.js";
 import type { UiContractMeta, CompareUiPayload } from "./run_step_ui_payload.js";
 import type { AcceptedOutputUserTurnClassification } from "./run_step_accepted_output_semantics.js";
+import type { BusinessListTurnSemanticClassification } from "./run_step_business_list_semantics.js";
 import type { RunStepTurnSemanticClassification } from "./run_step_turn_semantics.js";
 
 export type RunStepSpecialistRouting = {
@@ -303,6 +304,13 @@ export type RunStepPipelineRenderPorts = {
 };
 
 export type RunStepComparePipelinePorts = {
+  classifyBusinessListTurn: (params: {
+    model: string;
+    stepId: string;
+    userMessage: string;
+    referenceItems: string[];
+    language?: string;
+  }) => Promise<BusinessListTurnSemanticClassification>;
   classifyUserTurnSemantics: (params: {
     model: string;
     stepId: string;

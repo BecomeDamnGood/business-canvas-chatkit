@@ -186,6 +186,7 @@ import { createRunStepRuntimeDreamHelpers } from "./run_step_runtime_dream_helpe
 import { createRunStepRuntimeTextUiHelpers } from "./run_step_runtime_text_ui_helpers.js";
 import { createRunStepRuntimeSemanticHelpers } from "./run_step_runtime_semantic_helpers.js";
 import { classifyAcceptedOutputUserTurn as classifyAcceptedOutputUserTurnRaw } from "./run_step_accepted_output_semantics.js";
+import { classifyBusinessListTurn as classifyBusinessListTurnRaw } from "./run_step_business_list_semantics.js";
 import { classifyStepStuckTurn as classifyStepStuckTurnRaw } from "./run_step_stuck_turn_semantics.js";
 import { classifyRunStepTurnSemantics as classifyRunStepTurnSemanticsRaw } from "./run_step_turn_semantics.js";
 import { createRunStepRuntimeSpecialistHelpers } from "./run_step_runtime_specialist_helpers.js";
@@ -825,6 +826,17 @@ async function classifyAcceptedOutputUserTurn(params: {
   return result.classification;
 }
 
+async function classifyBusinessListTurn(params: {
+  model: string;
+  stepId: string;
+  userMessage: string;
+  referenceItems: string[];
+  language?: string;
+}) {
+  const result = await classifyBusinessListTurnRaw(params);
+  return result.classification;
+}
+
 async function classifyUserTurnSemantics(params: {
   model: string;
   stepId: string;
@@ -951,7 +963,7 @@ const runStepRuntimeExecuteDeps = {
   STRATEGY_CHOOSE_FOR_ME_ROUTE_TOKEN,
   PRESENTATION_MAKE_ROUTE_TOKEN, SWITCH_TO_SELF_DREAM_TOKEN,
   DREAM_START_EXERCISE_ROUTE_TOKEN, deriveSuggestionStateForWidget,
-  correctUserInputSurface, classifyAcceptedOutputUserTurn, classifyUserTurnSemantics, classifyStepStuckTurn,
+  correctUserInputSurface, classifyAcceptedOutputUserTurn, classifyBusinessListTurn, classifyUserTurnSemantics, classifyStepStuckTurn,
 };
 
 export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunStepError> {

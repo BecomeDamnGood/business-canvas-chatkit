@@ -39,12 +39,16 @@ let bridgeSeq = 0;
 const pendingBridgeCalls = new Map<string, { resolve: (v: unknown) => void; reject: (e: unknown) => void }>();
 let bridgeTargetOriginCache: string | null = null;
 let bridgeTargetOriginSource = "";
-let pendingWidgetScrollTarget: "" | "presentation_preview" = "";
+let pendingWidgetScrollTarget: "" | "widget_top" | "presentation_preview" = "";
 let pendingWidgetScrollTimer: ReturnType<typeof setTimeout> | null = null;
+let pendingViewportSettleTimer: ReturnType<typeof setTimeout> | null = null;
+let pendingViewportSettleFallbackTimer: ReturnType<typeof setTimeout> | null = null;
 type TransportStatus = "unknown" | "ready_callTool" | "ready_bridge" | "unavailable";
 const DESKTOP_WIDGET_SCROLL_OFFSET_PX = 10;
 const MOBILE_WIDGET_SCROLL_DELAY_MS = 60;
 const MOBILE_WIDGET_MAX_WIDTH_PX = 480;
+const MOBILE_VIEWPORT_SETTLE_DELAY_MS = 120;
+const MOBILE_VIEWPORT_SETTLE_MAX_WAIT_MS = 900;
 
 export function initActionsConfig(config: {
   render: (overrideRaw?: unknown) => void;
@@ -138,6 +142,72 @@ function scrollWidgetTop(): void {
   }
 }
 
+function clearViewportSettleTimers(): void {
+  if (pendingViewportSettleTimer) {
+    clearTimeout(pendingViewportSettleTimer);
+    pendingViewportSettleTimer = null;
+  }
+  if (pendingViewportSettleFallbackTimer) {
+    clearTimeout(pendingViewportSettleFallbackTimer);
+    pendingViewportSettleFallbackTimer = null;
+  }
+}
+
+function scheduleWidgetTopScrollAfterViewportSettles(): void {
+  if (typeof window === "undefined") return;
+  if (!shouldUseMobileScrollBehavior()) {
+    scrollWidgetTop();
+    return;
+  }
+
+  const visualViewport = window.visualViewport;
+  if (!visualViewport) {
+    pendingWidgetScrollTimer = setTimeout(() => {
+      pendingWidgetScrollTimer = null;
+      scrollWidgetTop();
+    }, MOBILE_VIEWPORT_SETTLE_DELAY_MS);
+    return;
+  }
+
+  clearViewportSettleTimers();
+
+  let cleanedUp = false;
+  const cleanup = (): void => {
+    if (cleanedUp) return;
+    cleanedUp = true;
+    clearViewportSettleTimers();
+    visualViewport.removeEventListener("resize", onViewportChange);
+    visualViewport.removeEventListener("scroll", onViewportChange);
+    window.removeEventListener("scroll", onViewportChange);
+  };
+
+  const finalize = (): void => {
+    cleanup();
+    scrollWidgetTop();
+  };
+
+  const onViewportChange = (): void => {
+    if (pendingViewportSettleTimer) {
+      clearTimeout(pendingViewportSettleTimer);
+    }
+    pendingViewportSettleTimer = setTimeout(() => {
+      pendingViewportSettleTimer = null;
+      finalize();
+    }, MOBILE_VIEWPORT_SETTLE_DELAY_MS);
+  };
+
+  visualViewport.addEventListener("resize", onViewportChange);
+  visualViewport.addEventListener("scroll", onViewportChange);
+  window.addEventListener("scroll", onViewportChange, { passive: true });
+
+  pendingViewportSettleFallbackTimer = setTimeout(() => {
+    pendingViewportSettleFallbackTimer = null;
+    finalize();
+  }, MOBILE_VIEWPORT_SETTLE_MAX_WAIT_MS);
+
+  onViewportChange();
+}
+
 function scrollPresentationPreviewIntoView(): boolean {
   if (typeof document === "undefined") return false;
   const preview = document.getElementById("presentationPreview");
@@ -166,17 +236,22 @@ export function prepareWidgetScrollForAction(messageText: string): void {
   if (hadFocusedInput && shouldUseMobileScrollBehavior()) {
     pendingWidgetScrollTimer = setTimeout(() => {
       pendingWidgetScrollTimer = null;
-      scrollWidgetTop();
+      scheduleWidgetTopScrollAfterViewportSettles();
     }, MOBILE_WIDGET_SCROLL_DELAY_MS);
   } else {
     scrollWidgetTop();
   }
   pendingWidgetScrollTarget = isPresentationMakeAction(normalized)
     ? "presentation_preview"
-    : "";
+    : "widget_top";
 }
 
 export function applyPendingWidgetScroll(): void {
+  if (pendingWidgetScrollTarget === "widget_top") {
+    pendingWidgetScrollTarget = "";
+    scheduleWidgetTopScrollAfterViewportSettles();
+    return;
+  }
   if (pendingWidgetScrollTarget !== "presentation_preview") return;
   if (scrollPresentationPreviewIntoView()) pendingWidgetScrollTarget = "";
 }
@@ -546,12 +621,17 @@ type BootstrapOrderingState = {
   hostWidgetSessionId: string;
 };
 
-type Step0ContinuityField = "business_name" | "step_0_final" | "step0_bootstrap";
+type Step0ContinuityField =
+  | "business_name"
+  | "step_0_final"
+  | "step0_bootstrap"
+  | "initial_user_message";
 
 const STEP0_CONTINUITY_FIELDS: Step0ContinuityField[] = [
   "business_name",
   "step_0_final",
   "step0_bootstrap",
+  "initial_user_message",
 ];
 
 type CanonicalContinuityStep =
@@ -867,6 +947,7 @@ function extractStep0ContinuityContext(state: Record<string, unknown> | null | u
     : "";
   const step0FinalFromState = String(source.step_0_final || "").replace(/\s+/g, " ").trim();
   const step0FinalFromBootstrap = composeStep0FinalFromBootstrap(bootstrap);
+  const initialUserMessage = String(source.initial_user_message || "").replace(/\s+/g, " ").trim();
   return {
     ...(Object.keys(bootstrap).length > 0 ? { step0_bootstrap: bootstrap } : {}),
     ...((businessNameFromState || businessNameFromBootstrap)
@@ -875,6 +956,7 @@ function extractStep0ContinuityContext(state: Record<string, unknown> | null | u
     ...(step0FinalFromState || step0FinalFromBootstrap
       ? { step_0_final: step0FinalFromState || step0FinalFromBootstrap }
       : {}),
+    ...(initialUserMessage ? { initial_user_message: initialUserMessage } : {}),
   };
 }
 
@@ -912,6 +994,9 @@ export function retainStep0Continuity(
       : {}),
     ...(String(normalizedContext.step_0_final || "").trim()
       ? { step_0_final: normalizedContext.step_0_final }
+      : {}),
+    ...(String(normalizedContext.initial_user_message || "").trim()
+      ? { initial_user_message: normalizedContext.initial_user_message }
       : {}),
   };
 }
@@ -1019,6 +1104,7 @@ function buildWidgetStateContinuityPatch(params: {
       business_name: undefined,
       step_0_final: undefined,
       step0_bootstrap: undefined,
+      initial_user_message: undefined,
       provisional_by_step: undefined,
       provisional_source_by_step: undefined,
     }
@@ -1030,6 +1116,9 @@ function buildWidgetStateContinuityPatch(params: {
   if (String(retainedContext.business_name || "").trim()) patch.business_name = retainedContext.business_name;
   if (String(retainedContext.step_0_final || "").trim()) patch.step_0_final = retainedContext.step_0_final;
   if (Object.keys(toRecord(retainedContext.step0_bootstrap)).length) patch.step0_bootstrap = retainedContext.step0_bootstrap;
+  if (String(retainedContext.initial_user_message || "").trim()) {
+    patch.initial_user_message = retainedContext.initial_user_message;
+  }
 
   for (const stepId of CANONICAL_CONTINUITY_STEP_IDS) {
     const finalField = CANONICAL_FINAL_FIELD_BY_STEP_ID[stepId];

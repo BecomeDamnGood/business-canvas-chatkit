@@ -32,10 +32,10 @@ export const UI_STRINGS_LOCALE_NL: Record<string, string> = {
     "byText": "Een businessmodel van:",
     "contract.headline.define": "Definieer",
     "contract.headline.refine": "Verfijn",
-    "contract.headline.define.withOptions": "Definieer je {0} voor {1} of kies een optie.",
-    "contract.headline.define.withoutOptions": "Definieer je {0} voor {1}.",
-    "contract.headline.refine.withOptions": "Verfijn je {0} voor {1} of kies een optie.",
-    "contract.headline.refine.withoutOptions": "Verfijn je {0} voor {1}.",
+    "contract.headline.define.withOptions": "Geef je {0} voor {1} vorm, of kies een optie.",
+    "contract.headline.define.withoutOptions": "Geef je {0} voor {1} vorm.",
+    "contract.headline.refine.withOptions": "Scherp je {0} voor {1} verder aan, of kies een optie.",
+    "contract.headline.refine.withoutOptions": "Scherp je {0} voor {1} verder aan.",
     "contract.headline.strategy.moreFocus": "Waar focus je nog meer op binnen je strategie?",
     "contract.headline.withOptions": "{0} je {1} voor {2} of kies een optie.",
     "contract.headline.withoutOptions": "{0} je {1} voor {2}.",
@@ -128,7 +128,7 @@ export const UI_STRINGS_LOCALE_NL: Record<string, string> = {
     "productsservices.current.heading.plural_mixed": "De huidige producten en diensten van {0} zijn",
     "productsservices.classifier.product.tokens": "product|producten|app|apps|platform|platformen|software|tool|tools|module|modules|template|templates",
     "productsservices.classifier.service.tokens": "dienst|diensten|advies|consultancy|coaching|support|onderhoud|strategie|branding|design|ontwikkeling|training|workshop|workshops|begeleiding",
-    "rulesofthegame.count.template": "Je hebt nu {0} spelregels. Ik adviseer je om minimaal {1} en maximaal {2} spelregels te formuleren.",
+    "rulesofthegame.count.template": "Je hebt nu {0} spelregels.",
     "rulesofthegame.current.template": "Je huidige spelregels voor {0} zijn:",
     "offtopic.redirect.template": "Laten we doorgaan met de {0} van {1}.",
     "offtopic.step.bigwhy": "grote waarom",
@@ -237,8 +237,8 @@ export const UI_STRINGS_LOCALE_NL: Record<string, string> = {
     "step0.readiness.suffix": "Ben je klaar om te starten met de eerste stap: Droom?",
     "stepLabel.validation": "Validatie",
     "strategy.current.template": "Je huidige strategie voor {0} is:",
-    "strategy.focuspoints.count.template": "Je hebt nu {0} focuspunten binnen je strategie. Ik adviseer je om minimaal 4 en maximaal 7 focuspunten te formuleren.",
-    "strategy.focuspoints.warning.template": "Ik raad je sterk aan om maximaal 7 focuspunten toe te voegen. Zal ik dit voor je bundelen?",
+    "strategy.focuspoints.count.template": "Je hebt nu {0} focuspunten binnen je strategie.",
+    "strategy.focuspoints.warning.template": "Er staan nu meer dan 7 focuspunten in beeld.",
     "rules.policy.overflow.rationale":
       "Meer dan 5 Spelregels maakt het al snel een handboek. Houd het kort en werkbaar.",
     "rules.policy.external.rationale":
@@ -291,14 +291,14 @@ export const UI_STRINGS_LOCALE_NL: Record<string, string> = {
     "uiUseWidgetToContinue": "Gebruik de Business Strategy Canvas Builder-widget om door te gaan (niet het chatvak).",
     "compare.choice.context.default": "Kies alsjeblieft de bewoording die het beste past.",
     "compare.feedback.compare.intro.template":
-      "Ik denk dat ik begrijp wat je bedoelt. Voor een sterke {0} helpt het om dit in gedachten te houden.",
-    "compare.feedback.user_pick.ack.default": "Je eigen formulering is helemaal prima.",
+      "Hier is een vergelijking voor je {0}.",
+    "compare.feedback.user_pick.ack.default": "Je formulering is behouden.",
     "compare.feedback.user_pick.nudge.template":
-      "Tegelijk helpt het om in gedachten te houden wat een sterke {0} meestal krachtiger maakt.",
+      "Je kunt dit verder aanscherpen als je wilt.",
     "compare.feedback.user_pick.reason.default":
-      "Houd wel in gedachten wat deze stap sterk maakt, zodat je formulering helder en passend blijft.",
+      "De formulering blijft passend bij deze stap.",
     "compare.feedback.dream_builder.rewrite.default":
-      "Je oorspronkelijke zin gaat vooral over je eigen wens, terwijl Dream Builder vraagt om een bredere verandering in de wereld.",
+      "Deze suggestie maakt de formulering breder voor deze stap.",
     "compare.chooseVersion": "Kies deze versie",
     "compare.useInputFallback": "Gebruik deze input",
     "compareHeading": "Dit is jouw input:",
@@ -307,6 +307,6 @@ export const UI_STRINGS_LOCALE_NL: Record<string, string> = {
     "compareGroupedCompareSuggestionLabel": "Mijn suggestie is dit:",
     "compareGroupedCompareInstruction": "Kies de versie die het beste past bij het resterende verschil.",
     "compareGroupedCompareRetainedHeading": "Deze punten blijven al in de definitieve lijst:",
-    "compareInstruction": "Klik alsjeblieft wat het beste bij je past.",
+    "compareInstruction": "Kies de versie die het dichtst ligt bij wat je bedoelt.",
     "compareSuggestionLabel": "Dit zou mijn suggestie zijn:",
 } as const;

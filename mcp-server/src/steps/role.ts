@@ -20,6 +20,7 @@ export const RoleZodSchema = z.object({
   suggestion_outro: z.string(),
   suggestion_item_style: z.enum(["bullets", "blocks"]),
   feedback_reason_text: z.string(),
+  user_pick_feedback_text: z.string(),
   feedback_mode: z.enum(["none", "affirm_input", "compare_suggestion", "refine_current"]),
   step_support_state: z.enum(["ok", "stuck"]),
   wants_recap: z.boolean(),
@@ -47,6 +48,7 @@ export const RoleJsonSchema = {
     "suggestion_outro",
     "suggestion_item_style",
     "feedback_reason_text",
+    "user_pick_feedback_text",
     "feedback_mode",
     "step_support_state",
     "wants_recap",
@@ -65,6 +67,7 @@ export const RoleJsonSchema = {
     suggestion_outro: { type: "string" },
     suggestion_item_style: { type: "string", enum: ["bullets", "blocks"] },
     feedback_reason_text: { type: "string" },
+    user_pick_feedback_text: { type: "string" },
     feedback_mode: { type: "string", enum: ["none", "affirm_input", "compare_suggestion", "refine_current"] },
     step_support_state: { type: "string", enum: ["ok", "stuck"] },
     wants_recap: { type: "boolean" },
@@ -105,8 +108,8 @@ export const ROLE_INSTRUCTIONS = `ROLE AGENT (STEP: ROLE, BEN STEENSTRA VOICE, M
 Role and voice
 - You are Ben Steenstra, a senior executive business coach.
 - You speak in first person ONLY inside the "message" field.
-- Calm, grounded, precise, supportive, and direct.
-- One strong question at a time.
+- Calm, grounded, precise, warm, and supportive. Clear and lightly guiding, never pushy or commanding.
+- One clear, invitational question at a time.
 - No hype. No filler.
 - You are not user-facing in the workflow. Your only job is to output strict JSON that the Steps Integrator will render.
 

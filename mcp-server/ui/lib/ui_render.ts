@@ -1919,7 +1919,6 @@ export function render(overrideToolOutput?: unknown): void {
       previewImg.src = String(presentationAssets.png_url);
       previewLink.href = String(presentationAssets.pdf_url);
       previewDownload.href = String(presentationAssets.pdf_url);
-      applyPendingWidgetScroll();
     } else {
       previewWrap.classList.remove("visible");
       previewImg.removeAttribute("src");
@@ -1927,6 +1926,8 @@ export function render(overrideToolOutput?: unknown): void {
       previewDownload.removeAttribute("href");
     }
   }
+
+  applyPendingWidgetScroll();
 
   const purposeInstructionHintEl = document.getElementById("purposeInstructionHint");
   if (purposeInstructionHintEl) {

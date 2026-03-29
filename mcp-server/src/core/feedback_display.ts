@@ -31,6 +31,38 @@ function splitFeedbackSentences(input: string): string[] {
     .filter(Boolean);
 }
 
+function softenTargetGroupFeedbackSentence(input: string): string {
+  const sentence = ensureSentence(input);
+  if (!sentence) return "";
+
+  const targetedRewrites: Array<{ pattern: RegExp; replacement: string }> = [
+    {
+      pattern: /^["'“”‘’]?[^.!?]+["'“”‘’]?\s+is too broad to guide your choices[.!?]*$/i,
+      replacement:
+        "I can see the direction, and one more layer of focus would make this target group easier to act on.",
+    },
+    {
+      pattern: /^["'“”‘’]?[^.!?]+["'“”‘’]?\s+is too generic to create a usable target group[.!?]*$/i,
+      replacement:
+        "I can see who you have in mind, and a bit more focus would make this target group much easier to work with.",
+    },
+    {
+      pattern: /^["'“”‘’]?[^.!?]+["'“”‘’]?\s+is te breed om richting te geven aan je keuzes[.!?]*$/i,
+      replacement:
+        "Ik zie de richting al, en met nog iets meer focus wordt deze doelgroep veel makkelijker om op te sturen.",
+    },
+    {
+      pattern: /^["'“”‘’]?[^.!?]+["'“”‘’]?\s+is te algemeen om er een bruikbare doelgroep van te maken[.!?]*$/i,
+      replacement:
+        "Ik snap op wie je doelt, en met iets meer focus wordt deze doelgroep veel makkelijker om mee te werken.",
+    },
+  ];
+  for (const rewrite of targetedRewrites) {
+    if (rewrite.pattern.test(sentence)) return rewrite.replacement;
+  }
+  return sentence;
+}
+
 function isPureGenericFeedbackAcknowledgementSentence(input: string): boolean {
   const sentence = String(input || "").trim();
   if (!sentence) return false;
@@ -63,6 +95,10 @@ export function sanitizeSupportTextForDisplay(rawText: string): string {
   return sanitized.join(" ").trim();
 }
 
+export function sanitizeUserPickFeedbackTextForDisplay(rawText: string): string {
+  return sanitizeSupportTextForDisplay(rawText);
+}
+
 export function sanitizeFeedbackReasonForDisplay(params: {
   stepId: string;
   rawReason: string;
@@ -76,7 +112,9 @@ export function sanitizeFeedbackReasonForDisplay(params: {
     if (intro && normalizeComparable(sentence) === normalizeComparable(intro)) return false;
     return true;
   });
-  return candidate || "";
+  if (!candidate) return "";
+  if (params.stepId === "targetgroup") return softenTargetGroupFeedbackSentence(candidate);
+  return candidate;
 }
 
 function stripStepPrefix(value: string): string {

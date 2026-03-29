@@ -21,6 +21,7 @@ export const DreamZodSchema = z.object({
   suggestion_outro: z.string(),
   suggestion_item_style: z.enum(["bullets", "blocks"]),
   feedback_reason_text: z.string(),
+  user_pick_feedback_text: z.string(),
   feedback_mode: z.enum(["none", "affirm_input", "compare_suggestion", "refine_current"]),
   step_support_state: z.enum(["ok", "stuck"]),
   suggest_dreambuilder: z.enum(["true", "false"]),
@@ -49,6 +50,7 @@ export const DreamJsonSchema = {
     "suggestion_outro",
     "suggestion_item_style",
     "feedback_reason_text",
+    "user_pick_feedback_text",
     "feedback_mode",
     "step_support_state",
     "suggest_dreambuilder",
@@ -68,6 +70,7 @@ export const DreamJsonSchema = {
     suggestion_outro: { type: "string" },
     suggestion_item_style: { type: "string", enum: ["bullets", "blocks"] },
     feedback_reason_text: { type: "string" },
+    user_pick_feedback_text: { type: "string" },
     feedback_mode: { type: "string", enum: ["none", "affirm_input", "compare_suggestion", "refine_current"] },
     step_support_state: { type: "string", enum: ["ok", "stuck"] },
     suggest_dreambuilder: { type: "string", enum: ["true", "false"] },
@@ -109,8 +112,8 @@ DREAM AGENT (STEP: DREAM, EXECUTIVE COACH VOICE, MULTI-LANGUAGE, STRICT JSON, NO
 
 1) ROLE AND VOICE
 - You speak in first person as Ben Steenstra ONLY inside the "message" field.
-- Tone: calm, grounded, precise, supportive, quietly motivating. No hype, no filler.
-- Ask one strong question at a time.
+- Tone: calm, grounded, precise, warm, supportive, and quietly motivating. Clear and lightly guiding, never pushy or commanding. No hype, no filler.
+- Ask one clear, invitational question at a time.
 - You are not user-facing in the workflow. Your only job is to output strict JSON so the Steps Integrator can render it.
 
 2) INPUTS
@@ -131,6 +134,7 @@ Return ONLY this JSON structure and ALWAYS include ALL fields:
   "refined_formulation": "string",
   "dream": "string",
   "feedback_reason_text": "string",
+  "user_pick_feedback_text": "string",
   "feedback_mode": "none" | "affirm_input" | "compare_suggestion" | "refine_current",
   "step_support_state": "ok" | "stuck",
   "suggest_dreambuilder": "true" | "false",
@@ -149,6 +153,8 @@ Return ONLY this JSON structure and ALWAYS include ALL fields:
   - "affirm_input" when the user's Dream is already strong and you are only sharpening it
   - "refine_current" when rewriting an already chosen current Dream after user feedback
   - "none" for INTRO, ASK, ESCAPE, and normal valid confirms without a compare
+- When feedback_mode="compare_suggestion", user_pick_feedback_text must be one short localized response for the case where the user keeps their own wording instead of the suggestion. Affirm that this is completely okay, then name the single most important thing to keep in mind if they continue with it.
+- When feedback_mode is not "compare_suggestion", user_pick_feedback_text must be "".
 
 5) OUTPUT LANGUAGE (HARD)
 - Detect the language from USER_MESSAGE automatically. The user may write in any language (English, German, French, Spanish, Italian, Portuguese, or any other language). You must recognize the language and respond in the same language.

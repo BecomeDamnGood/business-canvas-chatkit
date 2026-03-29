@@ -62,7 +62,6 @@ function createAppServer(baseUrl: string): McpServer {
     new Set(
       [
         widgetOrigin || "",
-        "https://app.heygen.com",
       ].filter(Boolean)
     )
   );

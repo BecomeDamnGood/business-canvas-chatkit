@@ -96,17 +96,17 @@ const UI_STRINGS_BASE: Record<string, string> = {
   compareDreamBuilderMergeInstruction:
     "Choose whether you want to keep both similar statements or merge them into one stronger statement.",
   compareSuggestionLabel: "This would be my suggestion:",
-  compareInstruction: "Please click what suits you best.",
+  compareInstruction: "Choose the version that feels closest to what you mean.",
   "compare.choice.context.default": "Please choose the wording that fits best.",
   "compare.feedback.compare.intro.template":
-    "I think I understand what you mean. For a stronger {0}, it helps to keep this in mind.",
-  "compare.feedback.user_pick.ack.default": "Your own wording is completely okay.",
+    "Here is a comparison for your {0}.",
+  "compare.feedback.user_pick.ack.default": "Your wording has been kept.",
   "compare.feedback.user_pick.nudge.template":
-    "At the same time, it helps to remember what usually makes a strong {0}.",
+    "You can refine it further if you want.",
   "compare.feedback.user_pick.reason.default":
-    "Keep in mind what makes this step strong, so your wording stays clear and aligned.",
+    "The wording stays aligned with this step.",
   "compare.feedback.dream_builder.rewrite.default":
-    "Your original wording is mainly about your own wish, while Dream Builder asks for a broader change in the world.",
+    "This suggestion broadens the wording for this step.",
   "generic.choicePrompt.shareOrOption": "Share your thoughts or choose an option",
   "invariant.prompt.ask.default": "Share your thoughts or choose an option.",
   "dreamBuilder.startExercise": "Start the exercise",
@@ -177,10 +177,10 @@ const UI_STRINGS_BASE: Record<string, string> = {
   "productsservices.current.heading.plural_mixed": "The current products and services of {0} are",
   "productsservices.classifier.product.tokens": "product|products|app|apps|platform|software|tool|tools|module|modules|template|templates",
   "productsservices.classifier.service.tokens": "service|services|consulting|advisory|coaching|support|maintenance|strategy|branding|design|development|training|workshop|workshops",
-  "strategy.focuspoints.count.template": "You now have {0} focus points within your strategy. I advise you to formulate at least 4 but maximum 7 focus points.",
-  "strategy.focuspoints.warning.template": "I strongly advice you to only add a maximum of 7 focus points. can I consolidate this for you?",
+  "strategy.focuspoints.count.template": "You now have {0} focus points within your strategy.",
+  "strategy.focuspoints.warning.template": "More than 7 focus points are currently shown.",
   "rulesofthegame.count.template":
-    "You now have {0} Rules of the Game. I advise you to formulate at least {1} and at most {2} Rules of the Game.",
+    "You now have {0} Rules of the Game.",
   "rulesofthegame.current.template": "Your current Rules of the Game for {0} are:",
   "rules.policy.overflow.rationale":
     "More than 5 Rules of the Game makes this feel like a handbook. Keep it short and practical.",
@@ -216,10 +216,10 @@ const UI_STRINGS_BASE: Record<string, string> = {
   "contract.headline.strategy.moreFocus": "What more do you focus on within your strategy?",
   "contract.headline.define": "Define",
   "contract.headline.refine": "Refine",
-  "contract.headline.define.withOptions": "Define your {0} for {1} or choose an option.",
-  "contract.headline.define.withoutOptions": "Define your {0} for {1}.",
-  "contract.headline.refine.withOptions": "Refine your {0} for {1} or choose an option.",
-  "contract.headline.refine.withoutOptions": "Refine your {0} for {1}.",
+  "contract.headline.define.withOptions": "Shape your {0} for {1}, or choose an option.",
+  "contract.headline.define.withoutOptions": "Shape your {0} for {1}.",
+  "contract.headline.refine.withOptions": "Further shape your {0} for {1}, or choose an option.",
+  "contract.headline.refine.withoutOptions": "Further shape your {0} for {1}.",
   "contract.headline.withOptions": "{0} your {1} for {2} or choose an option.",
   "contract.headline.withoutOptions": "{0} your {1} for {2}.",
   "structuredSuggestions.outro.template": "I hope these suggestions inspire you to write your own {0}.",

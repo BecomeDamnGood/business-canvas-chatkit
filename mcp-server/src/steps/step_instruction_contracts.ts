@@ -2,7 +2,7 @@ export function buildSingleValueStepContractBlock(stepLabel: string, fieldName: 
   return `
 CANONICAL OUTPUT CONTRACT (HARD)
 - Output schema fields MUST always include:
-  "action", "message", "question", "refined_formulation", "${fieldName}", "feedback_reason_text", "feedback_mode", "step_support_state", "wants_recap", "is_offtopic", "user_intent", "meta_topic".
+  "action", "message", "question", "refined_formulation", "${fieldName}", "feedback_reason_text", "user_pick_feedback_text", "feedback_mode", "step_support_state", "wants_recap", "is_offtopic", "user_intent", "meta_topic".
 - Menu/buttons are runtime contract-driven via contract_id + action_codes. Never emulate buttons in message/question.
 
 Field discipline by intent
@@ -13,6 +13,7 @@ Field discipline by intent
   - refined_formulation=""
   - ${fieldName}=""
   - feedback_reason_text=""
+  - user_pick_feedback_text=""
   - feedback_mode="none"
   - step_support_state="ok"
 - ESCAPE:
@@ -22,6 +23,7 @@ Field discipline by intent
   - refined_formulation=""
   - ${fieldName}=""
   - feedback_reason_text=""
+  - user_pick_feedback_text=""
   - feedback_mode="none"
   - step_support_state="ok"
 - REFINE:
@@ -30,6 +32,7 @@ Field discipline by intent
   - ${fieldName}=""
   - question=""
   - feedback_reason_text must be one short localized sentence that explains the single strongest reason for the suggestion. It must be content-specific, grounded in the user's input and the step criteria, and written in a warm, non-judgmental agent voice. Phrase it so the user can feel understood before the strongest content reason is named, but do that naturally for the specific case, not with a fixed stock opener. Do not use generic interpretation openers, filler, praise, process talk, detached editorial phrasing, or repeat the refined sentence.
+  - user_pick_feedback_text must be one short localized response for the case where the user keeps their own wording instead of the suggestion. Affirm that this is completely okay, then name the single most important thing to keep in mind if they continue with it. Keep it warm, specific, and non-judgmental. Do not repeat the refined sentence.
   - feedback_mode must be:
     - "compare_suggestion" only when the runtime should show "Your input / My suggestion" because the suggestion is meaningfully preferable to the user's wording
     - "affirm_input" when the user's wording is already strong and you are only lightly sharpening it
@@ -41,6 +44,7 @@ Field discipline by intent
   - ${fieldName}=""
   - question=""
   - feedback_reason_text=""
+  - user_pick_feedback_text=""
   - feedback_mode="none"
   - step_support_state="ok" unless the user is clearly stuck as defined below.
 - ASK (valid/confirmed):
@@ -49,6 +53,7 @@ Field discipline by intent
   - ${fieldName}=same as refined_formulation
   - question=""
   - feedback_reason_text=""
+  - user_pick_feedback_text=""
   - feedback_mode="none"
   - step_support_state="ok"
 
@@ -91,7 +96,7 @@ export function buildListStepContractBlock(stepLabel: string, fieldName: string,
   return `
 CANONICAL OUTPUT CONTRACT (HARD)
 - Output schema fields MUST always include:
-  "action", "message", "question", "refined_formulation", "${fieldName}", "feedback_reason_text", "step_support_state", "wants_recap", "is_offtopic", "user_intent", "meta_topic", "statements".
+  "action", "message", "question", "refined_formulation", "${fieldName}", "feedback_reason_text", "user_pick_feedback_text", "step_support_state", "wants_recap", "is_offtopic", "user_intent", "meta_topic", "statements".
 - Menu/buttons are runtime contract-driven via contract_id + action_codes. Never emulate buttons in message/question.
 
 Field discipline by intent
@@ -102,6 +107,7 @@ Field discipline by intent
   - refined_formulation=""
   - ${fieldName}=""
   - feedback_reason_text=""
+  - user_pick_feedback_text=""
   - step_support_state="ok"
   - statements=[]
 - ESCAPE:
@@ -111,6 +117,7 @@ Field discipline by intent
   - refined_formulation=""
   - ${fieldName}=""
   - feedback_reason_text=""
+  - user_pick_feedback_text=""
   - step_support_state="ok"
   - statements=preserve previous list
 - ASK (collect/incomplete):
@@ -118,15 +125,27 @@ Field discipline by intent
   - question=""
   - refined_formulation=""
   - ${fieldName}=""
-  - feedback_reason_text=""
+  - feedback_reason_text="" only when you are simply collecting or confirming accepted list content without a compare
+  - user_pick_feedback_text="" only when you are simply collecting or confirming accepted list content without a compare
   - step_support_state="ok" unless the user is clearly stuck as defined below.
   - statements=updated list
+- ASK/REFINE (local compare suggestion):
+  - use this when you keep the accepted canonical list unchanged for now, but propose a local wording alternative for the user's latest contribution or for the smallest overlapping cluster that needs merging
+  - action="ASK" or "REFINE"
+  - question=""
+  - refined_formulation=ONLY the local proposal in bullet form, not the full accepted list
+  - ${fieldName}=""
+  - feedback_reason_text must be one short localized sentence that explains the one remaining difference or why the local rewrite helps, grounded in the user's input and step criteria, and written in a warm, non-judgmental agent voice. Phrase it so the user can feel understood before the strongest content reason is named, but do that naturally for the specific case, not with a fixed stock opener. Do not use generic interpretation openers, filler, praise, process talk, detached editorial phrasing, or repeat the displayed list.
+  - user_pick_feedback_text must be one short localized response for the case where the user keeps their own wording instead of the suggestion. Affirm that this is completely okay, then name the single most important thing to keep in mind if they continue with it. Keep it warm, specific, and non-judgmental. Do not repeat the displayed list.
+  - step_support_state="ok" unless the user is explicitly still stuck and you are returning the stuck helper or graceful exit flow below.
+  - statements=preserve previous list unchanged until the user accepts one of the compare options
 - ASK/REFINE (valid):
   - action="ASK" or "REFINE"
   - question=""
   - refined_formulation=bullet list
   - ${fieldName}=same bullet list when finalized
   - feedback_reason_text must be one short localized sentence when action="REFINE" and must be "" when action="ASK". The sentence must explain the one remaining difference or why the local rewrite helps, grounded in the user's input and step criteria, and written in a warm, non-judgmental agent voice. Phrase it so the user can feel understood before the strongest content reason is named, but do that naturally for the specific case, not with a fixed stock opener. Do not use generic interpretation openers, filler, praise, process talk, detached editorial phrasing, or repeat the displayed list.
+  - user_pick_feedback_text must be one short localized response for the case where the user keeps their own wording instead of the suggestion. Affirm that this is completely okay, then name the single most important thing to keep in mind if they continue with it. Keep it warm, specific, and non-judgmental. Do not repeat the displayed list. When action="ASK", set it to "".
   - step_support_state="ok" unless the user is explicitly still stuck and you are returning the stuck helper or graceful exit flow below.
   - statements=updated list
 - ${listRuleLine}

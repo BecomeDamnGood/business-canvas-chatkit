@@ -69,7 +69,7 @@ export const RULESOFTHEGAME_CONTRACT_MATRIX: Record<RulesContractIntent, RulesCo
 export const RULESOFTHEGAME_OUTPUT_CONTRACT_TEXT = `
 CANONICAL OUTPUT CONTRACT (HARD)
 - Output schema fields MUST always include:
-  "action", "message", "question", "refined_formulation", "rulesofthegame", "feedback_reason_text", "step_support_state", "wants_recap", "is_offtopic", "user_intent", "meta_topic", "statements".
+  "action", "message", "question", "refined_formulation", "rulesofthegame", "feedback_reason_text", "user_pick_feedback_text", "step_support_state", "wants_recap", "is_offtopic", "user_intent", "meta_topic", "statements".
 - Menu/buttons are runtime contract-driven via contract_id + action_codes. Never emulate buttons in message/question.
 
 Field discipline by intent
@@ -80,6 +80,7 @@ Field discipline by intent
   - refined_formulation=""
   - rulesofthegame=""
   - feedback_reason_text=""
+  - user_pick_feedback_text=""
   - step_support_state="ok"
   - statements=[]
 - ASK_COLLECT (no rules captured yet):
@@ -88,6 +89,7 @@ Field discipline by intent
   - refined_formulation=""
   - rulesofthegame=""
   - feedback_reason_text=""
+  - user_pick_feedback_text=""
   - step_support_state="ok"
   - statements=[]
 - ASK_INCOMPLETE (1-2 rules captured):
@@ -96,14 +98,26 @@ Field discipline by intent
   - refined_formulation=""
   - rulesofthegame=""
   - feedback_reason_text=""
+  - user_pick_feedback_text=""
   - step_support_state="ok"
   - statements=updated list
+- ASK/REFINE (local compare suggestion):
+  - use this when you keep the accepted canonical list unchanged for now, but propose a local wording alternative for the user's latest contribution or the smallest overlapping cluster that needs merging
+  - action="ASK" or "REFINE"
+  - question=""
+  - refined_formulation=ONLY the local proposal in bullet form, not the full accepted list
+  - rulesofthegame=""
+  - feedback_reason_text=one short localized sentence that explains the strongest local rewrite reason in a warm, non-judgmental way
+  - user_pick_feedback_text=one short localized response for the case where the user keeps their own wording instead of the suggestion; affirm that this is completely okay, then name the most important thing to keep in mind
+  - step_support_state="ok" unless the user is clearly stuck and you are returning the stuck helper or exit flow
+  - statements=preserve previous list unchanged until the user accepts one of the compare options
 - ASK_VALID (3+ rules or explicit finalized bullet list):
   - action="ASK"
   - question=""
   - refined_formulation=bullet list
   - rulesofthegame=same bullet list
   - feedback_reason_text=""
+  - user_pick_feedback_text=""
   - step_support_state="ok"
   - statements=updated list
 - REFINE:
@@ -112,6 +126,7 @@ Field discipline by intent
   - refined_formulation=bullet list (proposal/adjusted formulation)
   - rulesofthegame=bullet list (aligned with refined_formulation)
   - feedback_reason_text=one short localized sentence that explains the strongest local rewrite reason
+  - user_pick_feedback_text=one short localized response for the case where the user keeps their own wording instead of the suggestion; affirm that this is completely okay, then name the most important thing to keep in mind
   - step_support_state="ok" unless the user is clearly stuck and you are returning the stuck helper or exit flow
   - statements=preserved or updated list
 - ESCAPE:
@@ -121,6 +136,7 @@ Field discipline by intent
   - refined_formulation=""
   - rulesofthegame=""
   - feedback_reason_text=""
+  - user_pick_feedback_text=""
   - step_support_state="ok"
   - statements=preserve PREVIOUS_STATEMENTS
 `;

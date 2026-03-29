@@ -335,6 +335,7 @@ const PendingInteractionRenderUnitZod = z.object({
 
 const PendingInteractionRenderModelZod = z.object({
   mode: z.enum(["text", "list"]),
+  list_semantics: z.enum(["delta", "full", "overlap_merge"]).optional(),
   instruction: z.string(),
   feedback_reason_text: z.string(),
   user_label: z.string(),
@@ -384,8 +385,14 @@ function normalizePendingInteractionRenderModel(raw: unknown): PendingInteractio
   const record = toRecord(raw);
   if (Object.keys(record).length === 0) return null;
   const mode = String(record.mode || "").trim() === "list" ? "list" : "text";
+  const rawListSemantics = trimString(record.list_semantics);
+  const listSemantics =
+    rawListSemantics === "delta" || rawListSemantics === "full" || rawListSemantics === "overlap_merge"
+      ? rawListSemantics
+      : undefined;
   return {
     mode,
+    ...(mode === "list" && listSemantics ? { list_semantics: listSemantics } : {}),
     instruction: trimString(record.instruction),
     feedback_reason_text: trimString(record.feedback_reason_text),
     user_label: trimString(record.user_label),
