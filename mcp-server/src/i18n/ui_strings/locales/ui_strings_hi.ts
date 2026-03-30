@@ -27,7 +27,7 @@ export const UI_STRINGS_LOCALE_HI: Record<string, string> = {
     "dev.error.unhandled_rejection": "अनहैंडल्ड रिजेक्शन",
     "dev.error.unknown": "अज्ञात त्रुटि",
     "dreamBuilder.question.base": "यदि आप 5 से 10 साल आगे देखें, तो आपको कौन-से बड़े अवसर या खतरे दिखते हैं, और आप कौन-से सकारात्मक बदलावों की उम्मीद करते हैं? इन्हें स्पष्ट कथनों के रूप में लिखें।",
-    "dreamBuilder.question.more": "भविष्य में और क्या बदलता हुआ दिखता है, सकारात्मक या नकारात्मक? अपनी कल्पना को खुला छोड़ें और इन्हें स्पष्ट कथनों के रूप में लिखें।",
+    "dreamBuilder.question.more": "यदि आप 5 से 10 साल आगे देखें, तो आपको कौन-से अन्य बड़े अवसर या खतरे दिखते हैं, और आप कौन-से सकारात्मक बदलावों की उम्मीद करते हैं? इन्हें स्पष्ट कथनों के रूप में लिखें।",
     "dreamBuilder.startExercise": "अभ्यास शुरू करें",
     "dreamBuilder.resumeExercise": "उस छोटे अभ्यास के साथ आगे बढ़ें जो आपके सपने को परिभाषित करने में मदद करता है।",
     "dreamBuilder.statements.count": "अब तक कम से कम 20 में से N कथन",
@@ -159,7 +159,15 @@ export const UI_STRINGS_LOCALE_HI: Record<string, string> = {
     "strategy.current.template": "{0} के लिए आपकी वर्तमान रणनीति है:",
     "strategy.focuspoints.count.template": "अब आपकी रणनीति में {0} केंद्र-बिंदु हैं।",
     "strategy.focuspoints.warning.template": "इस समय 7 से अधिक केंद्र-बिंदु दिख रहे हैं।",
+    "strategy.focuspoints.guidance.min.template":
+      "अब आपके पास न्यूनतम {1} में से {0} फोकस बिंदु हैं।",
+    "strategy.focuspoints.guidance.max.template":
+      "मैं सलाह देता हूँ कि इसे अधिकतम {0} फोकस बिंदुओं तक रखें ताकि यह स्पष्ट बना रहे।",
     "rulesofthegame.count.template": "अब आपके पास {0} खेल के नियम हैं।",
+    "rulesofthegame.guidance.min.template":
+      "अब आपके पास न्यूनतम {1} में से {0} खेल के नियम हैं।",
+    "rulesofthegame.guidance.max.template":
+      "मैं सलाह देता हूँ कि इसे अधिकतम {0} खेल के नियमों तक रखें ताकि यह स्पष्ट बना रहे।",
     "rulesofthegame.current.template": "{0} के लिए आपके वर्तमान खेल के नियम हैं:",
     "thinking": "सोच रहा हूँ…",
     "title.bigwhy": "बड़ा क्यों",

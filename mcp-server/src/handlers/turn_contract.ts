@@ -15,6 +15,7 @@ import { resolveUiStringForState } from "../i18n/ui_strings_lookup.js";
 import { STEP_0_ID } from "../steps/step_0_validation.js";
 import { buildCanonicalWidgetState } from "./run_step_canonical_widget_state.js";
 import { dreamBuilderExerciseLabelKey } from "./dream_builder_resume.js";
+import { readDreamBuilderCompareRuntime } from "./dream_builder_compare_runtime.js";
 import { stampResponseContentLocale } from "./locale_continuity.js";
 import {
   CONTRACT_BOOTSTRAP_PHASES,
@@ -251,10 +252,61 @@ function buildNormalCompareRenderModel(
   };
 }
 
+function buildDreamBuilderCompareRenderModel(
+  response: RunStepContractResponse
+): PendingInteractionCompareRenderModel | null {
+  const ui = toRecord(response.ui);
+  const state = toRecord(response.state);
+  const dreamBuilder = toRecord(ui.dream_builder_contract);
+  if (String(dreamBuilder.phase || "").trim() !== "compare") return null;
+
+  const compare = toRecord(dreamBuilder.compare);
+  const kind = String(compare.kind || "").trim();
+  if (kind !== "batch_rewrite_compare" && kind !== "overlap_merge_compare") return null;
+
+  const specialist = toRecord(response.specialist);
+  const compareRuntime =
+    readDreamBuilderCompareRuntime(specialist) ||
+    readDreamBuilderCompareRuntime(toRecord(state.last_specialist_result));
+
+  const userItems = normalizeStringArray(compare.current_items);
+  const suggestionItems = normalizeStringArray(compare.suggested_items);
+  const userText =
+    String(compare.current_value || "").trim() ||
+    (userItems.length === 1 ? userItems[0] : "");
+  const suggestionText =
+    String(compare.suggested_value || "").trim() ||
+    (suggestionItems.length === 1 ? suggestionItems[0] : "");
+  const hasComparableValues =
+    userItems.length > 0 ||
+    suggestionItems.length > 0 ||
+    Boolean(userText) ||
+    Boolean(suggestionText);
+  if (!hasComparableValues) return null;
+
+  const retainedItems = compareRuntime?.segments
+    ?.filter((entry) => String((entry as Record<string, unknown>)?.kind || "").trim() === "retained")
+    .flatMap((entry) => normalizeStringArray((entry as Record<string, unknown>)?.items)) || [];
+
+  return {
+    mode: "list",
+    instruction: "",
+    feedback_reason_text: String(compare.rationale || "").trim(),
+    user_label: String(compare.current_label || "").trim() || uiLabelForKey(state, "compareHeading"),
+    suggestion_label: String(compare.suggested_label || "").trim() || uiLabelForKey(state, "compareSuggestionLabel"),
+    user_text: userText,
+    suggestion_text: suggestionText,
+    user_items: userItems,
+    suggestion_items: suggestionItems,
+    retained_heading: "",
+    retained_items: retainedItems,
+  };
+}
+
 function buildPendingInteractionRenderModel(
   response: RunStepContractResponse
 ): PendingInteractionCompareRenderModel | null {
-  return buildNormalCompareRenderModel(response);
+  return buildNormalCompareRenderModel(response) || buildDreamBuilderCompareRenderModel(response);
 }
 
 function comparePendingInteractionId(params: {

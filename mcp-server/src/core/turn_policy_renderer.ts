@@ -26,7 +26,6 @@ import {
 import { labelKeyForMenuAction } from "./menu_contract.js";
 import { parseUiContractOwnerForStep } from "./ui_contract_id.js";
 import {
-  buildStrategyContextBlock,
   extractStatementCount,
   strategyStatementsFromSources,
 } from "./turn_policy/strategy_helpers.js";
@@ -805,18 +804,17 @@ function stripInlineNumberedSummaryParagraphs(answerText: string, statements: st
   return kept.join("\n\n").trim();
 }
 
-function stripStrategySummaryParagraphs(answerText: string, statements: string[]): string {
+function stripListContextParagraphs(
+  answerText: string,
+  statements: string[],
+  summaryLines: string[]
+): string {
   const expected = statements.map((line) => String(line || "").trim()).filter(Boolean);
-  const summaryPatterns = [
-    /^so far we have these\b/i,
-    /^i['’]?ve reformulated your input into valid strategy focus choices:?$/i,
-    /^if you want to sharpen or adjust these, let me know\.?$/i,
-    /^current strategy focus points:?$/i,
-    /^you now have\s+\d+\s+focus points within your strategy:?$/i,
-    /^i advise you to formulate at least 4 but maximum 7 focus points\.?$/i,
-    /^your current strategy for\b/i,
-    /^the current strategy of\b/i,
-  ];
+  const blockedLines = new Set(
+    summaryLines
+      .map((line) => comparableText(line))
+      .filter(Boolean)
+  );
   const paragraphs = String(answerText || "")
     .replace(/\r/g, "\n")
     .split(/\n{2,}/)
@@ -829,7 +827,7 @@ function stripStrategySummaryParagraphs(answerText: string, statements: string[]
       .split("\n")
       .map((line) => String(line || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim())
       .filter(Boolean);
-    if (normalizedLines.some((line) => summaryPatterns.some((pattern) => pattern.test(line)))) {
+    if (normalizedLines.some((line) => blockedLines.has(comparableText(line)))) {
       return false;
     }
     const bulletLikeLines = normalizedLines.filter((line) => /^(?:[-*•]|\d+[\).])\s+/.test(line));
@@ -1094,29 +1092,29 @@ function rulesOfTheGameRecapBlock(state: CanvasState, recapText: string): string
     comparePending: false,
   }).items;
   if (items.length === 0) return String(recapText || "").trim();
-  const rendered = formatStepSectionTitle({
-    stepId: "rulesofthegame",
-    businessName: offTopicCompanyName(state),
-    getString: (key) => uiStringFromState(state, key, uiDefaultString(key)),
-  }).trim();
-  const base = rendered.replace(/[.!?。！？]+$/g, "").replace(/\s*:\s*$/g, "").trim();
-  const heading = base ? `${base}:` : "";
-  const bullets = items.map((line) => `• ${line}`).join("\n");
-  if (!heading) return bullets;
-  return `${heading}\n${bullets}`.trim();
+  return buildBoundedListContextBlock({
+    state,
+    items,
+    minCount: RULESOFTHEGAME_MIN_RULES,
+    maxCount: RULESOFTHEGAME_MAX_RULES,
+    countBelowMinKey: "rulesofthegame.guidance.min.template",
+    countAtOrAboveMinKey: "rulesofthegame.guidance.max.template",
+    currentHeadingKey: "rulesofthegame.current.template",
+  }).block;
 }
 
-function rulesOfTheGameCountLine(state: CanvasState, count: number): string {
-  const template = uiStringFromState(
-    state,
-    "rulesofthegame.count.template",
-    uiDefaultString("rulesofthegame.count.template")
-  );
+function formatIndexedUiTemplate(state: CanvasState, key: string, replacements: string[]): string {
+  const template = uiStringFromState(state, key, uiDefaultString(key));
   const line = String(template || "")
-    .replace(/\{0\}/g, String(count))
-    .replace(/\{1\}/g, String(RULESOFTHEGAME_MIN_RULES))
-    .replace(/\{2\}/g, String(RULESOFTHEGAME_MAX_RULES))
+    .replace(/\{0\}/g, String(replacements[0] || ""))
+    .replace(/\{1\}/g, String(replacements[1] || ""))
+    .replace(/\{2\}/g, String(replacements[2] || ""))
     .trim();
+  return line;
+}
+
+function formatContextLeadLine(state: CanvasState, key: string, replacements: string[]): string {
+  const line = formatIndexedUiTemplate(state, key, replacements);
   if (!line) return "";
   const sentenceMatch = line.match(/^([\s\S]*?[.!?。！？])(?:\s+|$)([\s\S]*)$/);
   const firstSentence = String(sentenceMatch?.[1] || line).trim();
@@ -1125,22 +1123,60 @@ function rulesOfTheGameCountLine(state: CanvasState, count: number): string {
   return rest ? `${heading}\n${rest}` : heading;
 }
 
-function rulesOfTheGameCurrentHeading(state: CanvasState): string {
-  const template = uiStringFromState(
-    state,
-    "rulesofthegame.current.template",
-    uiDefaultString("rulesofthegame.current.template")
-  );
-  const rendered = String(template || "").replace(/\{0\}/g, offTopicCompanyName(state)).trim();
+function formatContextHeadingLine(state: CanvasState, key: string, replacements: string[]): string {
+  const rendered = formatIndexedUiTemplate(state, key, replacements);
   if (!rendered) return "";
   const base = rendered.replace(/[.!?。！？]+$/g, "").replace(/\s*:\s*$/g, "").trim();
   return base ? `${base}:` : "";
 }
 
+type BoundedListContextBlock = {
+  items: string[];
+  block: string;
+  summaryLines: string[];
+};
+
+function buildBoundedListContextBlock(params: {
+  state: CanvasState;
+  items: string[];
+  minCount: number;
+  maxCount: number;
+  countBelowMinKey: string;
+  countAtOrAboveMinKey: string;
+  currentHeadingKey?: string;
+}): BoundedListContextBlock {
+  const items = params.items.map((line) => String(line || "").trim()).filter(Boolean);
+  if (items.length === 0) return { items: [], block: "", summaryLines: [] };
+  const countLine = items.length < params.minCount
+    ? formatContextLeadLine(params.state, params.countBelowMinKey, [
+        String(items.length),
+        String(params.minCount),
+        String(params.maxCount),
+      ])
+    : formatContextLeadLine(params.state, params.countAtOrAboveMinKey, [
+        String(params.maxCount),
+        String(items.length),
+        String(params.minCount),
+      ]);
+  const currentHeading = params.currentHeadingKey
+    ? formatContextHeadingLine(params.state, params.currentHeadingKey, [offTopicCompanyName(params.state)])
+    : "";
+  const parts = [
+    countLine,
+    currentHeading,
+    items.map((line) => `• ${line}`).join("\n"),
+  ].filter(Boolean);
+  return {
+    items,
+    block: parts.join("\n").trim(),
+    summaryLines: [countLine, currentHeading].filter(Boolean),
+  };
+}
+
 function rulesOfTheGameContextBlock(
   state: CanvasState,
   recapText: string
-): { items: string[]; block: string } {
+): BoundedListContextBlock {
   const items = evaluateRulesRuntimeGate({
     acceptedOutput: true,
     acceptedValue: "",
@@ -1148,16 +1184,16 @@ function rulesOfTheGameContextBlock(
     statements: [],
     comparePending: false,
   }).items;
-  if (items.length === 0) return { items: [], block: String(recapText || "").trim() };
-  const parts = [
-    rulesOfTheGameCountLine(state, items.length),
-    rulesOfTheGameCurrentHeading(state),
-    items.map((line) => `• ${line}`).join("\n"),
-  ].filter(Boolean);
-  return {
+  if (items.length === 0) return { items: [], block: String(recapText || "").trim(), summaryLines: [] };
+  return buildBoundedListContextBlock({
+    state,
     items,
-    block: parts.join("\n").trim(),
-  };
+    minCount: RULESOFTHEGAME_MIN_RULES,
+    maxCount: RULESOFTHEGAME_MAX_RULES,
+    countBelowMinKey: "rulesofthegame.guidance.min.template",
+    countAtOrAboveMinKey: "rulesofthegame.guidance.max.template",
+    currentHeadingKey: "rulesofthegame.current.template",
+  });
 }
 
 function step0ConfirmQuestion(state: CanvasState, venture: string, name: string, status: string): string {
@@ -1669,14 +1705,21 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
       : defaultRecapBlock;
   const strategyStatements =
     stepId === "strategy" ? strategyStatementsFromSources(state, statusSource, prev, { provisionalForStep }) : [];
-  const strategyContextBlock =
+  const strategyContext =
     !isOfftopic && stepId === "strategy" && strategyStatements.length > 0 && !comparePending
-      ? buildStrategyContextBlock(state, strategyStatements, { uiStringFromState })
-      : "";
+      ? buildBoundedListContextBlock({
+          state,
+          items: strategyStatements,
+          minCount: 4,
+          maxCount: 7,
+          countBelowMinKey: "strategy.focuspoints.guidance.min.template",
+          countAtOrAboveMinKey: "strategy.focuspoints.guidance.max.template",
+        })
+      : { items: [], block: "", summaryLines: [] };
   const rulesContext =
     !isOfftopic && stepId === "rulesofthegame" && recapText && !comparePending
       ? rulesOfTheGameContextBlock(state, recapText)
-      : { items: [], block: "" };
+      : { items: [], block: "", summaryLines: [] };
   const message = (() => {
     if (
       isOfftopic &&
@@ -1694,22 +1737,30 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
       }
       return `${answerText}\n\n${recapBlock}`.trim();
     }
-    if (strategyContextBlock) {
+    if (strategyContext.block) {
       const withoutInlineSummary = stripInlineNumberedSummaryParagraphs(answerText, strategyStatements);
-      const cleanedAnswer = stripStrategySummaryParagraphs(withoutInlineSummary, strategyStatements);
-      if (!cleanedAnswer) return strategyContextBlock;
+      const cleanedAnswer = stripListContextParagraphs(
+        withoutInlineSummary,
+        strategyStatements,
+        strategyContext.summaryLines
+      );
+      if (!cleanedAnswer) return strategyContext.block;
       const answerKey = comparableText(cleanedAnswer);
-      const recapKey = comparableText(strategyContextBlock);
+      const recapKey = comparableText(strategyContext.block);
       if (recapKey && answerKey.includes(recapKey)) return cleanedAnswer;
-      return `${cleanedAnswer}\n\n${strategyContextBlock}`.trim();
+      return `${cleanedAnswer}\n\n${strategyContext.block}`.trim();
     }
     if (rulesContext.block) {
-      const cleanedAnswer = stripInlineNumberedSummaryParagraphs(answerText, rulesContext.items);
+      const withoutInlineSummary = stripInlineNumberedSummaryParagraphs(answerText, rulesContext.items);
+      const cleanedAnswer = stripListContextParagraphs(
+        withoutInlineSummary,
+        rulesContext.items,
+        rulesContext.summaryLines
+      );
       if (!cleanedAnswer) return rulesContext.block;
       const answerKey = comparableText(cleanedAnswer);
       const recapKey = comparableText(rulesContext.block);
       if (recapKey && answerKey.includes(recapKey)) return cleanedAnswer;
-      if (answerContainsAllStatements(cleanedAnswer, rulesContext.items)) return cleanedAnswer;
       return `${cleanedAnswer}\n\n${rulesContext.block}`.trim();
     }
     if (effectiveStatus === "valid_output" && recapText) {

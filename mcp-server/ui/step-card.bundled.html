@@ -5112,7 +5112,7 @@
     const scoringRaw = toRecord3(contract.scoring);
     const scoringClusters = Array.isArray(scoringRaw.clusters) ? scoringRaw.clusters.map((entry) => {
       const record = toRecord3(entry);
-      const statementIndices = normalizeStringArray(record.statement_indices).map((value) => Number(value)).filter((value) => Number.isFinite(value) && value >= 0).map((value) => Math.trunc(value));
+      const statementIndices = Array.isArray(record.statement_indices) ? record.statement_indices.map((value) => String(value ?? "").trim()).filter((value) => value !== "") : [].map((value) => Number(value)).filter((value) => Number.isFinite(value) && value >= 0).map((value) => Math.trunc(value));
       if (statementIndices.length === 0) return null;
       return {
         theme: String(record.theme || "").trim(),
@@ -5183,7 +5183,6 @@ ${String(item || "").trim()}`.trim())
   }
   function shouldSuppressMainCardForCompare(uiPayloadRaw) {
     const uiPayload = uiPayloadRaw && typeof uiPayloadRaw === "object" ? uiPayloadRaw : {};
-    if (readDreamBuilderContract(uiPayload)) return false;
     return Boolean(readPendingInteraction(uiPayload));
   }
   function shouldSuppressPromptForCompare(params) {
@@ -5227,19 +5226,11 @@ ${String(item || "").trim()}`.trim())
     }
     return [];
   }
-  function readPendingInteraction(uiPayloadRaw) {
+  function compareAllowedActionsFromUiPayload(uiPayloadRaw) {
     const uiPayload = toRecord3(uiPayloadRaw);
-    const pending = toRecord3(uiPayload.pending_interaction);
-    const kind = String(pending.kind || "").trim();
-    const status = String(pending.status || "").trim();
-    if (kind !== "text_compare" && kind !== "list_compare" || status !== "pending") return null;
-    const renderModelRaw = toRecord3(pending.render_model);
-    const mode = String(renderModelRaw.mode || "").trim().toLowerCase() === "list" ? "list" : "text";
-    if (kind === "list_compare" && mode !== "list" || kind === "text_compare" && mode !== "text") {
-      return null;
-    }
-    const allowedActions = Array.isArray(pending.allowed_actions) ? pending.allowed_actions.map((entry) => {
-      const action = toRecord3(entry);
+    const actionContract = toRecord3(uiPayload.action_contract);
+    const actions = Array.isArray(actionContract.actions) ? actionContract.actions.map((entry) => toRecord3(entry)).filter((entry) => String(entry.action_code || "").trim().length > 0) : [];
+    return actions.map((action) => {
       const id = String(action.id || "").trim();
       const actionCode = String(action.action_code || "").trim();
       const label = String(action.label || "").trim();
@@ -5256,49 +5247,92 @@ ${String(item || "").trim()}`.trim())
         surface,
         primary: action.primary === true
       };
-    }).filter((entry) => Boolean(entry)) : [];
-    if (allowedActions.length === 0) return null;
-    const hasUserPickAction = allowedActions.some((action) => action.role === "compare_pick_user");
-    const hasSuggestionPickAction = allowedActions.some((action) => action.role === "compare_pick_suggestion");
-    if (!hasUserPickAction || !hasSuggestionPickAction) return null;
-    const userLabel = String(renderModelRaw.user_label || "").trim();
-    const suggestionLabel = String(renderModelRaw.suggestion_label || "").trim();
-    if (!userLabel || !suggestionLabel) return null;
-    const userItems = normalizeStringArray(renderModelRaw.user_items);
-    const suggestionItems = normalizeStringArray(renderModelRaw.suggestion_items);
-    const userText = String(renderModelRaw.user_text || "").trim();
-    const suggestionText = String(renderModelRaw.suggestion_text || "").trim();
-    const hasComparableValues = mode === "list" ? userItems.length > 0 || suggestionItems.length > 0 || Boolean(userText) || Boolean(suggestionText) : Boolean(userText) || Boolean(suggestionText);
-    if (!hasComparableValues) return null;
-    return {
-      id: String(pending.id || "").trim(),
-      kind,
-      status: "pending",
-      allowedActions,
-      renderModel: {
-        mode,
-        instruction: String(renderModelRaw.instruction || "").trim(),
-        feedbackReasonText: String(renderModelRaw.feedback_reason_text || "").trim(),
-        userLabel,
-        suggestionLabel,
-        userText,
-        suggestionText,
-        userItems,
-        suggestionItems,
-        units: Array.isArray(renderModelRaw.units) ? renderModelRaw.units.map((entry) => {
-          const unit = toRecord3(entry);
-          const normalizedUserItems = normalizeStringArray(unit.user_items);
-          const normalizedSuggestionItems = normalizeStringArray(unit.suggestion_items);
-          const feedbackReasonText = String(unit.feedback_reason_text || "").trim();
-          if (normalizedUserItems.length === 0 && normalizedSuggestionItems.length === 0) return null;
+    }).filter((entry) => Boolean(entry));
+  }
+  function readPendingInteraction(uiPayloadRaw) {
+    const uiPayload = toRecord3(uiPayloadRaw);
+    const pending = toRecord3(uiPayload.pending_interaction);
+    const kind = String(pending.kind || "").trim();
+    const status = String(pending.status || "").trim();
+    if ((kind === "text_compare" || kind === "list_compare") && status === "pending") {
+      const renderModelRaw = toRecord3(pending.render_model);
+      const mode = String(renderModelRaw.mode || "").trim().toLowerCase() === "list" ? "list" : "text";
+      if (kind === "list_compare" && mode === "list" || kind === "text_compare" && mode === "text") {
+        const allowedActions = compareAllowedActionsFromUiPayload({
+          action_contract: uiPayload.action_contract,
+          pending_interaction: pending
+        });
+        const hasUserPickAction = allowedActions.some((action) => action.role === "compare_pick_user");
+        const hasSuggestionPickAction = allowedActions.some((action) => action.role === "compare_pick_suggestion");
+        const userLabel = String(renderModelRaw.user_label || "").trim();
+        const suggestionLabel = String(renderModelRaw.suggestion_label || "").trim();
+        const userItems = normalizeStringArray(renderModelRaw.user_items);
+        const suggestionItems = normalizeStringArray(renderModelRaw.suggestion_items);
+        const userText = String(renderModelRaw.user_text || "").trim();
+        const suggestionText = String(renderModelRaw.suggestion_text || "").trim();
+        const hasComparableValues = mode === "list" ? userItems.length > 0 || suggestionItems.length > 0 || Boolean(userText) || Boolean(suggestionText) : Boolean(userText) || Boolean(suggestionText);
+        if (allowedActions.length > 0 && hasUserPickAction && hasSuggestionPickAction && userLabel && suggestionLabel && hasComparableValues) {
           return {
-            userItems: normalizedUserItems,
-            suggestionItems: normalizedSuggestionItems,
-            feedbackReasonText
+            id: String(pending.id || "").trim(),
+            kind,
+            status: "pending",
+            allowedActions,
+            renderModel: {
+              mode,
+              instruction: String(renderModelRaw.instruction || "").trim(),
+              feedbackReasonText: String(renderModelRaw.feedback_reason_text || "").trim(),
+              userLabel,
+              suggestionLabel,
+              userText,
+              suggestionText,
+              userItems,
+              suggestionItems,
+              units: Array.isArray(renderModelRaw.units) ? renderModelRaw.units.map((entry) => {
+                const unit = toRecord3(entry);
+                const normalizedUserItems = normalizeStringArray(unit.user_items);
+                const normalizedSuggestionItems = normalizeStringArray(unit.suggestion_items);
+                const feedbackReasonText = String(unit.feedback_reason_text || "").trim();
+                if (normalizedUserItems.length === 0 && normalizedSuggestionItems.length === 0) return null;
+                return {
+                  userItems: normalizedUserItems,
+                  suggestionItems: normalizedSuggestionItems,
+                  feedbackReasonText
+                };
+              }).filter((entry) => Boolean(entry)) : [],
+              retainedHeading: String(renderModelRaw.retained_heading || "").trim(),
+              retainedItems: normalizeStringArray(renderModelRaw.retained_items)
+            }
           };
-        }).filter((entry) => Boolean(entry)) : [],
-        retainedHeading: String(renderModelRaw.retained_heading || "").trim(),
-        retainedItems: normalizeStringArray(renderModelRaw.retained_items)
+        }
+      }
+    }
+    const dreamBuilderContract = readDreamBuilderContract(uiPayload);
+    const compare = dreamBuilderContract?.compare;
+    if (dreamBuilderContract?.phase !== "compare" || !compare) return null;
+    const compareActions = compareAllowedActionsFromUiPayload(uiPayload);
+    const hasCompareUserPickAction = compareActions.some((action) => action.role === "compare_pick_user");
+    const hasCompareSuggestionPickAction = compareActions.some((action) => action.role === "compare_pick_suggestion");
+    if (!hasCompareUserPickAction || !hasCompareSuggestionPickAction) return null;
+    const compareHasComparableValues = compare.currentItems.length > 0 || compare.suggestedItems.length > 0 || Boolean(compare.currentValue) || Boolean(compare.suggestedValue);
+    if (!compareHasComparableValues) return null;
+    return {
+      id: String(pending.id || "dream_builder_compare").trim(),
+      kind: "list_compare",
+      status: "pending",
+      allowedActions: compareActions,
+      renderModel: {
+        mode: "list",
+        instruction: "",
+        feedbackReasonText: compare.rationale,
+        userLabel: compare.currentLabel,
+        suggestionLabel: compare.suggestedLabel,
+        userText: compare.currentValue,
+        suggestionText: compare.suggestedValue,
+        userItems: compare.currentItems,
+        suggestionItems: compare.suggestedItems,
+        units: [],
+        retainedHeading: compare.retainedHeading,
+        retainedItems: compare.retainedItems
       }
     };
   }
@@ -5373,8 +5407,15 @@ ${String(item || "").trim()}`.trim())
     return surfaceActionsForResult(resultData, "choice");
   }
   function collectPendingScoresForContractAction() {
+    const canUseDomFallback = typeof document !== "undefined";
+    if (canUseDomFallback) {
+      const domPayload = collectPendingScoresFromDom(true);
+      if (domPayload) return domPayload;
+    }
     const scoringScores = globalThis.__dreamScoringScores || [];
-    if (!Array.isArray(scoringScores) || scoringScores.length === 0) return null;
+    if (!Array.isArray(scoringScores) || scoringScores.length === 0) {
+      return null;
+    }
     const payload = [];
     for (let ci = 0; ci < scoringScores.length; ci += 1) {
       const row = Array.isArray(scoringScores[ci]) ? scoringScores[ci] : [];
@@ -5391,6 +5432,65 @@ ${String(item || "").trim()}`.trim())
       payload.push(normalizedRow);
     }
     return payload;
+  }
+  function collectPartialPendingScoresForContractAction() {
+    const canUseDomFallback = typeof document !== "undefined";
+    if (canUseDomFallback) {
+      const domPayload = collectPendingScoresFromDom(false);
+      if (domPayload) return domPayload;
+    }
+    const scoringScores = globalThis.__dreamScoringScores || [];
+    if (!Array.isArray(scoringScores) || scoringScores.length === 0) {
+      return null;
+    }
+    const payload = [];
+    let hasAnyValue = false;
+    for (let ci = 0; ci < scoringScores.length; ci += 1) {
+      const row = Array.isArray(scoringScores[ci]) ? scoringScores[ci] : [];
+      const normalizedRow = [];
+      for (let si = 0; si < row.length; si += 1) {
+        const normalized = normalizeDreamScoreValue(row[si]);
+        if (normalized) hasAnyValue = true;
+        normalizedRow.push(normalized ? Number(normalized) : 0);
+      }
+      payload.push(normalizedRow);
+    }
+    return hasAnyValue ? payload : null;
+  }
+  function collectPendingScoresFromDom(requireComplete) {
+    const clusterEls = Array.from(
+      document.querySelectorAll(".scoringCluster[data-cluster-index]")
+    ).sort((left, right) => {
+      const leftIndex = Number(left.getAttribute("data-cluster-index") || "0");
+      const rightIndex = Number(right.getAttribute("data-cluster-index") || "0");
+      return leftIndex - rightIndex;
+    });
+    if (clusterEls.length === 0) return null;
+    const payload = [];
+    let hasAnyValue = false;
+    for (const clusterEl of clusterEls) {
+      const inputEls = Array.from(
+        clusterEl.querySelectorAll(".scoreInput[data-statement]")
+      ).sort((left, right) => {
+        const leftIndex = Number(left.getAttribute("data-statement") || "0");
+        const rightIndex = Number(right.getAttribute("data-statement") || "0");
+        return leftIndex - rightIndex;
+      });
+      if (inputEls.length === 0) return null;
+      const normalizedRow = [];
+      for (const inputEl2 of inputEls) {
+        const normalized = normalizeDreamScoreValue(inputEl2.value);
+        if (!normalized) {
+          if (requireComplete) return null;
+          normalizedRow.push(0);
+          continue;
+        }
+        hasAnyValue = true;
+        normalizedRow.push(Number(normalized));
+      }
+      payload.push(normalizedRow);
+    }
+    return requireComplete ? payload : hasAnyValue ? payload : null;
   }
   function dispatchContractAction(action) {
     if (getIsLoading()) return;
@@ -5461,17 +5561,25 @@ ${String(item || "").trim()}`.trim())
   }
   function buildInitialDreamScoringScores(params) {
     const clientScores = normalizeDreamScoreMatrix(params.clientScores);
+    const clientScoreMap = params.clientScoreMap && typeof params.clientScoreMap === "object" ? params.clientScoreMap : {};
     const persistedScores = normalizeDreamScoreMatrix(params.persistedScores);
     const hasClientValues = clientScores.some((row) => row.some((value) => value !== ""));
     const sourceScores = hasClientValues ? clientScores : persistedScores;
+    const statements = Array.isArray(params.statements) ? params.statements.map((value) => String(value || "").trim()) : [];
     return params.clusters.map((cluster, clusterIndex) => {
       const statementIndices = Array.isArray(cluster.statement_indices) ? cluster.statement_indices : [];
       const sourceRow = Array.isArray(sourceScores[clusterIndex]) ? sourceScores[clusterIndex] : [];
-      return statementIndices.map((_, statementIndex) => normalizeDreamScoreValue(sourceRow[statementIndex]));
+      return statementIndices.map((statementIndexRaw, statementIndex) => {
+        const statementPosition = Number(statementIndexRaw);
+        const statementText = Number.isFinite(statementPosition) && statementPosition >= 0 ? String(statements[Math.trunc(statementPosition)] || "").trim() : "";
+        const mappedValue = statementText ? normalizeDreamScoreValue(clientScoreMap[statementText]) : "";
+        return mappedValue || normalizeDreamScoreValue(sourceRow[statementIndex]);
+      });
     });
   }
   function shouldRetainDreamScoringClientScores(params) {
-    return String(params.currentStep || "").trim() === "dream" && params.isScoringView;
+    void params.isScoringView;
+    return String(params.currentStep || "").trim() === "dream";
   }
   function benAvatarCandidates() {
     const candidates = [];
@@ -5603,8 +5711,12 @@ ${String(item || "").trim()}`.trim())
     const resultText = typeof params.resultText === "string" ? String(params.resultText || "").trim() : "";
     const promptBody = String(params.promptBody || "");
     const specialist = params.specialist || {};
-    const specialistText = String(specialist.message || "").trim() || String(specialist.refined_formulation || "").trim() || String(specialist.question || "").trim();
+    const refinedFormulation = String(specialist.refined_formulation || "").trim();
+    const specialistText = String(specialist.message || "").trim() || refinedFormulation || String(specialist.question || "").trim();
     const dreamBuilderViewContract = params.dreamBuilderViewContract || readDreamBuilderViewContract(null);
+    if (params.currentStep === "dream" && params.isDreamBuilderRefineView && refinedFormulation) {
+      return refinedFormulation;
+    }
     if (params.currentStep === "dream" && dreamBuilderViewContract.active) {
       if (typeof params.resultText === "string") return resultText;
       if (dreamBuilderViewContract.bodyMode === "none") return "";
@@ -5810,10 +5922,6 @@ ${String(item || "").trim()}`.trim())
       return false;
     }
     const uiPayload = resultData && typeof resultData.ui === "object" && resultData.ui ? resultData.ui : {};
-    if (readDreamBuilderContract(uiPayload)) {
-      wrap.style.display = "none";
-      return false;
-    }
     const pendingInteraction = readPendingInteraction(uiPayload);
     if (!pendingInteraction) {
       wrap.style.display = "none";
@@ -5827,6 +5935,8 @@ ${String(item || "").trim()}`.trim())
     const suggestionLabelFromPayload = pendingInteraction.renderModel.suggestionLabel;
     const userItems = pendingInteraction.renderModel.userItems;
     const suggestionItems = pendingInteraction.renderModel.suggestionItems;
+    const userPickAction = pendingInteraction.allowedActions.find((action) => action.role === "compare_pick_user") || null;
+    const suggestionPickAction = pendingInteraction.allowedActions.find((action) => action.role === "compare_pick_suggestion") || null;
     const instruction = pendingInteraction.renderModel.instruction || t(lang, "compareInstruction");
     const instructionParts = {
       retainedHeading: pendingInteraction.renderModel.retainedHeading,
@@ -5874,8 +5984,8 @@ ${String(item || "").trim()}`.trim())
         li.textContent = normalizeListItem(item);
         suggestionListEl.appendChild(li);
       }
-      userBtn.textContent = uiText2(lang, "compare.chooseVersion", "");
-      suggestionBtn.textContent = uiText2(lang, "compare.chooseVersion", "");
+      userBtn.textContent = String(userPickAction?.label || "").trim() || uiText2(lang, "compare.chooseVersion", "");
+      suggestionBtn.textContent = String(suggestionPickAction?.label || "").trim() || uiText2(lang, "compare.chooseVersion", "");
     } else {
       userTextEl.style.display = "block";
       suggestionTextEl.style.display = "block";
@@ -6184,7 +6294,8 @@ ${String(item || "").trim()}`.trim())
       resultText: result?.text,
       specialist,
       promptBody,
-      dreamBuilderViewContract
+      dreamBuilderViewContract,
+      isDreamBuilderRefineView: isViewModeDreamBuilderRefine
     });
     let promptSource = promptRaw;
     let body;
@@ -6348,7 +6459,7 @@ ${String(item || "").trim()}`.trim())
           }
         }
         const avgText = filled === 0 ? uiText2(lang, "scoring.avg.empty", "") : (sum / filled).toFixed(1);
-        const themeName = String(clusters[ci].theme || "").trim() || uiText2(lang, "scoring.categoryFallback", "").replace("{0}", String(ci + 1));
+        const themeName = String(clusters[ci].theme || "").trim();
         const showStats = filled > 0;
         const avgHtml = showStats ? '<span class="avgScore">' + t(lang, "scoringAvg").replace("X", avgText) + "</span>" : "";
         const headerEl = clusterDiv.querySelector(".scoringClusterHeader");
@@ -6363,6 +6474,22 @@ ${String(item || "").trim()}`.trim())
           }
         }
         return true;
+      }, syncScoringScoreMap2 = function() {
+        for (let ci = 0; ci < clusters.length; ci++) {
+          const indices = clusters[ci].statement_indices || [];
+          for (let si = 0; si < indices.length; si++) {
+            const stIdx = typeof indices[si] !== "number" ? parseInt(String(indices[si]), 10) : indices[si];
+            if (isNaN(stIdx) || stIdx < 0 || stIdx >= statementsArray.length) continue;
+            const statementText = String(statementsArray[stIdx] || "").trim();
+            if (!statementText) continue;
+            const normalized = normalizeDreamScoreValue(scoringScores[ci][si]);
+            if (normalized) {
+              scoringScoreByStatement[statementText] = normalized;
+            } else {
+              delete scoringScoreByStatement[statementText];
+            }
+          }
+        }
       }, updateScoringDreamQuestionVisibility2 = function() {
         const filled = allScoringFilled2();
         const promptEl2 = document.getElementById("prompt");
@@ -6372,7 +6499,7 @@ ${String(item || "").trim()}`.trim())
         document.querySelectorAll('[data-bsc-action-role="score_submit"]').forEach((button) => {
           const submitButton = button;
           submitButton.disabled = getIsLoading() || !scoreSubmitEnabled;
-          submitButton.style.display = scoreSubmitEnabled ? "" : "none";
+          submitButton.style.display = "";
         });
         const primaryActionWrap2 = document.getElementById("primaryActionWrap");
         if (primaryActionWrap2) {
@@ -6382,7 +6509,7 @@ ${String(item || "").trim()}`.trim())
           primaryActionWrap2.style.display = hasVisibleButtons ? "flex" : "none";
         }
       };
-      var updateScoringClusterHeader = updateScoringClusterHeader2, allScoringFilled = allScoringFilled2, updateScoringDreamQuestionVisibility = updateScoringDreamQuestionVisibility2, syncScoringActionAvailability = syncScoringActionAvailability2;
+      var updateScoringClusterHeader = updateScoringClusterHeader2, allScoringFilled = allScoringFilled2, syncScoringScoreMap = syncScoringScoreMap2, updateScoringDreamQuestionVisibility = updateScoringDreamQuestionVisibility2, syncScoringActionAvailability = syncScoringActionAvailability2;
       const clusters = (dreamBuilderContract?.scoring?.clusters || []).map((cluster) => ({
         statement_indices: cluster.statementIndices,
         theme: cluster.theme
@@ -6398,7 +6525,7 @@ ${String(item || "").trim()}`.trim())
         showPrompt.textContent = t(lang, "scoringDreamQuestion");
         showPrompt.style.display = "none";
       }
-      inputWrap.style.display = "none";
+      inputWrap.style.display = "flex";
       const scoringPanelEl = document.getElementById("scoringPanel");
       if (scoringPanelEl) {
         scoringPanelEl.classList.add("visible");
@@ -6412,17 +6539,23 @@ ${String(item || "").trim()}`.trim())
       const win = globalThis;
       win.__dreamScoringScores = buildInitialDreamScoringScores({
         clientScores: win.__dreamScoringScores,
+        clientScoreMap: win.__dreamScoringScoreByStatement,
         persistedScores: dreamBuilderContract?.scoring?.scores || [],
+        statements: statementsArray,
         clusters
       });
       const scoringScores = win.__dreamScoringScores;
+      if (!win.__dreamScoringScoreByStatement || typeof win.__dreamScoringScoreByStatement !== "object") {
+        win.__dreamScoringScoreByStatement = {};
+      }
+      const scoringScoreByStatement = win.__dreamScoringScoreByStatement;
       const scoringClustersEl = document.getElementById("scoringClusters");
       if (!scoringClustersEl) return;
       scoringClustersEl.innerHTML = "";
       for (let cii = 0; cii < clusters.length; cii++) {
         const cluster = clusters[cii];
         const indices = cluster.statement_indices || [];
-        const themeName = String(cluster.theme || "").trim() || uiText2(lang, "scoring.categoryFallback", "").replace("{0}", String(cii + 1));
+        const themeName = String(cluster.theme || "").trim();
         const clusterDiv = document.createElement("div");
         clusterDiv.className = "scoringCluster";
         clusterDiv.setAttribute("data-cluster-index", String(cii));
@@ -6478,6 +6611,7 @@ ${String(item || "").trim()}`.trim())
         actions: surfaceActionsForResult(result, "auxiliary", lang),
         className: "btn"
       });
+      syncScoringScoreMap2();
       updateScoringDreamQuestionVisibility2();
       syncScoringActionAvailability2();
       scoringClustersEl.querySelectorAll(".scoreInput").forEach((input3) => {
@@ -6494,15 +6628,21 @@ ${String(item || "").trim()}`.trim())
             val = input3.value;
           }
           scoringScores[ci][si] = val;
+          syncScoringScoreMap2();
           updateScoringClusterHeader2(ci);
           syncScoringActionAvailability2();
           updateScoringDreamQuestionVisibility2();
         });
       });
-      inputWrap.style.display = "none";
       const input2 = document.getElementById("input");
-      if (input2) input2.placeholder = t(lang, "inputPlaceholder");
-      setSendEnabled(false);
+      if (input2) {
+        input2.disabled = false;
+        input2.readOnly = false;
+        input2.placeholder = t(lang, "inputPlaceholder");
+        setSendEnabled(String(input2.value || "").trim().length > 0);
+      } else {
+        setSendEnabled(false);
+      }
       const latestScoringState = retainCanonicalStepContinuity(
         state,
         latestState
@@ -6519,6 +6659,7 @@ ${String(item || "").trim()}`.trim())
     const scoringWindow = globalThis;
     if (!shouldRetainDreamScoringClientScores({ currentStep: current, isScoringView })) {
       scoringWindow.__dreamScoringScores = [];
+      scoringWindow.__dreamScoringScoreByStatement = {};
     }
     if (cardDescEl) cardDescEl.style.display = "block";
     const promptPost = document.getElementById("prompt");
@@ -6963,7 +7104,11 @@ ${String(item || "").trim()}`.trim())
     }
     if (input) input.value = "";
     setSendEnabled(false);
-    callRunStep(submitActionCode, { __text_submit: inputVal });
+    const pendingScores = collectPartialPendingScoresForContractAction();
+    callRunStep(
+      submitActionCode,
+      pendingScores ? { __text_submit: inputVal, __pending_scores: pendingScores } : { __text_submit: inputVal }
+    );
   }
   var inputEl = document.getElementById("input");
   if (inputEl) {

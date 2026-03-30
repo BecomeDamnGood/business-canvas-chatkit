@@ -28,10 +28,6 @@ import {
 } from "./run_step_context.js";
 import type { RunStepPipelinePorts } from "./run_step_ports.js";
 import type { TurnResponseRenderFailureContext } from "./run_step_turn_response_engine.js";
-import {
-  clearDreamBuilderCompareRuntime,
-  readDreamBuilderCompareRuntime,
-} from "./dream_builder_compare_runtime.js";
 import type { UiContractMeta, CompareUiPayload } from "./run_step_ui_payload.js";
 import {
   asRecord,
@@ -57,6 +53,10 @@ import {
   supportsAutoSuggest,
 } from "../steps/step_registry.js";
 import { deriveStructuredSuggestionsContent } from "../core/structured_suggestions.js";
+import {
+  buildDreamBuilderScoringRepairRetrySpecialist,
+  hasValidDreamBuilderScoringContract,
+} from "./dream_builder_scoring.js";
 type RunPostSpecialistPipelineParams = RunStepPostSpecialistPipelineRequest;
 
 type RunStepPipelineFlatPorts<TPayload> =
@@ -303,86 +303,17 @@ function didDreamBuilderAppendExactlyOneStatement(params: {
   return true;
 }
 
-type DreamBuilderScoringCluster = {
-  theme: string;
-  statement_indices: number[];
-};
-
-function hasValidDreamBuilderScoringContract(
-  specialistResult: Record<string, unknown>,
-  minimumStatements: number
-): boolean {
-  if (!isTrueFlag(specialistResult.scoring_phase)) return false;
-  const statements = readStringArray(specialistResult.statements);
-  if (statements.length < minimumStatements) return false;
-  const clustersRaw = Array.isArray(specialistResult.clusters)
-    ? (specialistResult.clusters as unknown[])
-    : [];
-  if (clustersRaw.length === 0) return false;
-  return clustersRaw.every((cluster) => {
-    const record = asRecord(cluster);
-    const theme = String(record.theme || "").trim();
-    const indices = Array.isArray(record.statement_indices)
-      ? (record.statement_indices as unknown[])
-          .map((value) => Number(value))
-          .filter((value) => Number.isFinite(value) && value >= 0)
-      : [];
-    return Boolean(theme) && indices.length > 0;
-  });
-}
-
-function buildFallbackDreamBuilderScoringClusters(
-  statements: string[],
-  categoryTemplate: string
-): DreamBuilderScoringCluster[] {
-  const safeStatements = readStringArray(statements);
-  if (safeStatements.length === 0) return [];
-  const clusterCount = Math.max(1, Math.ceil(safeStatements.length / 7));
-  const baseSize = Math.floor(safeStatements.length / clusterCount);
-  const remainder = safeStatements.length % clusterCount;
-  const clusters: DreamBuilderScoringCluster[] = [];
-  let cursor = 0;
-  for (let clusterIndex = 0; clusterIndex < clusterCount; clusterIndex += 1) {
-    const size = baseSize + (clusterIndex < remainder ? 1 : 0);
-    const statementIndices = Array.from({ length: size }, (_, offset) => cursor + offset);
-    cursor += size;
-    const theme = String(categoryTemplate || "Category {0}").replace("{0}", String(clusterIndex + 1)).trim();
-    clusters.push({
-      theme: theme || `Category ${clusterIndex + 1}`,
-      statement_indices: statementIndices,
-    });
+function didDreamBuilderAppendMultipleStatements(params: {
+  previousStatements: string[];
+  nextStatements: string[];
+}): boolean {
+  const previousStatements = readStringArray(params.previousStatements);
+  const nextStatements = readStringArray(params.nextStatements);
+  if (nextStatements.length < previousStatements.length + 2) return false;
+  for (let index = 0; index < previousStatements.length; index += 1) {
+    if (nextStatements[index] !== previousStatements[index]) return false;
   }
-  return clusters.filter((cluster) => cluster.statement_indices.length > 0);
-}
-
-function buildFallbackDreamBuilderScoringSpecialist(params: {
-  specialistResult: Record<string, unknown>;
-  state: CanvasState;
-  statements: string[];
-}): Record<string, unknown> {
-  const scoringMessage = resolveUiStringForState(
-    params.state,
-    "scoringIntro2",
-    "Please score each statement from 1 to 10 based on how important it is for your Dream (1 = low, 10 = very important)."
-  ).trim();
-  const categoryTemplate = resolveUiStringForState(
-    params.state,
-    "scoring.categoryFallback",
-    "Category {0}"
-  ).trim();
-  return {
-    ...params.specialistResult,
-    action: "ASK",
-    message: scoringMessage || String(params.specialistResult.message || "").trim(),
-    question: "",
-    feedback_reason_text: "",
-    refined_formulation: "",
-    dream: "",
-    suggest_dreambuilder: "true",
-    statements: readStringArray(params.statements),
-    scoring_phase: "true",
-    clusters: buildFallbackDreamBuilderScoringClusters(params.statements, categoryTemplate),
-  };
+  return true;
 }
 
 export function shouldForcePendingCompareFromIntent(params: {
@@ -676,13 +607,6 @@ function clearPendingCompareFields(specialistResult: Record<string, unknown>): R
   return {
     ...clearPendingInteractionState(specialistResult),
     feedback_mode: "none",
-  };
-}
-
-function clearDreamBuilderCompareState(specialistResult: Record<string, unknown>): Record<string, unknown> {
-  return {
-    ...clearDreamBuilderCompareRuntime(specialistResult),
-    ...clearPendingCompareFields(specialistResult),
   };
 }
 
@@ -1225,6 +1149,29 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
         return readStringArray(previousSpecialist.statements);
       })();
       const nextStatements = readStringArray(specialistResult.statements);
+      const needsMultiRewriteRepair = didDreamBuilderAppendMultipleStatements({
+        previousStatements,
+        nextStatements,
+      });
+      if (needsMultiRewriteRepair) {
+        const repairInput = `${deps.dreamExplainerMultiRewriteRepairRoutePrefix}\n${String(userMessage || "").trim()}`;
+        const multiRewriteRepairCall = await deps.callSpecialistStrictSafe(
+          { model: params.model, state, decision: decision1, userMessage: repairInput },
+          deps.buildRoutingContext(repairInput),
+          state
+        );
+        if (multiRewriteRepairCall.ok) {
+          params.rememberLlmCall(multiRewriteRepairCall.value);
+          attempts = Math.max(attempts, multiRewriteRepairCall.value.attempts);
+          specialistResult = asRecord(multiRewriteRepairCall.value.specialistResult);
+        }
+      }
+      const repairedAsRefine =
+        String(specialistResult.action || "").trim() === "REFINE" &&
+        String(specialistResult.refined_formulation || "").trim();
+      if (repairedAsRefine) {
+        // Let the standard compare pipeline handle the rewrite proposal below.
+      } else {
       const overlapRepairPair =
         findDreamBuilderOverlapRepairPair({
           previousStatements,
@@ -1262,6 +1209,7 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
           };
           dreamBuilderOverlapRepairApplied = true;
         }
+      }
       }
     }
 
@@ -1593,60 +1541,6 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
       provisionalSource: provisionalSourceForMutation,
     });
 
-    if (
-      decision1.specialist_to_call === deps.dreamExplainerSpecialist &&
-      String(decision1.current_step || "") === deps.dreamStepId &&
-      !isTrueFlag(specialistResult.is_offtopic) &&
-      !readDreamBuilderCompareRuntime(specialistResult) &&
-      String((nextState as Record<string, unknown>).dream_awaiting_direction ?? "").trim() !== "true"
-    ) {
-      const canonicalDreamBuilderStatements = readStringArray((nextState as Record<string, unknown>).dream_builder_statements);
-      if (
-        canonicalDreamBuilderStatements.length >= 20 &&
-        !hasValidDreamBuilderScoringContract(asRecord(specialistResult), 20)
-      ) {
-        const scoringRecoveryRoute = "__ROUTE__DREAM_EXPLAINER_CONTINUE__";
-        const scoringRecoveryCall = await deps.callSpecialistStrictSafe(
-          {
-            model: params.model,
-            state: nextState,
-            decision: decision1,
-            userMessage: scoringRecoveryRoute,
-          },
-          deps.buildRoutingContext(scoringRecoveryRoute),
-          nextState
-        );
-
-        if (scoringRecoveryCall.ok) {
-          params.rememberLlmCall(scoringRecoveryCall.value);
-          attempts = Math.max(attempts, scoringRecoveryCall.value.attempts);
-          specialistResult = asRecord(scoringRecoveryCall.value.specialistResult);
-          nextState = deps.applyPostSpecialistStateMutations({
-            prevState: nextState,
-            decision: decision1,
-            specialistResult,
-            provisionalSource: provisionalSourceForMutation,
-          });
-        }
-
-        if (
-          !hasValidDreamBuilderScoringContract(asRecord(specialistResult), 20)
-        ) {
-          specialistResult = buildFallbackDreamBuilderScoringSpecialist({
-            specialistResult: asRecord(specialistResult),
-            state: nextState,
-            statements: canonicalDreamBuilderStatements,
-          });
-          nextState = deps.applyPostSpecialistStateMutations({
-            prevState: nextState,
-            decision: decision1,
-            specialistResult,
-            provisionalSource: provisionalSourceForMutation,
-          });
-        }
-      }
-    }
-
     let effectiveStepSupportState = await resolveEffectiveStepSupportState({
       state: nextState,
       stepId: String(decision1.current_step || ""),
@@ -1786,8 +1680,6 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
     const currentSpecialistForCompare = String(asStateRecord(nextState).active_specialist || "");
     const previousSpecialistForCompare = asRecord(asStateRecord(state).last_specialist_result);
     const dreamRuntimeModeForCompare = deps.getDreamRuntimeMode(nextState);
-    const dreamBuilderFlowActiveForCompare =
-      currentStepForCompare === deps.dreamStepId && dreamRuntimeModeForCompare !== "self";
     const isCurrentTurnOfftopic = isTrueFlag(specialistResult?.is_offtopic);
     const eligibleForCompareTurn = deps.isCompareEligibleContext(
       currentStepForCompare,
@@ -1857,15 +1749,10 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
         provisionalSource: provisionalSourceForMutation,
       });
     }
-    if (dreamBuilderFlowActiveForCompare) {
-      specialistResult = clearDreamBuilderCompareState(asRecord(specialistResult));
-      compareOverride = null;
-    }
     asStateRecord(nextState).last_specialist_result = clearPendingInteractionState(specialistResult);
     asStateRecord(nextState).pending_interaction_state = readPendingInteractionState(nextState) || {};
     if (
       params.compareEnabled &&
-      !dreamBuilderFlowActiveForCompare &&
       params.inputMode === "widget" &&
       wordingIntentEligible
     ) {
@@ -1898,11 +1785,110 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
       } else if (readPendingInteractionState(nextState)) {
         specialistResult = clearPendingCompareFields(asRecord(specialistResult));
       }
-    } else if (dreamBuilderFlowActiveForCompare) {
-      specialistResult = clearDreamBuilderCompareState(asRecord(specialistResult));
-      compareOverride = null;
     } else if (readPendingInteractionState(nextState)) {
       specialistResult = clearPendingCompareFields(asRecord(specialistResult));
+    }
+
+    const canonicalDreamBuilderStatements = readStringArray(
+      asStateRecord(nextState).dream_builder_statements
+    );
+    const shouldRecoverDreamBuilderScoring =
+      finalDecision.specialist_to_call === deps.dreamExplainerSpecialist &&
+      String(finalDecision.current_step || "") === deps.dreamStepId &&
+      !isTrueFlag(specialistResult.is_offtopic) &&
+      String((nextState as Record<string, unknown>).dream_awaiting_direction ?? "").trim() !== "true" &&
+      canonicalDreamBuilderStatements.length >= 20 &&
+      !readPendingInteractionState(nextState) &&
+      !compareOverride?.enabled &&
+      !hasValidDreamBuilderScoringContract(asRecord(specialistResult), 20, nextState);
+
+    if (shouldRecoverDreamBuilderScoring) {
+      const scoringRecoveryRoute = "__ROUTE__DREAM_EXPLAINER_CONTINUE__";
+      const scoringRecoveryCall = await deps.callSpecialistStrictSafe(
+        {
+          model: params.model,
+          state: nextState,
+          decision: finalDecision,
+          userMessage: scoringRecoveryRoute,
+        },
+        deps.buildRoutingContext(scoringRecoveryRoute),
+        nextState
+      );
+
+      if (scoringRecoveryCall.ok) {
+        params.rememberLlmCall(scoringRecoveryCall.value);
+        attempts = Math.max(attempts, scoringRecoveryCall.value.attempts);
+        specialistResult = asRecord(scoringRecoveryCall.value.specialistResult);
+        nextState = deps.applyPostSpecialistStateMutations({
+          prevState: nextState,
+          decision: finalDecision,
+          specialistResult,
+          provisionalSource: provisionalSourceForMutation,
+        });
+      }
+
+      for (let repairAttempt = 0; repairAttempt < 2; repairAttempt += 1) {
+        if (hasValidDreamBuilderScoringContract(asRecord(specialistResult), 20, nextState)) break;
+        const clusterRepairRoute = [
+          deps.dreamExplainerClusterThemeRepairRoutePrefix,
+          `REPAIR_ATTEMPT: ${repairAttempt + 1}`,
+          "STATEMENTS_JSON:",
+          JSON.stringify(canonicalDreamBuilderStatements),
+          "CURRENT_CLUSTERS_JSON:",
+          JSON.stringify(Array.isArray(asRecord(specialistResult).clusters) ? asRecord(specialistResult).clusters : []),
+        ].join("\n");
+        const clusterRepairCall = await deps.callSpecialistStrictSafe(
+          {
+            model: params.model,
+            state: nextState,
+            decision: finalDecision,
+            userMessage: clusterRepairRoute,
+          },
+          deps.buildRoutingContext(clusterRepairRoute),
+          nextState
+        );
+
+        if (!clusterRepairCall.ok) break;
+        params.rememberLlmCall(clusterRepairCall.value);
+        attempts = Math.max(attempts, clusterRepairCall.value.attempts);
+        specialistResult = asRecord(clusterRepairCall.value.specialistResult);
+        nextState = deps.applyPostSpecialistStateMutations({
+          prevState: nextState,
+          decision: finalDecision,
+          specialistResult,
+          provisionalSource: provisionalSourceForMutation,
+        });
+      }
+
+      if (!hasValidDreamBuilderScoringContract(asRecord(specialistResult), 20, nextState)) {
+        specialistResult = buildDreamBuilderScoringRepairRetrySpecialist({
+          specialistResult: asRecord(specialistResult),
+          state: nextState,
+          statements: canonicalDreamBuilderStatements,
+        });
+        nextState = deps.applyPostSpecialistStateMutations({
+          prevState: nextState,
+          decision: finalDecision,
+          specialistResult,
+          provisionalSource: provisionalSourceForMutation,
+        });
+      }
+
+      const scoringRerender = deps.turnResponseEngine.renderValidateRecover({
+        state: nextState,
+        specialist: asRecord(specialistResult),
+        previousSpecialist: asRecord(asStateRecord(state).last_specialist_result),
+        telemetry: params.uiI18nTelemetry,
+        onContractViolation: buildRenderedContractViolationPayload,
+      });
+      if (!scoringRerender.ok) return scoringRerender.payload;
+      nextState = scoringRerender.value.state;
+      specialistResult = scoringRerender.value.specialist;
+      renderedStatusForPolicy = scoringRerender.value.renderedStatus;
+      actionCodesOverride = scoringRerender.value.actionCodes;
+      renderedActionsOverride = scoringRerender.value.renderedActions;
+      contractMetaOverride = scoringRerender.value.contractMeta;
+      compareOverride = null;
     }
 
     const canonicalDreamBuilderStatementsCount =
@@ -1911,10 +1897,7 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
       currentStepId: String(asStateRecord(nextState).current_step || ""),
       activeSpecialist: String(asStateRecord(nextState).active_specialist || ""),
       canonicalStatementCount: canonicalDreamBuilderStatementsCount,
-      comparePending:
-        dreamBuilderFlowActiveForCompare
-          ? Boolean(readDreamBuilderCompareRuntime(specialistResult))
-          : Boolean(compareOverride?.enabled),
+      comparePending: Boolean(compareOverride?.enabled),
       state: nextState,
     });
     // Motivational quote injection feature removed.

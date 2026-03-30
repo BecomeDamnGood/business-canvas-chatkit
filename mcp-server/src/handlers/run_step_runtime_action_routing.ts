@@ -173,6 +173,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
       actionCodes?: string[];
       renderedActions?: import("../contracts/ui_actions.js").RenderedAction[];
       contractMeta?: import("./run_step_ui_payload.js").UiContractMeta | null;
+      continueUserMessage?: string;
     };
     isComparePickRouteToken: (raw: string) => boolean;
     isRefineAdjustRouteToken: (raw: string) => boolean;
@@ -285,9 +286,6 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     const stepId = String(stateValue.current_step || "").trim();
     const activeSpecialist = String((stateValue as Record<string, unknown>).active_specialist || "");
     const dreamRuntimeMode = action.getDreamRuntimeMode(stateValue);
-    const dreamBuilderFlowActive =
-      stepId === ids.dreamStepId && dreamRuntimeMode !== "self";
-    if (dreamBuilderFlowActive) return null;
     if (
       !compare.isCompareEligibleContext(
         stepId,
@@ -330,9 +328,6 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     const stepId = String(stateValue.current_step || "").trim();
     const activeSpecialist = String((stateValue as Record<string, unknown>).active_specialist || "");
     const dreamRuntimeMode = action.getDreamRuntimeMode(stateValue);
-    const dreamBuilderFlowActive =
-      stepId === ids.dreamStepId && dreamRuntimeMode !== "self";
-    if (dreamBuilderFlowActive) return false;
     if (
       !compare.isCompareEligibleContext(
         stepId,
@@ -357,11 +352,6 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     stepId: string
   ): Promise<Record<string, unknown>> => {
     if (!readPendingInteractionState(state)) return specialist;
-    const dreamRuntimeMode = action.getDreamRuntimeMode(state);
-    const dreamBuilderFlowActive = String(state.current_step || "") === ids.dreamStepId && dreamRuntimeMode !== "self";
-    if (dreamBuilderFlowActive && stepId === ids.dreamStepId) {
-      return clearDreamBuilderLegacyCompareFields(specialist);
-    }
     return specialist;
   };
 
@@ -1085,9 +1075,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     runtime.inputMode === "widget" &&
     dreamBuilderModeActive &&
     Boolean(readDreamBuilderCompareRuntime(pendingBeforeTurn));
-  let hasPendingCompare =
-    !dreamBuilderModeActive &&
-    hasActiveOrdinaryCompareOwner(state, pendingBeforeTurn);
+  let hasPendingCompare = hasActiveOrdinaryCompareOwner(state, pendingBeforeTurn);
   const suspendPendingCompare = (specialist: Record<string, unknown>) => {
     const suspended = suspendPendingCompareSpecialist(specialist);
     state = clearPendingInteractionState(state) as CanvasState;
@@ -1177,9 +1165,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
       }
     }
     pendingBeforeTurn = readLastSpecialist(state);
-    hasPendingCompare =
-      !dreamBuilderModeActive &&
-      hasActiveOrdinaryCompareOwner(state, pendingBeforeTurn);
+    hasPendingCompare = hasActiveOrdinaryCompareOwner(state, pendingBeforeTurn);
     if (!hasPendingCompare && readPendingInteractionState(state)) {
       suspendPendingCompare(pendingBeforeTurn);
     }
@@ -1468,6 +1454,10 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
       };
 
   if (compareSelection.handled) {
+    if (String(compareSelection.continueUserMessage || "").trim()) {
+      state = compareSelection.nextState;
+      userMessage = String(compareSelection.continueUserMessage || "").trim();
+    } else {
     const stateWithUi = await behavior.ensureUiStrings(compareSelection.nextState, userMessage);
     state = stateWithUi;
     return {
@@ -1489,6 +1479,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
       pickBigWhyCandidate,
       buildBigWhyTooLongFeedback,
     };
+    }
   }
 
   const responseUiFlags = behavior.resolveResponseUiFlags(userMessage);

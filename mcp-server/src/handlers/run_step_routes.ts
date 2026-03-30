@@ -28,6 +28,7 @@ import {
 import { STEP_0_BOOTSTRAP_SPECIALIST } from "../steps/step_0_bootstrap.js";
 import { getDreamBuilderResumeContext } from "./dream_builder_resume.js";
 import { resolveUiStringForState } from "../i18n/ui_strings_lookup.js";
+import { hasValidDreamBuilderScoringContract } from "./dream_builder_scoring.js";
 
 export type RenderedRouteOutput = RunStepRenderedRouteOutput;
 export type RouteRegistryContext = RunStepRouteRegistryRequest;
@@ -704,17 +705,26 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
 
     dream_submit_scores: {
       id: "dream_submit_scores",
-      canHandle: (context) =>
-        String((context.state as Record<string, unknown>).current_step || "") === deps.dreamStepId &&
-        String((context.state as Record<string, unknown>).active_specialist || "") === deps.dreamExplainerSpecialist &&
-        (
-          String(context.actionCodeRaw || "").trim().toUpperCase() === "ACTION_DREAM_EXPLAINER_SUBMIT_SCORES" ||
+      canHandle: (context) => {
+        const stateRef = context.state as Record<string, unknown>;
+        if (String(stateRef.current_step || "") !== deps.dreamStepId) return false;
+        const normalizedActionCode = String(context.actionCodeRaw || "").trim().toUpperCase();
+        const hasSubmitPayload =
+          normalizedActionCode === "ACTION_DREAM_EXPLAINER_SUBMIT_SCORES" ||
           parseSubmitScoresPayload(
             context.userMessage,
             context.transientPendingScores,
             context.actionCodeRaw
-          ) !== null
-        ),
+          ) !== null;
+        if (!hasSubmitPayload) return false;
+        const dreamRuntimeMode = String((stateRef as Record<string, unknown>).__dream_runtime_mode || "").trim();
+        const lastResult = asRecord(stateRef.last_specialist_result || {});
+        const scoringPhase = String(lastResult.scoring_phase || "").trim().toLowerCase() === "true";
+        const hasClusters =
+          (Array.isArray(lastResult.clusters) && lastResult.clusters.length > 0) ||
+          (Array.isArray(stateRef.dream_scoring_clusters) && stateRef.dream_scoring_clusters.length > 0);
+        return dreamRuntimeMode === "builder_scoring" || scoringPhase || hasClusters;
+      },
       handle: async (context) => {
         const parsedScores = parseSubmitScoresPayload(
           context.userMessage,
@@ -724,7 +734,11 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
         if (!parsedScores || parsedScores.length === 0) return null;
 
         const lastResult = asRecord((context.state as Record<string, unknown>).last_specialist_result || {});
-        const clusters = Array.isArray((lastResult as Record<string, unknown>).clusters) ? ((lastResult as Record<string, unknown>).clusters as unknown[]) : [];
+        const clusters = Array.isArray((lastResult as Record<string, unknown>).clusters) && ((lastResult as Record<string, unknown>).clusters as unknown[]).length > 0
+          ? ((lastResult as Record<string, unknown>).clusters as unknown[])
+          : Array.isArray((context.state as Record<string, unknown>).dream_scoring_clusters)
+            ? ((context.state as Record<string, unknown>).dream_scoring_clusters as unknown[])
+            : [];
 
         const statementsFromCanonical = Array.isArray((context.state as Record<string, unknown>).dream_builder_statements)
           ? ((context.state as Record<string, unknown>).dream_builder_statements as unknown[])
@@ -743,6 +757,18 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
                 : [];
 
         if (clusters.length !== parsedScores.length || statements.length === 0) return null;
+        if (!hasValidDreamBuilderScoringContract(lastResult, 20, context.state)) {
+          return finalizeRouteTurnIntent(context, {
+            state: context.state,
+            specialist: lastResult,
+            previousSpecialist: lastResult,
+            responseUiFlags: context.responseUiFlags,
+            debug: {
+              submit_scores_rejected: true,
+              reason: "invalid_cluster_themes",
+            },
+          });
+        }
         if (!areScoresCompleteForClusters(parsedScores, clusters as Array<{ statement_indices: number[] }>)) {
           return finalizeRouteTurnIntent(context, {
             state: context.state,
@@ -765,7 +791,7 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
           const sum = nums.reduce((a, b) => a + b, 0);
           const average = nums.length > 0 ? sum / nums.length : 0;
           return {
-            theme: String((cluster as Record<string, unknown>).theme ?? "").trim() || `Category ${clusterIndex + 1}`,
+            theme: String((cluster as Record<string, unknown>).theme ?? "").trim(),
             average,
           };
         });
@@ -779,7 +805,7 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
             const topStatementIndices = cluster.statement_indices.filter((_, statementIndex) => row[statementIndex] === maxScore);
             if (maxScore <= 0 || topStatementIndices.length === 0) return null;
             return {
-              theme: String((cluster as Record<string, unknown>).theme ?? "").trim() || `Category ${clusterIndex + 1}`,
+              theme: String((cluster as Record<string, unknown>).theme ?? "").trim(),
               average: clusterAverages[clusterIndex]?.average || 0,
               top_statement_indices: topStatementIndices,
               top_statements: topStatementIndices
@@ -851,16 +877,39 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
         deps.rememberLlmCall(callFormulation.value);
 
         const formulationResult = callFormulation.value.specialistResult;
+        const normalizedDreamValue = String(
+          (formulationResult as Record<string, unknown>).dream ||
+          (formulationResult as Record<string, unknown>).refined_formulation ||
+          ""
+        ).trim();
+        const normalizedDreamSpecialistResult = {
+          ...(formulationResult as Record<string, unknown>),
+          action: normalizedDreamValue ? "REFINE" : String((formulationResult as Record<string, unknown>).action || "ASK"),
+          refined_formulation: normalizedDreamValue,
+          dream: normalizedDreamValue,
+          suggest_dreambuilder: "false",
+          scoring_phase: "false",
+          clusters: [],
+        };
+        const dreamDecision = {
+          ...forcedDecision,
+          specialist_to_call: deps.dreamSpecialist,
+        } as unknown as OrchestratorOutput;
         const nextStateFormulation = deps.applyPostSpecialistStateMutations({
           prevState: nextStateScores,
-          decision: forcedDecision,
-          specialistResult: formulationResult,
-          provisionalSource: "system_generated",
+          decision: dreamDecision,
+          specialistResult: normalizedDreamSpecialistResult,
+          provisionalSource: "action_route",
         });
 
         (nextStateFormulation as Record<string, unknown>).dream_builder_statements = statements;
-        deps.setDreamRuntimeMode(nextStateFormulation, "builder_refine");
         (nextStateFormulation as Record<string, unknown>).dream_awaiting_direction = "false";
+        (nextStateFormulation as Record<string, unknown>).dream_scores = [];
+        (nextStateFormulation as Record<string, unknown>).dream_top_clusters = [];
+        (nextStateFormulation as Record<string, unknown>).dream_top_cluster_details = [];
+        (nextStateFormulation as Record<string, unknown>).dream_scoring_clusters = [];
+        (nextStateFormulation as Record<string, unknown>).dream_scoring_statements = [];
+        deps.setDreamRuntimeMode(nextStateFormulation, "self");
         return finalizeRouteTurnIntent(context, {
           state: nextStateFormulation,
           specialist: asRecord((nextStateFormulation as Record<string, unknown>).last_specialist_result || {}),

@@ -5,6 +5,19 @@ import {
 } from "./locale_continuity.js";
 import { resolveUiStringForState } from "../i18n/ui_strings_lookup.js";
 
+function sanitizeDreamPendingScores(raw: unknown): string[][] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((row) =>
+    Array.isArray(row)
+      ? row.map((value) => {
+          const numeric = Number(value);
+          if (!Number.isFinite(numeric) || numeric < 1 || numeric > 10) return "";
+          return String(Math.round(numeric));
+        })
+      : []
+  );
+}
+
 export async function runStepRuntimeExecute(
   rawArgs: unknown,
   deps: any
@@ -33,7 +46,7 @@ export async function runStepRuntimeExecute(
     applyComparePickSelection, isComparePickRouteToken, isRefineAdjustRouteToken, buildCompareFromTurn,
     pickCompareAgentBase, copyPendingCompareState, normalizeNonStep0OfftopicSpecialist,
     uiStringFromStateMap, uiDefaultString, attachRegistryPayload, langFromState, UI_CONTRACT_VERSION,
-    DREAM_FORCE_REFINE_ROUTE_PREFIX, DREAM_EXPLAINER_OVERLAP_REPAIR_ROUTE_PREFIX, DREAM_EXPLAINER_MULTI_REWRITE_REPAIR_ROUTE_PREFIX, STRATEGY_CONSOLIDATE_ROUTE_TOKEN, DREAM_SPECIALIST, PURPOSE_SPECIALIST, BIGWHY_SPECIALIST, ENTITY_SPECIALIST, STRATEGY_SPECIALIST,
+    DREAM_FORCE_REFINE_ROUTE_PREFIX, DREAM_EXPLAINER_OVERLAP_REPAIR_ROUTE_PREFIX, DREAM_EXPLAINER_MULTI_REWRITE_REPAIR_ROUTE_PREFIX, DREAM_EXPLAINER_CLUSTER_THEME_REPAIR_ROUTE_PREFIX, STRATEGY_CONSOLIDATE_ROUTE_TOKEN, DREAM_SPECIALIST, PURPOSE_SPECIALIST, BIGWHY_SPECIALIST, ENTITY_SPECIALIST, STRATEGY_SPECIALIST,
     callSpecialistStrictSafe, normalizeLocalizedConceptTerms, normalizeEntitySpecialistResult, applyCentralMetaTopicRouter,
     normalizeStep0AskDisplayContract, hasValidStep0Final, applyPostSpecialistStateMutations,
     isMetaOfftopicFallbackTurn, hasDreamSpecialistCandidate,
@@ -366,6 +379,37 @@ export async function runStepRuntimeExecute(
   state = dropIncompatibleLastSpecialistResult(state, {
     previousAuthority: localeAuthorityBeforeResolve,
   });
+  const stateRef = state as Record<string, unknown>;
+  const dreamRuntimeModeAfterLanguage = String(getDreamRuntimeMode(state) || "").trim();
+  const currentStepAfterLanguage = String(stateRef.current_step || "").trim();
+  const persistedLastSpecialist =
+    stateRef.last_specialist_result && typeof stateRef.last_specialist_result === "object"
+      ? (stateRef.last_specialist_result as Record<string, unknown>)
+      : {};
+  const scoringPhaseAfterLanguage =
+    String(persistedLastSpecialist.scoring_phase || "").trim().toLowerCase() === "true";
+  const isDreamBuilderScoringTurn =
+    currentStepAfterLanguage === DREAM_STEP_ID &&
+    (dreamRuntimeModeAfterLanguage === "builder_scoring" || scoringPhaseAfterLanguage);
+  if (isDreamBuilderScoringTurn) {
+    const canonicalDreamStatements = Array.isArray(stateRef.dream_builder_statements)
+      ? (stateRef.dream_builder_statements as unknown[])
+          .map((value) => String(value || "").trim())
+          .filter(Boolean)
+      : [];
+    if (canonicalDreamStatements.length > 0) {
+      stateRef.dream_scoring_statements = canonicalDreamStatements;
+    }
+    if (Array.isArray(persistedLastSpecialist.clusters) && persistedLastSpecialist.clusters.length > 0) {
+      stateRef.dream_scoring_clusters = persistedLastSpecialist.clusters;
+    }
+    if (transientPendingScores) {
+      const sanitizedScores = sanitizeDreamPendingScores(transientPendingScores);
+      if (sanitizedScores.length > 0) {
+        stateRef.dream_scores = sanitizedScores;
+      }
+    }
+  }
   languageResolvedThisTurn = true;
 
   const actionRoutingLayer = await runStepRuntimeActionRoutingLayer({
@@ -470,6 +514,7 @@ export async function runStepRuntimeExecute(
       dreamForceRefineRoutePrefix: DREAM_FORCE_REFINE_ROUTE_PREFIX,
       dreamExplainerOverlapRepairRoutePrefix: DREAM_EXPLAINER_OVERLAP_REPAIR_ROUTE_PREFIX,
       dreamExplainerMultiRewriteRepairRoutePrefix: DREAM_EXPLAINER_MULTI_REWRITE_REPAIR_ROUTE_PREFIX,
+      dreamExplainerClusterThemeRepairRoutePrefix: DREAM_EXPLAINER_CLUSTER_THEME_REPAIR_ROUTE_PREFIX,
       strategyConsolidateRouteToken: STRATEGY_CONSOLIDATE_ROUTE_TOKEN,
       bigwhyMaxWords: actionRoutingLayer.bigwhyMaxWords,
       uiContractVersion: UI_CONTRACT_VERSION,

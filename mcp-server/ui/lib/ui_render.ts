@@ -196,7 +196,11 @@ export function readDreamBuilderContract(
     ? (scoringRaw.clusters as unknown[])
       .map((entry) => {
         const record = toRecord(entry);
-        const statementIndices = normalizeStringArray(record.statement_indices)
+        const statementIndices = Array.isArray(record.statement_indices)
+          ? (record.statement_indices as unknown[])
+              .map((value) => String(value ?? "").trim())
+              .filter((value) => value !== "")
+          : []
           .map((value) => Number(value))
           .filter((value) => Number.isFinite(value) && value >= 0)
           .map((value) => Math.trunc(value));
@@ -306,7 +310,6 @@ export function shouldSuppressMainCardForCompare(
   uiPayloadRaw: Record<string, unknown> | null | undefined
 ): boolean {
   const uiPayload = uiPayloadRaw && typeof uiPayloadRaw === "object" ? uiPayloadRaw : {};
-  if (readDreamBuilderContract(uiPayload)) return false;
   return Boolean(readPendingInteraction(uiPayload));
 }
 
@@ -387,6 +390,38 @@ function actionContractActionsForResult(resultData: Record<string, unknown>): Ar
   return [];
 }
 
+function compareAllowedActionsFromUiPayload(
+  uiPayloadRaw: Record<string, unknown> | null | undefined
+): NormalizedPendingInteraction["allowedActions"] {
+  const uiPayload = toRecord(uiPayloadRaw);
+  const actionContract = toRecord(uiPayload.action_contract);
+  const actions = Array.isArray(actionContract.actions)
+    ? (actionContract.actions as unknown[])
+      .map((entry) => toRecord(entry))
+      .filter((entry) => String(entry.action_code || "").trim().length > 0)
+    : [];
+  return actions
+    .map((action) => {
+      const id = String(action.id || "").trim();
+      const actionCode = String(action.action_code || "").trim();
+      const label = String(action.label || "").trim();
+      const labelKey = String(action.label_key || "").trim();
+      const role = String(action.role || "").trim();
+      const surface = String(action.surface || "").trim();
+      if (!id || !actionCode || !label || !labelKey || !role || !surface) return null;
+      return {
+        id,
+        actionCode,
+        label,
+        labelKey,
+        role,
+        surface,
+        primary: action.primary === true,
+      };
+    })
+    .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));
+}
+
 function readPendingInteraction(
   uiPayloadRaw: Record<string, unknown> | null | undefined
 ): NormalizedPendingInteraction | null {
@@ -394,84 +429,97 @@ function readPendingInteraction(
   const pending = toRecord(uiPayload.pending_interaction);
   const kind = String(pending.kind || "").trim();
   const status = String(pending.status || "").trim();
-  if ((kind !== "text_compare" && kind !== "list_compare") || status !== "pending") return null;
-  const renderModelRaw = toRecord(pending.render_model);
-  const mode = String(renderModelRaw.mode || "").trim().toLowerCase() === "list" ? "list" : "text";
-  if ((kind === "list_compare" && mode !== "list") || (kind === "text_compare" && mode !== "text")) {
-    return null;
-  }
-  const allowedActions = Array.isArray(pending.allowed_actions)
-    ? (pending.allowed_actions as unknown[])
-      .map((entry) => {
-        const action = toRecord(entry);
-        const id = String(action.id || "").trim();
-        const actionCode = String(action.action_code || "").trim();
-        const label = String(action.label || "").trim();
-        const labelKey = String(action.label_key || "").trim();
-        const role = String(action.role || "").trim();
-        const surface = String(action.surface || "").trim();
-        if (!id || !actionCode || !label || !labelKey || !role || !surface) return null;
+  if ((kind === "text_compare" || kind === "list_compare") && status === "pending") {
+    const renderModelRaw = toRecord(pending.render_model);
+    const mode = String(renderModelRaw.mode || "").trim().toLowerCase() === "list" ? "list" : "text";
+    if ((kind === "list_compare" && mode === "list") || (kind === "text_compare" && mode === "text")) {
+      const allowedActions = compareAllowedActionsFromUiPayload({
+        action_contract: uiPayload.action_contract,
+        pending_interaction: pending,
+      });
+      const hasUserPickAction = allowedActions.some((action) => action.role === "compare_pick_user");
+      const hasSuggestionPickAction = allowedActions.some((action) => action.role === "compare_pick_suggestion");
+      const userLabel = String(renderModelRaw.user_label || "").trim();
+      const suggestionLabel = String(renderModelRaw.suggestion_label || "").trim();
+      const userItems = normalizeStringArray(renderModelRaw.user_items);
+      const suggestionItems = normalizeStringArray(renderModelRaw.suggestion_items);
+      const userText = String(renderModelRaw.user_text || "").trim();
+      const suggestionText = String(renderModelRaw.suggestion_text || "").trim();
+      const hasComparableValues =
+        mode === "list"
+          ? userItems.length > 0 || suggestionItems.length > 0 || Boolean(userText) || Boolean(suggestionText)
+          : Boolean(userText) || Boolean(suggestionText);
+      if (allowedActions.length > 0 && hasUserPickAction && hasSuggestionPickAction && userLabel && suggestionLabel && hasComparableValues) {
         return {
-          id,
-          actionCode,
-          label,
-          labelKey,
-          role,
-          surface,
-          primary: action.primary === true,
+          id: String(pending.id || "").trim(),
+          kind: kind as "text_compare" | "list_compare",
+          status: "pending",
+          allowedActions,
+          renderModel: {
+            mode,
+            instruction: String(renderModelRaw.instruction || "").trim(),
+            feedbackReasonText: String(renderModelRaw.feedback_reason_text || "").trim(),
+            userLabel,
+            suggestionLabel,
+            userText,
+            suggestionText,
+            userItems,
+            suggestionItems,
+            units: Array.isArray(renderModelRaw.units)
+              ? (renderModelRaw.units as unknown[])
+                .map((entry) => {
+                  const unit = toRecord(entry);
+                  const normalizedUserItems = normalizeStringArray(unit.user_items);
+                  const normalizedSuggestionItems = normalizeStringArray(unit.suggestion_items);
+                  const feedbackReasonText = String(unit.feedback_reason_text || "").trim();
+                  if (normalizedUserItems.length === 0 && normalizedSuggestionItems.length === 0) return null;
+                  return {
+                    userItems: normalizedUserItems,
+                    suggestionItems: normalizedSuggestionItems,
+                    feedbackReasonText,
+                  };
+                })
+                .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry))
+              : [],
+            retainedHeading: String(renderModelRaw.retained_heading || "").trim(),
+            retainedItems: normalizeStringArray(renderModelRaw.retained_items),
+          },
         };
-      })
-      .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry))
-    : [];
-  if (allowedActions.length === 0) return null;
-  const hasUserPickAction = allowedActions.some((action) => action.role === "compare_pick_user");
-  const hasSuggestionPickAction = allowedActions.some((action) => action.role === "compare_pick_suggestion");
-  if (!hasUserPickAction || !hasSuggestionPickAction) return null;
-  const userLabel = String(renderModelRaw.user_label || "").trim();
-  const suggestionLabel = String(renderModelRaw.suggestion_label || "").trim();
-  if (!userLabel || !suggestionLabel) return null;
-  const userItems = normalizeStringArray(renderModelRaw.user_items);
-  const suggestionItems = normalizeStringArray(renderModelRaw.suggestion_items);
-  const userText = String(renderModelRaw.user_text || "").trim();
-  const suggestionText = String(renderModelRaw.suggestion_text || "").trim();
-  const hasComparableValues =
-    mode === "list"
-      ? userItems.length > 0 || suggestionItems.length > 0 || Boolean(userText) || Boolean(suggestionText)
-      : Boolean(userText) || Boolean(suggestionText);
-  if (!hasComparableValues) return null;
+      }
+    }
+  }
+
+  const dreamBuilderContract = readDreamBuilderContract(uiPayload);
+  const compare = dreamBuilderContract?.compare;
+  if (dreamBuilderContract?.phase !== "compare" || !compare) return null;
+  const compareActions = compareAllowedActionsFromUiPayload(uiPayload);
+  const hasCompareUserPickAction = compareActions.some((action) => action.role === "compare_pick_user");
+  const hasCompareSuggestionPickAction = compareActions.some((action) => action.role === "compare_pick_suggestion");
+  if (!hasCompareUserPickAction || !hasCompareSuggestionPickAction) return null;
+  const compareHasComparableValues =
+    compare.currentItems.length > 0 ||
+    compare.suggestedItems.length > 0 ||
+    Boolean(compare.currentValue) ||
+    Boolean(compare.suggestedValue);
+  if (!compareHasComparableValues) return null;
   return {
-    id: String(pending.id || "").trim(),
-    kind: kind as "text_compare" | "list_compare",
+    id: String(pending.id || "dream_builder_compare").trim(),
+    kind: "list_compare",
     status: "pending",
-    allowedActions,
+    allowedActions: compareActions,
     renderModel: {
-      mode,
-      instruction: String(renderModelRaw.instruction || "").trim(),
-      feedbackReasonText: String(renderModelRaw.feedback_reason_text || "").trim(),
-      userLabel,
-      suggestionLabel,
-      userText,
-      suggestionText,
-      userItems,
-      suggestionItems,
-      units: Array.isArray(renderModelRaw.units)
-        ? (renderModelRaw.units as unknown[])
-          .map((entry) => {
-            const unit = toRecord(entry);
-            const normalizedUserItems = normalizeStringArray(unit.user_items);
-            const normalizedSuggestionItems = normalizeStringArray(unit.suggestion_items);
-            const feedbackReasonText = String(unit.feedback_reason_text || "").trim();
-            if (normalizedUserItems.length === 0 && normalizedSuggestionItems.length === 0) return null;
-            return {
-              userItems: normalizedUserItems,
-              suggestionItems: normalizedSuggestionItems,
-              feedbackReasonText,
-            };
-          })
-          .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry))
-        : [],
-      retainedHeading: String(renderModelRaw.retained_heading || "").trim(),
-      retainedItems: normalizeStringArray(renderModelRaw.retained_items),
+      mode: "list",
+      instruction: "",
+      feedbackReasonText: compare.rationale,
+      userLabel: compare.currentLabel,
+      suggestionLabel: compare.suggestedLabel,
+      userText: compare.currentValue,
+      suggestionText: compare.suggestedValue,
+      userItems: compare.currentItems,
+      suggestionItems: compare.suggestedItems,
+      units: [],
+      retainedHeading: compare.retainedHeading,
+      retainedItems: compare.retainedItems,
     },
   };
 }
@@ -629,9 +677,16 @@ function choiceActionsForResult(resultData: Record<string, unknown>): Renderable
 }
 
 export function collectPendingScoresForContractAction(): number[][] | null {
+  const canUseDomFallback = typeof document !== "undefined";
+  if (canUseDomFallback) {
+    const domPayload = collectPendingScoresFromDom(true);
+    if (domPayload) return domPayload;
+  }
   const scoringScores =
     (globalThis as unknown as { __dreamScoringScores?: unknown[][] }).__dreamScoringScores || [];
-  if (!Array.isArray(scoringScores) || scoringScores.length === 0) return null;
+  if (!Array.isArray(scoringScores) || scoringScores.length === 0) {
+    return null;
+  }
   const payload: number[][] = [];
   for (let ci = 0; ci < scoringScores.length; ci += 1) {
     const row = Array.isArray(scoringScores[ci]) ? scoringScores[ci] : [];
@@ -648,6 +703,68 @@ export function collectPendingScoresForContractAction(): number[][] | null {
     payload.push(normalizedRow);
   }
   return payload;
+}
+
+export function collectPartialPendingScoresForContractAction(): number[][] | null {
+  const canUseDomFallback = typeof document !== "undefined";
+  if (canUseDomFallback) {
+    const domPayload = collectPendingScoresFromDom(false);
+    if (domPayload) return domPayload;
+  }
+  const scoringScores =
+    (globalThis as unknown as { __dreamScoringScores?: unknown[][] }).__dreamScoringScores || [];
+  if (!Array.isArray(scoringScores) || scoringScores.length === 0) {
+    return null;
+  }
+  const payload: number[][] = [];
+  let hasAnyValue = false;
+  for (let ci = 0; ci < scoringScores.length; ci += 1) {
+    const row = Array.isArray(scoringScores[ci]) ? scoringScores[ci] : [];
+    const normalizedRow: number[] = [];
+    for (let si = 0; si < row.length; si += 1) {
+      const normalized = normalizeDreamScoreValue(row[si]);
+      if (normalized) hasAnyValue = true;
+      normalizedRow.push(normalized ? Number(normalized) : 0);
+    }
+    payload.push(normalizedRow);
+  }
+  return hasAnyValue ? payload : null;
+}
+
+function collectPendingScoresFromDom(requireComplete: boolean): number[][] | null {
+  const clusterEls = Array.from(
+    document.querySelectorAll<HTMLElement>('.scoringCluster[data-cluster-index]')
+  ).sort((left, right) => {
+    const leftIndex = Number(left.getAttribute("data-cluster-index") || "0");
+    const rightIndex = Number(right.getAttribute("data-cluster-index") || "0");
+    return leftIndex - rightIndex;
+  });
+  if (clusterEls.length === 0) return null;
+  const payload: number[][] = [];
+  let hasAnyValue = false;
+  for (const clusterEl of clusterEls) {
+    const inputEls = Array.from(
+      clusterEl.querySelectorAll<HTMLInputElement>('.scoreInput[data-statement]')
+    ).sort((left, right) => {
+      const leftIndex = Number(left.getAttribute("data-statement") || "0");
+      const rightIndex = Number(right.getAttribute("data-statement") || "0");
+      return leftIndex - rightIndex;
+    });
+    if (inputEls.length === 0) return null;
+    const normalizedRow: number[] = [];
+    for (const inputEl of inputEls) {
+      const normalized = normalizeDreamScoreValue(inputEl.value);
+      if (!normalized) {
+        if (requireComplete) return null;
+        normalizedRow.push(0);
+        continue;
+      }
+      hasAnyValue = true;
+      normalizedRow.push(Number(normalized));
+    }
+    payload.push(normalizedRow);
+  }
+  return requireComplete ? payload : hasAnyValue ? payload : null;
 }
 
 function dispatchContractAction(action: RenderableContractAction): void {
@@ -777,18 +894,37 @@ function normalizeDreamScoreMatrix(raw: unknown): string[][] {
 
 export function buildInitialDreamScoringScores(params: {
   clientScores?: unknown;
+  clientScoreMap?: unknown;
   persistedScores?: unknown;
+  statements?: unknown;
   clusters: Array<{ statement_indices?: unknown[] }>;
 }): string[][] {
   const clientScores = normalizeDreamScoreMatrix(params.clientScores);
+  const clientScoreMap =
+    params.clientScoreMap && typeof params.clientScoreMap === "object"
+      ? (params.clientScoreMap as Record<string, unknown>)
+      : {};
   const persistedScores = normalizeDreamScoreMatrix(params.persistedScores);
   const hasClientValues = clientScores.some((row) => row.some((value) => value !== ""));
   const sourceScores = hasClientValues ? clientScores : persistedScores;
+  const statements = Array.isArray(params.statements)
+    ? (params.statements as unknown[]).map((value) => String(value || "").trim())
+    : [];
 
   return params.clusters.map((cluster, clusterIndex) => {
     const statementIndices = Array.isArray(cluster.statement_indices) ? cluster.statement_indices : [];
     const sourceRow = Array.isArray(sourceScores[clusterIndex]) ? sourceScores[clusterIndex] : [];
-    return statementIndices.map((_, statementIndex) => normalizeDreamScoreValue(sourceRow[statementIndex]));
+    return statementIndices.map((statementIndexRaw, statementIndex) => {
+      const statementPosition = Number(statementIndexRaw);
+      const statementText =
+        Number.isFinite(statementPosition) && statementPosition >= 0
+          ? String(statements[Math.trunc(statementPosition)] || "").trim()
+          : "";
+      const mappedValue = statementText
+        ? normalizeDreamScoreValue(clientScoreMap[statementText])
+        : "";
+      return mappedValue || normalizeDreamScoreValue(sourceRow[statementIndex]);
+    });
   });
 }
 
@@ -796,7 +932,8 @@ export function shouldRetainDreamScoringClientScores(params: {
   currentStep?: string | null;
   isScoringView: boolean;
 }): boolean {
-  return String(params.currentStep || "").trim() === "dream" && params.isScoringView;
+  void params.isScoringView;
+  return String(params.currentStep || "").trim() === "dream";
 }
 
 function benAvatarCandidates(): string[] {
@@ -980,15 +1117,20 @@ export function resolveWidgetBodyText(params: {
   specialist: Record<string, unknown>;
   promptBody?: unknown;
   dreamBuilderViewContract?: ReturnType<typeof readDreamBuilderViewContract>;
+  isDreamBuilderRefineView?: boolean;
 }): string {
   const resultText = typeof params.resultText === "string" ? String(params.resultText || "").trim() : "";
   const promptBody = String(params.promptBody || "");
   const specialist = params.specialist || {};
+  const refinedFormulation = String(specialist.refined_formulation || "").trim();
   const specialistText =
     String(specialist.message || "").trim() ||
-    String(specialist.refined_formulation || "").trim() ||
+    refinedFormulation ||
     String(specialist.question || "").trim();
   const dreamBuilderViewContract = params.dreamBuilderViewContract || readDreamBuilderViewContract(null);
+  if (params.currentStep === "dream" && params.isDreamBuilderRefineView && refinedFormulation) {
+    return refinedFormulation;
+  }
   if (params.currentStep === "dream" && dreamBuilderViewContract.active) {
     if (typeof params.resultText === "string") return resultText;
     if (dreamBuilderViewContract.bodyMode === "none") return "";
@@ -1330,10 +1472,6 @@ function renderComparePanel(resultData: Record<string, unknown>, lang: string): 
     resultData && typeof resultData.ui === "object" && resultData.ui
       ? (resultData.ui as Record<string, unknown>)
       : {};
-  if (readDreamBuilderContract(uiPayload)) {
-    (wrap as HTMLElement).style.display = "none";
-    return false;
-  }
   const pendingInteraction = readPendingInteraction(uiPayload);
   if (!pendingInteraction) {
     (wrap as HTMLElement).style.display = "none";
@@ -1347,6 +1485,8 @@ function renderComparePanel(resultData: Record<string, unknown>, lang: string): 
   const suggestionLabelFromPayload = pendingInteraction.renderModel.suggestionLabel;
   const userItems = pendingInteraction.renderModel.userItems;
   const suggestionItems = pendingInteraction.renderModel.suggestionItems;
+  const userPickAction = pendingInteraction.allowedActions.find((action) => action.role === "compare_pick_user") || null;
+  const suggestionPickAction = pendingInteraction.allowedActions.find((action) => action.role === "compare_pick_suggestion") || null;
   const instruction = pendingInteraction.renderModel.instruction || t(lang, "compareInstruction");
   const instructionParts = {
     retainedHeading: pendingInteraction.renderModel.retainedHeading,
@@ -1405,8 +1545,12 @@ function renderComparePanel(resultData: Record<string, unknown>, lang: string): 
       li.textContent = normalizeListItem(item);
       suggestionListEl.appendChild(li);
     }
-    userBtn.textContent = uiText(lang, "compare.chooseVersion", "");
-    suggestionBtn.textContent = uiText(lang, "compare.chooseVersion", "");
+    userBtn.textContent =
+      String(userPickAction?.label || "").trim() ||
+      uiText(lang, "compare.chooseVersion", "");
+    suggestionBtn.textContent =
+      String(suggestionPickAction?.label || "").trim() ||
+      uiText(lang, "compare.chooseVersion", "");
   } else {
     (userTextEl as HTMLElement).style.display = "block";
     (suggestionTextEl as HTMLElement).style.display = "block";
@@ -1791,6 +1935,7 @@ export function render(overrideToolOutput?: unknown): void {
     specialist,
     promptBody,
     dreamBuilderViewContract,
+    isDreamBuilderRefineView: isViewModeDreamBuilderRefine,
   });
   let promptSource = promptRaw;
   let body: string;
@@ -1997,7 +2142,7 @@ export function render(overrideToolOutput?: unknown): void {
       showPrompt.textContent = t(lang, "scoringDreamQuestion");
       showPrompt.style.display = "none";
     }
-    inputWrap.style.display = "none";
+    inputWrap.style.display = "flex";
 
     const scoringPanelEl = document.getElementById("scoringPanel");
     if (scoringPanelEl) {
@@ -2012,13 +2157,22 @@ export function render(overrideToolOutput?: unknown): void {
       scoringIntro.textContent = introLines.join("\n");
     }
 
-    const win = globalThis as unknown as { __dreamScoringScores?: unknown[][] };
+    const win = globalThis as unknown as {
+      __dreamScoringScores?: unknown[][];
+      __dreamScoringScoreByStatement?: Record<string, string>;
+    };
     win.__dreamScoringScores = buildInitialDreamScoringScores({
       clientScores: win.__dreamScoringScores,
+      clientScoreMap: win.__dreamScoringScoreByStatement,
       persistedScores: dreamBuilderContract?.scoring?.scores || [],
+      statements: statementsArray,
       clusters,
     });
     const scoringScores = win.__dreamScoringScores;
+    if (!win.__dreamScoringScoreByStatement || typeof win.__dreamScoringScoreByStatement !== "object") {
+      win.__dreamScoringScoreByStatement = {};
+    }
+    const scoringScoreByStatement = win.__dreamScoringScoreByStatement;
 
     const scoringClustersEl = document.getElementById("scoringClusters");
     if (!scoringClustersEl) return;
@@ -2026,8 +2180,7 @@ export function render(overrideToolOutput?: unknown): void {
     for (let cii = 0; cii < clusters.length; cii++) {
       const cluster = clusters[cii];
       const indices = cluster.statement_indices || [];
-      const themeName = String(cluster.theme || "").trim() ||
-        uiText(lang, "scoring.categoryFallback", "").replace("{0}", String(cii + 1));
+      const themeName = String(cluster.theme || "").trim();
       const clusterDiv = document.createElement("div");
       clusterDiv.className = "scoringCluster";
       clusterDiv.setAttribute("data-cluster-index", String(cii));
@@ -2100,8 +2253,7 @@ export function render(overrideToolOutput?: unknown): void {
         }
       }
       const avgText = filled === 0 ? uiText(lang, "scoring.avg.empty", "") : (sum / filled).toFixed(1);
-      const themeName = String(clusters[ci].theme || "").trim() ||
-        uiText(lang, "scoring.categoryFallback", "").replace("{0}", String(ci + 1));
+      const themeName = String(clusters[ci].theme || "").trim();
       const showStats = filled > 0;
       const avgHtml = showStats
         ? '<span class="avgScore">' + t(lang, "scoringAvg").replace("X", avgText) + "</span>"
@@ -2123,6 +2275,24 @@ export function render(overrideToolOutput?: unknown): void {
       return true;
     }
 
+    function syncScoringScoreMap(): void {
+      for (let ci = 0; ci < clusters.length; ci++) {
+        const indices = clusters[ci].statement_indices || [];
+        for (let si = 0; si < indices.length; si++) {
+          const stIdx = typeof indices[si] !== "number" ? parseInt(String(indices[si]), 10) : indices[si];
+          if (isNaN(stIdx) || stIdx < 0 || stIdx >= statementsArray.length) continue;
+          const statementText = String(statementsArray[stIdx] || "").trim();
+          if (!statementText) continue;
+          const normalized = normalizeDreamScoreValue(scoringScores[ci][si]);
+          if (normalized) {
+            scoringScoreByStatement[statementText] = normalized;
+          } else {
+            delete scoringScoreByStatement[statementText];
+          }
+        }
+      }
+    }
+
     function updateScoringDreamQuestionVisibility(): void {
       const filled = allScoringFilled();
       const promptEl = document.getElementById("prompt");
@@ -2134,7 +2304,7 @@ export function render(overrideToolOutput?: unknown): void {
       document.querySelectorAll('[data-bsc-action-role="score_submit"]').forEach((button) => {
         const submitButton = button as HTMLButtonElement;
         submitButton.disabled = getIsLoading() || !scoreSubmitEnabled;
-        submitButton.style.display = scoreSubmitEnabled ? "" : "none";
+        submitButton.style.display = "";
       });
       const primaryActionWrap = document.getElementById("primaryActionWrap");
       if (primaryActionWrap) {
@@ -2156,6 +2326,7 @@ export function render(overrideToolOutput?: unknown): void {
       className: "btn",
     });
 
+    syncScoringScoreMap();
     updateScoringDreamQuestionVisibility();
     syncScoringActionAvailability();
 
@@ -2173,16 +2344,22 @@ export function render(overrideToolOutput?: unknown): void {
           val = (input as HTMLInputElement).value;
         }
         scoringScores[ci][si] = val;
+        syncScoringScoreMap();
         updateScoringClusterHeader(ci);
         syncScoringActionAvailability();
         updateScoringDreamQuestionVisibility();
       });
     });
 
-    inputWrap.style.display = "none";
     const input = document.getElementById("input");
-    if (input) (input as HTMLInputElement).placeholder = t(lang, "inputPlaceholder");
-    setSendEnabled(false);
+    if (input) {
+      (input as HTMLInputElement).disabled = false;
+      (input as HTMLInputElement).readOnly = false;
+      (input as HTMLInputElement).placeholder = t(lang, "inputPlaceholder");
+      setSendEnabled(String((input as HTMLInputElement).value || "").trim().length > 0);
+    } else {
+      setSendEnabled(false);
+    }
 
     const latestScoringState = retainCanonicalStepContinuity(
       state,
@@ -2200,9 +2377,13 @@ export function render(overrideToolOutput?: unknown): void {
     scoringPanelPost.classList.remove("visible");
     scoringPanelPost.style.display = "none";
   }
-  const scoringWindow = globalThis as unknown as { __dreamScoringScores?: unknown[][] };
+  const scoringWindow = globalThis as unknown as {
+    __dreamScoringScores?: unknown[][];
+    __dreamScoringScoreByStatement?: Record<string, string>;
+  };
   if (!shouldRetainDreamScoringClientScores({ currentStep: current, isScoringView })) {
     scoringWindow.__dreamScoringScores = [];
+    scoringWindow.__dreamScoringScoreByStatement = {};
   }
   if (cardDescEl) cardDescEl.style.display = "block";
   const promptPost = document.getElementById("prompt");

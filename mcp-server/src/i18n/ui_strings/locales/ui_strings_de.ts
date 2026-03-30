@@ -27,7 +27,7 @@ export const UI_STRINGS_LOCALE_DE: Record<string, string> = {
     "dev.error.unhandled_rejection": "unbehandelte Ausnahme",
     "dev.error.unknown": "unbekannter Fehler",
     "dreamBuilder.question.base": "Wenn du 5 bis 10 Jahre vorausblickst: Welche großen Chancen oder Bedrohungen siehst du, und welche positiven Veränderungen erhoffst du dir? Formuliere sie als klare Aussagen.",
-    "dreamBuilder.question.more": "Was siehst du in der Zukunft noch verändern, positiv oder negativ? Lass deiner Fantasie freien Lauf und formuliere es als klare Aussagen.",
+    "dreamBuilder.question.more": "Wenn du 5 bis 10 Jahre vorausblickst: Welche anderen großen Chancen oder Bedrohungen siehst du, und welche positiven Veränderungen erhoffst du dir? Formuliere sie als klare Aussagen.",
     "dreamBuilder.startExercise": "Übung starten",
     "dreamBuilder.resumeExercise": "Fahre mit der kleinen Übung fort, die hilft, deinen Traum zu definieren.",
     "dreamBuilder.statements.count": "N Aussagen von bisher mindestens 20",
@@ -159,7 +159,15 @@ export const UI_STRINGS_LOCALE_DE: Record<string, string> = {
     "strategy.current.template": "Deine aktuelle Strategie für {0} ist:",
     "strategy.focuspoints.count.template": "Du hast jetzt {0} Fokuspunkte in deiner Strategie.",
     "strategy.focuspoints.warning.template": "Derzeit werden mehr als 7 Fokuspunkte angezeigt.",
+    "strategy.focuspoints.guidance.min.template":
+      "Du hast jetzt {0} von mindestens {1} Fokuspunkten.",
+    "strategy.focuspoints.guidance.max.template":
+      "Ich empfehle, es bei höchstens {0} Fokuspunkten zu halten, damit es übersichtlich bleibt.",
     "rulesofthegame.count.template": "Du hast jetzt {0} Spielregeln.",
+    "rulesofthegame.guidance.min.template":
+      "Du hast jetzt {0} von mindestens {1} Spielregeln.",
+    "rulesofthegame.guidance.max.template":
+      "Ich empfehle, es bei höchstens {0} Spielregeln zu halten, damit es übersichtlich bleibt.",
     "rulesofthegame.current.template": "Deine aktuellen Spielregeln für {0} sind:",
     "thinking": "Denken…",
     "title.bigwhy": "Big Warum",

@@ -27,7 +27,7 @@ export const UI_STRINGS_LOCALE_IT: Record<string, string> = {
     "dev.error.unhandled_rejection": "eccezione non gestita",
     "dev.error.unknown": "errore sconosciuto",
     "dreamBuilder.question.base": "Se guardi da 5 a 10 anni avanti, quali grandi opportunità o minacce vedi, e quali cambiamenti positivi speri? Formulali come affermazioni chiare.",
-    "dreamBuilder.question.more": "Cos’altro vedi cambiare in futuro, in positivo o in negativo? Lascia libera la tua immaginazione e formulalo come affermazioni chiare.",
+    "dreamBuilder.question.more": "Se guardi da 5 a 10 anni avanti, quali altre grandi opportunità o minacce vedi, e quali cambiamenti positivi speri? Formulali come affermazioni chiare.",
     "dreamBuilder.startExercise": "Avvia l’esercizio",
     "dreamBuilder.resumeExercise": "Continua con il piccolo esercizio che aiuta a definire il tuo sogno.",
     "dreamBuilder.statements.count": "N affermazioni su un minimo di 20 finora",
@@ -159,7 +159,15 @@ export const UI_STRINGS_LOCALE_IT: Record<string, string> = {
     "strategy.current.template": "La tua Strategia attuale per {0} è:",
     "strategy.focuspoints.count.template": "Ora hai {0} punti focali nella tua Strategia.",
     "strategy.focuspoints.warning.template": "Al momento sono mostrati più di 7 punti focali.",
+    "strategy.focuspoints.guidance.min.template":
+      "Adesso hai {0} dei {1} punti focali minimi.",
+    "strategy.focuspoints.guidance.max.template":
+      "Ti consiglio di restare a un massimo di {0} punti focali per mantenere il tutto chiaro.",
     "rulesofthegame.count.template": "Ora hai {0} Regole del gioco.",
+    "rulesofthegame.guidance.min.template":
+      "Adesso hai {0} delle {1} Regole del gioco minime.",
+    "rulesofthegame.guidance.max.template":
+      "Ti consiglio di restare a un massimo di {0} Regole del gioco per mantenere il tutto chiaro.",
     "rulesofthegame.current.template": "Le tue Regole del gioco attuali per {0} sono:",
     "thinking": "Sto pensando…",
     "title.bigwhy": "Motivazione Profonda",

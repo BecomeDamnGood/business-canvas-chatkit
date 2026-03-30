@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { t } from "./ui_constants.js";
-import { render } from "./ui_render.js";
+import { collectPartialPendingScoresForContractAction, render } from "./ui_render.js";
 import { stripInlineText } from "./ui_text.js";
 import {
   applyToolResult,
@@ -351,7 +351,11 @@ import { getIsLoading, setSessionStarted, setSessionWelcomeShown } from "./ui_st
     }
     if (input) input.value = "";
     setSendEnabled(false);
-    callRunStep(submitActionCode, { __text_submit: inputVal });
+    const pendingScores = collectPartialPendingScoresForContractAction();
+    callRunStep(
+      submitActionCode,
+      pendingScores ? { __text_submit: inputVal, __pending_scores: pendingScores } : { __text_submit: inputVal }
+    );
   }
   var inputEl = document.getElementById("input");
   if (inputEl) {

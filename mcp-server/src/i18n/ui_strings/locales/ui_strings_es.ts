@@ -27,7 +27,7 @@ export const UI_STRINGS_LOCALE_ES: Record<string, string> = {
     "dev.error.unhandled_rejection": "rechazo no controlado",
     "dev.error.unknown": "error desconocido",
     "dreamBuilder.question.base": "Si miras de 5 a 10 años hacia adelante, ¿qué grandes oportunidades o amenazas ves y qué cambios positivos esperas? Formúlalos como afirmaciones claras.",
-    "dreamBuilder.question.more": "¿Qué más ves que cambiará en el futuro, para bien o para mal? Deja volar tu imaginación y formúlalo como afirmaciones claras.",
+    "dreamBuilder.question.more": "Si miras de 5 a 10 años hacia adelante, ¿qué otras grandes oportunidades o amenazas ves y qué cambios positivos esperas? Formúlalos como afirmaciones claras.",
     "dreamBuilder.startExercise": "Iniciar el ejercicio",
     "dreamBuilder.resumeExercise": "Continúa con el pequeño ejercicio que ayuda a definir tu sueño.",
     "dreamBuilder.statements.count": "N afirmaciones de un mínimo de 20 hasta ahora",
@@ -159,7 +159,15 @@ export const UI_STRINGS_LOCALE_ES: Record<string, string> = {
     "strategy.current.template": "Tu estrategia actual para {0} es:",
     "strategy.focuspoints.count.template": "Ahora tienes {0} puntos de enfoque en tu estrategia.",
     "strategy.focuspoints.warning.template": "Actualmente se muestran más de 7 puntos de enfoque.",
+    "strategy.focuspoints.guidance.min.template":
+      "Ahora tienes {0} de los {1} puntos de enfoque mínimos.",
+    "strategy.focuspoints.guidance.max.template":
+      "Te recomiendo mantenerlo en un máximo de {0} puntos de enfoque para que siga siendo claro.",
     "rulesofthegame.count.template": "Ahora tienes {0} Reglas del juego.",
+    "rulesofthegame.guidance.min.template":
+      "Ahora tienes {0} de las {1} Reglas del juego mínimas.",
+    "rulesofthegame.guidance.max.template":
+      "Te recomiendo mantenerlo en un máximo de {0} Reglas del juego para que siga siendo claro.",
     "rulesofthegame.current.template": "Las Reglas del juego actuales para {0} son:",
     "thinking": "Pensando…",
     "title.bigwhy": "Gran Porqué",

@@ -401,6 +401,30 @@ export function parseListItems(input: string): string[] {
     }
     return out;
   };
+  const rawLines = raw.split("\n").map((line) => String(line || ""));
+  const hasExplicitBulletMarkers = rawLines.some((line) => /^\s*(?:[-*•]|\d+[\).])\s+/.test(line));
+  if (hasExplicitBulletMarkers) {
+    const grouped: string[] = [];
+    let current = "";
+    for (const rawLine of rawLines) {
+      const line = String(rawLine || "").trim();
+      if (!line) continue;
+      const bulletMatch = line.match(/^\s*(?:[-*•]|\d+[\).])\s+(.+)\s*$/);
+      if (bulletMatch) {
+        if (current) grouped.push(current);
+        current = normalizeListToken(String(bulletMatch[1] || ""));
+        continue;
+      }
+      if (current) {
+        current = `${current} ${normalizeListToken(line)}`.trim();
+        continue;
+      }
+      grouped.push(normalizeListToken(line));
+    }
+    if (current) grouped.push(current);
+    const dedupedGrouped = dedupe(grouped);
+    if (dedupedGrouped.length >= 1) return dedupedGrouped;
+  }
   const lines = raw
     .split("\n")
     .map((line) => normalizeListToken(line))
@@ -723,7 +747,7 @@ export function createRunStepCompareSuggestionHelpers(deps: RunStepCompareSugges
         .split(/\n+/)
         .map((line) => line.trim())
         .filter(Boolean);
-      if (lines.length < 2 || lines.length > 12) return false;
+      if (lines.length < 2 || lines.length > 30) return false;
       return lines.every((line) => {
         if (looksLikeExamplesFramingLine(line)) return false;
         if (/^[\-*•]\s+/.test(line)) return false;

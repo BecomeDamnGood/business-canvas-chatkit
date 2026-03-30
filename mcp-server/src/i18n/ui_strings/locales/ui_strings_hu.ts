@@ -40,7 +40,7 @@ export const UI_STRINGS_LOCALE_HU: Record<string, string> = {
     "dev.error.unknown": "ismeretlen hiba",
     "dream.intro.body": "A vízió a görög „visio” szóból ered, jelentése: „látni”. Egy igazi vízionárius olyan jövőt lát, amit mások még nem. Érzi. Megálmodja. Ezért hívják ezt a lépést Álomból. Az Álom a jövő élénk képe, amit létre szeretnél hozni. Egy olyan világot ír le, amely jobb, igazságosabb, egészségesebb, egyszerűbb vagy inspirálóbb azért, mert a szervezeted létezik. Nem bevételi cél, nem stratégia, és nem egy termék vagy szolgáltatás rejtett ajánlata. Egy valódi Álom emberi. Meg kell érintenie az embereket, és segítenie kell őket abban, hogy érezzék, miért számít. A világban látni kívánt változásra és arra a hatásra fókuszálj, amit az emberek életére szeretnél gyakorolni – ne az eszközökre vagy a megvalósításra. Írd le az Álmód első változatát. Nem kell tökéletesnek lennie. Csak valódinak.",
     "dreamBuilder.question.base": "Ha 5-10 évre előre tekintesz, milyen nagy lehetőségeket vagy fenyegetéseket látsz, és milyen pozitív változásokat remélsz? Fogalmazd meg őket világos állításokként.",
-    "dreamBuilder.question.more": "Mit látsz még változni a jövőben, pozitív vagy negatív irányban? Engedd szabadon a fantáziádat, és fogalmazd meg világos állításokként.",
+    "dreamBuilder.question.more": "Ha 5-10 évre előre tekintesz, milyen más nagy lehetőségeket vagy fenyegetéseket látsz, és milyen pozitív változásokat remélsz? Fogalmazd meg őket világos állításokként.",
     "dreamBuilder.startExercise": "Gyakorlat indítása",
     "dreamBuilder.resumeExercise": "Folytasd azt a rövid gyakorlatot, amely segít meghatározni az álmodat.",
     "dreamBuilder.statements.count": "N állítás a jelenlegi minimum 20-ból eddig",
@@ -172,7 +172,15 @@ export const UI_STRINGS_LOCALE_HU: Record<string, string> = {
     "strategy.current.template": "{0} jelenlegi stratégiája:",
     "strategy.focuspoints.count.template": "Most {0} fókuszpontod van a stratégiádban.",
     "strategy.focuspoints.warning.template": "Jelenleg több mint 7 fókuszpont látható.",
+    "strategy.focuspoints.guidance.min.template":
+      "Most {0} van a legalább {1} fókuszpontból.",
+    "strategy.focuspoints.guidance.max.template":
+      "Azt javaslom, hogy legfeljebb {0} fókuszpont maradjon, hogy áttekinthető maradjon.",
     "rulesofthegame.count.template": "Most {0} játékszabályod van.",
+    "rulesofthegame.guidance.min.template":
+      "Most {0} van a legalább {1} játékszabályból.",
+    "rulesofthegame.guidance.max.template":
+      "Azt javaslom, hogy legfeljebb {0} játékszabály maradjon, hogy áttekinthető maradjon.",
     "rulesofthegame.current.template": "{0} jelenlegi játékszabályai:",
     "thinking": "Gondolkodom…",
     "title.bigwhy": "Nagy Miért",

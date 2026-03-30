@@ -245,9 +245,55 @@ function normalizeDreamBuilderCompareContractFromSpecialist(
   return normalized;
 }
 
+function readTrimmedStringArray(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((value) => String(value || "").trim()).filter(Boolean);
+}
+
+function normalizeDreamBuilderScoreMatrix(raw: unknown): string[][] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((row) =>
+    Array.isArray(row)
+      ? row.map((value) => {
+          const trimmed = String(value ?? "").trim();
+          if (!trimmed) return "";
+          const numeric = Number(trimmed);
+          if (!Number.isFinite(numeric) || numeric < 1 || numeric > 10) return "";
+          return String(Math.round(numeric));
+        })
+      : []
+  );
+}
+
+function remapDreamBuilderScoresByStatement(params: {
+  statements: string[];
+  previousStatements: string[];
+  previousScores: string[][];
+  previousClusters: DreamBuilderScoringClusterPayload[];
+  nextClusters: DreamBuilderScoringClusterPayload[];
+}): string[][] {
+  const scoreByStatement = new Map<string, string>();
+  params.previousClusters.forEach((cluster, clusterIndex) => {
+    const row = Array.isArray(params.previousScores[clusterIndex]) ? params.previousScores[clusterIndex] : [];
+    cluster.statement_indices.forEach((statementIndex, statementRowIndex) => {
+      const statement = String(params.previousStatements[statementIndex] || "").trim();
+      const score = String(row[statementRowIndex] || "").trim();
+      if (!statement || !score || scoreByStatement.has(statement)) return;
+      scoreByStatement.set(statement, score);
+    });
+  });
+  return params.nextClusters.map((cluster) =>
+    cluster.statement_indices.map((statementIndex) => {
+      const statement = String(params.statements[statementIndex] || "").trim();
+      return statement ? String(scoreByStatement.get(statement) || "").trim() : "";
+    })
+  );
+}
+
 function normalizeDreamBuilderScoringContract(params: {
   specialist: Record<string, unknown>;
   state: CanvasState | null;
+  statements: string[];
 }): DreamBuilderScoringContractPayload | undefined {
   const clusters = Array.isArray(params.specialist.clusters)
     ? (params.specialist.clusters as unknown[])
@@ -270,11 +316,39 @@ function normalizeDreamBuilderScoringContract(params: {
       .filter((entry): entry is DreamBuilderScoringClusterPayload => Boolean(entry))
     : [];
   if (clusters.length === 0) return undefined;
-  const scores = Array.isArray((params.state as any)?.dream_scores)
-    ? (((params.state as any).dream_scores as unknown[]) as Array<unknown[]>).map((row) =>
-        Array.isArray(row) ? row.map((value) => String(value ?? "").trim()) : []
-      )
-    : undefined;
+  const previousStatements = readTrimmedStringArray((params.state as any)?.dream_scoring_statements);
+  const previousClusters = Array.isArray((params.state as any)?.dream_scoring_clusters)
+    ? ((params.state as any).dream_scoring_clusters as unknown[])
+        .map((entry) => {
+          const record = entry && typeof entry === "object" && !Array.isArray(entry)
+            ? (entry as Record<string, unknown>)
+            : {};
+          const statementIndices = Array.isArray(record.statement_indices)
+            ? (record.statement_indices as unknown[])
+                .map((value) => Number(value))
+                .filter((value) => Number.isFinite(value) && value >= 0)
+                .map((value) => Math.trunc(value))
+            : [];
+          if (statementIndices.length === 0) return null;
+          return {
+            ...(String(record.theme || "").trim() ? { theme: String(record.theme || "").trim() } : {}),
+            statement_indices: statementIndices,
+          } satisfies DreamBuilderScoringClusterPayload;
+        })
+        .filter((entry): entry is DreamBuilderScoringClusterPayload => Boolean(entry))
+    : [];
+  const persistedScores = normalizeDreamBuilderScoreMatrix((params.state as any)?.dream_scores);
+  const scores = previousStatements.length > 0 && previousClusters.length > 0 && persistedScores.length > 0
+    ? remapDreamBuilderScoresByStatement({
+        statements: params.statements,
+        previousStatements,
+        previousScores: persistedScores,
+        previousClusters,
+        nextClusters: clusters,
+      })
+    : persistedScores.length > 0
+      ? persistedScores
+      : undefined;
   const submitEnabled = Boolean(
     scores &&
       scores.length === clusters.length &&
@@ -315,6 +389,7 @@ function buildDreamBuilderContract(params: {
   const scoringFromSpecialist = normalizeDreamBuilderScoringContract({
     specialist: params.specialist,
     state: params.state,
+    statements: params.statements,
   });
   const hasDreamBuilderContext =
     params.dreamBuilderFlowActive ||
@@ -326,10 +401,10 @@ function buildDreamBuilderContract(params: {
   if (!hasDreamBuilderContext) return undefined;
 
   let phase: DreamBuilderContractPhase = "collect";
-  if (params.viewVariant === "dream_builder_scoring") {
-    phase = "scoring";
-  } else if (compareContract) {
+  if (compareContract) {
     phase = "compare";
+  } else if (params.viewVariant === "dream_builder_scoring") {
+    phase = "scoring";
   } else if (params.viewVariant === "dream_builder_refine") {
     phase = "refine";
   }

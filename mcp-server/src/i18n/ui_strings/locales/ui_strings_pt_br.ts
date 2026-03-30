@@ -27,7 +27,7 @@ export const UI_STRINGS_LOCALE_PT_BR: Record<string, string> = {
     "dev.error.unhandled_rejection": "rejeição não tratada",
     "dev.error.unknown": "erro desconhecido",
     "dreamBuilder.question.base": "Ao olhar de 5 a 10 anos à frente, quais grandes oportunidades ou ameaças você vê e quais mudanças positivas você espera? Formule isso como declarações claras.",
-    "dreamBuilder.question.more": "O que mais você vê mudando no futuro, positivo ou negativo? Deixe sua imaginação correr solta e formule isso como declarações claras.",
+    "dreamBuilder.question.more": "Ao olhar de 5 a 10 anos à frente, quais outras grandes oportunidades ou ameaças você vê e quais mudanças positivas você espera? Formule isso como declarações claras.",
     "dreamBuilder.startExercise": "Iniciar o exercício",
     "dreamBuilder.resumeExercise": "Continue com o pequeno exercício que ajuda a definir seu sonho.",
     "dreamBuilder.statements.count": "N declarações de um mínimo de 20 até agora",
@@ -159,7 +159,15 @@ export const UI_STRINGS_LOCALE_PT_BR: Record<string, string> = {
     "strategy.current.template": "Sua Estratégia atual para {0} é:",
     "strategy.focuspoints.count.template": "Você agora tem {0} pontos de foco na sua estratégia.",
     "strategy.focuspoints.warning.template": "No momento, mais de 7 pontos de foco estão sendo exibidos.",
+    "strategy.focuspoints.guidance.min.template":
+      "Você agora tem {0} dos {1} pontos de foco mínimos.",
+    "strategy.focuspoints.guidance.max.template":
+      "Eu recomendo manter no máximo {0} pontos de foco para que continue claro.",
     "rulesofthegame.count.template": "Você agora tem {0} Regras do Jogo.",
+    "rulesofthegame.guidance.min.template":
+      "Você agora tem {0} das {1} Regras do Jogo mínimas.",
+    "rulesofthegame.guidance.max.template":
+      "Eu recomendo manter no máximo {0} Regras do Jogo para que continue claro.",
     "rulesofthegame.current.template": "Suas Regras do Jogo atuais para {0} são:",
     "thinking": "Pensando…",
     "title.bigwhy": "Grande Porquê",

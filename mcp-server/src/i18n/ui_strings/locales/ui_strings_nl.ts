@@ -48,7 +48,7 @@ export const UI_STRINGS_LOCALE_NL: Record<string, string> = {
     "dev.error.unhandled_rejection": "niet-afgehandelde afwijzing",
     "dev.error.unknown": "onbekende fout",
     "dreamBuilder.question.base": "Als je 5 tot 10 jaar vooruitkijkt, welke grote kansen of dreigingen zie je, en welke positieve veranderingen hoop je? Formuleer dit als duidelijke uitspraken.",
-    "dreamBuilder.question.more": "Wat zie je nog meer veranderen in de toekomst, positief of negatief? Laat je verbeelding de vrije loop en formuleer dit als duidelijke uitspraken.",
+    "dreamBuilder.question.more": "Als je 5 tot 10 jaar vooruitkijkt, welke andere grote kansen of dreigingen zie je, en welke positieve veranderingen hoop je? Formuleer dit als duidelijke uitspraken.",
     "dreamBuilder.startExercise": "Start de oefening",
     "dreamBuilder.resumeExercise": "Ga verder met de kleine oefening die helpt om je droom te definiëren.",
     "dreamBuilder.statements.count": "N statements van minimaal 20 tot nu toe",
@@ -129,6 +129,9 @@ export const UI_STRINGS_LOCALE_NL: Record<string, string> = {
     "productsservices.classifier.product.tokens": "product|producten|app|apps|platform|platformen|software|tool|tools|module|modules|template|templates",
     "productsservices.classifier.service.tokens": "dienst|diensten|advies|consultancy|coaching|support|onderhoud|strategie|branding|design|ontwikkeling|training|workshop|workshops|begeleiding",
     "rulesofthegame.count.template": "Je hebt nu {0} spelregels.",
+    "rulesofthegame.guidance.min.template": "Je hebt nu {0} van de minimaal {1} spelregels.",
+    "rulesofthegame.guidance.max.template":
+      "Ik adviseer je om maximaal {0} spelregels te maken zodat het overzichtelijk blijft.",
     "rulesofthegame.current.template": "Je huidige spelregels voor {0} zijn:",
     "offtopic.redirect.template": "Laten we doorgaan met de {0} van {1}.",
     "offtopic.step.bigwhy": "grote waarom",
@@ -239,6 +242,9 @@ export const UI_STRINGS_LOCALE_NL: Record<string, string> = {
     "strategy.current.template": "Je huidige strategie voor {0} is:",
     "strategy.focuspoints.count.template": "Je hebt nu {0} focuspunten binnen je strategie.",
     "strategy.focuspoints.warning.template": "Er staan nu meer dan 7 focuspunten in beeld.",
+    "strategy.focuspoints.guidance.min.template": "Je hebt nu {0} van de minimaal {1} focuspunten.",
+    "strategy.focuspoints.guidance.max.template":
+      "Ik adviseer je om maximaal {0} focuspunten te maken zodat het overzichtelijk blijft.",
     "rules.policy.overflow.rationale":
       "Meer dan 5 Spelregels maakt het al snel een handboek. Houd het kort en werkbaar.",
     "rules.policy.external.rationale":
@@ -269,6 +275,10 @@ export const UI_STRINGS_LOCALE_NL: Record<string, string> = {
       "Stuur de ene definitieve set spelregels die je wilt behouden.",
     "rules.proceed.block.question.missing_accepted_output":
       "Stuur de definitieve set van 3 tot 5 spelregels die je wilt bevestigen.",
+    "scoring.themeRepairFailed.message":
+      "Ik kon deze statements nog niet veilig in betekenisvolle thema's groeperen.",
+    "scoring.themeRepairFailed.question":
+      "Stuur een willekeurig bericht en dan probeer ik de clustering opnieuw.",
     "thinking": "Even denken…",
     "title.bigwhy": "Grote Waarom",
     "title.dream": "Droom",

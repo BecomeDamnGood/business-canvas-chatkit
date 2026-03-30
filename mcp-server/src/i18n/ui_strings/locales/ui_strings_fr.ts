@@ -27,7 +27,7 @@ export const UI_STRINGS_LOCALE_FR: Record<string, string> = {
     "dev.error.unhandled_rejection": "rejet non géré",
     "dev.error.unknown": "erreur inconnue",
     "dreamBuilder.question.base": "Si tu te projettes à 5 à 10 ans, quelles grandes opportunités ou menaces vois-tu, et quels changements positifs espères-tu ? Formule-les en affirmations claires.",
-    "dreamBuilder.question.more": "Que vois-tu d’autre changer dans le futur, positivement ou négativement ? Laisse libre cours à ton imagination et formule-le en affirmations claires.",
+    "dreamBuilder.question.more": "Si tu te projettes à 5 à 10 ans, quelles autres grandes opportunités ou menaces vois-tu, et quels changements positifs espères-tu ? Formule-les en affirmations claires.",
     "dreamBuilder.startExercise": "Commencer l’exercice",
     "dreamBuilder.resumeExercise": "Continue avec le petit exercice qui aide à définir ton rêve.",
     "dreamBuilder.statements.count": "N affirmations sur un minimum de 20 pour l’instant",
@@ -159,7 +159,15 @@ export const UI_STRINGS_LOCALE_FR: Record<string, string> = {
     "strategy.current.template": "Votre stratégie actuelle pour {0} est :",
     "strategy.focuspoints.count.template": "Vous avez maintenant {0} points de focus dans votre stratégie.",
     "strategy.focuspoints.warning.template": "Plus de 7 points de focus sont actuellement affichés.",
+    "strategy.focuspoints.guidance.min.template":
+      "Vous avez maintenant {0} des {1} points de focus minimum.",
+    "strategy.focuspoints.guidance.max.template":
+      "Je vous recommande de vous limiter à {0} points de focus maximum pour que cela reste clair.",
     "rulesofthegame.count.template": "Vous avez maintenant {0} Règles du jeu.",
+    "rulesofthegame.guidance.min.template":
+      "Vous avez maintenant {0} des {1} Règles du jeu minimum.",
+    "rulesofthegame.guidance.max.template":
+      "Je vous recommande de vous limiter à {0} Règles du jeu maximum pour que cela reste clair.",
     "rulesofthegame.current.template": "Vos Règles du jeu actuelles pour {0} sont :",
     "thinking": "Réflexion…",
     "title.bigwhy": "Grand Pourquoi",

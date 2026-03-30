@@ -27,7 +27,7 @@ export const UI_STRINGS_LOCALE_KO: Record<string, string> = {
     "dev.error.unhandled_rejection": "처리되지 않은 거부",
     "dev.error.unknown": "알 수 없는 오류",
     "dreamBuilder.question.base": "5년에서 10년 앞을 내다볼 때, 어떤 큰 기회나 위협이 보이나요? 그리고 어떤 긍정적인 변화들을 바라나요? 이를 명확한 문장들로 작성해 주세요.",
-    "dreamBuilder.question.more": "앞으로 또 무엇이 바뀔 것 같나요? 긍정적이든 부정적이든 좋습니다. 상상력을 마음껏 펼쳐 명확한 문장들로 작성해 주세요.",
+    "dreamBuilder.question.more": "5년에서 10년 앞을 내다볼 때, 어떤 다른 큰 기회나 위협이 보이나요? 그리고 어떤 긍정적인 변화들을 바라나요? 이를 명확한 문장들로 작성해 주세요.",
     "dreamBuilder.startExercise": "연습 시작하기",
     "dreamBuilder.resumeExercise": "꿈을 정의하는 데 도움이 되는 작은 연습을 이어서 해요.",
     "dreamBuilder.statements.count": "현재까지 최소 20개 중 N개 문장",
@@ -159,7 +159,15 @@ export const UI_STRINGS_LOCALE_KO: Record<string, string> = {
     "strategy.current.template": "{0}의 현재 전략는 다음과 같습니다:",
     "strategy.focuspoints.count.template": "현재 당신의 전략에는 {0}개의 핵심 포인트가 있습니다.",
     "strategy.focuspoints.warning.template": "현재 7개를 넘는 핵심 포인트가 표시되고 있습니다.",
+    "strategy.focuspoints.guidance.min.template":
+      "현재 최소 {1}개 중 {0}개의 핵심 포인트가 있습니다.",
+    "strategy.focuspoints.guidance.max.template":
+      "명확함을 유지하려면 핵심 포인트를 최대 {0}개까지로 유지하는 것을 권합니다.",
     "rulesofthegame.count.template": "현재 게임의 규칙은 {0}개입니다.",
+    "rulesofthegame.guidance.min.template":
+      "현재 최소 {1}개 중 {0}개의 게임의 규칙이 있습니다.",
+    "rulesofthegame.guidance.max.template":
+      "명확함을 유지하려면 게임의 규칙을 최대 {0}개까지로 유지하는 것을 권합니다.",
     "rulesofthegame.current.template": "{0}의 현재 게임의 규칙은 다음과 같습니다:",
     "thinking": "생각 중…",
     "title.bigwhy": "큰 이유",

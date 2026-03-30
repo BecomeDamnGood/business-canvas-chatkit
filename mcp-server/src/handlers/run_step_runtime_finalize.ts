@@ -1374,7 +1374,7 @@ export function createRunStepRuntimeFinalizeLayer<TPayload extends Record<string
       isDreamStep &&
       isDreamExplainer &&
       (dreamRuntimeMode === "builder_scoring" || scoringPhase);
-    const scoreSubmitAvailable = false;
+    const scoreSubmitAvailable = dreamBuilderScoringActive;
     const setStateAction = (key: string, value: string): void => {
       if (value) {
         stateRef[key] = value;

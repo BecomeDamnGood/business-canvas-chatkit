@@ -114,7 +114,7 @@ const UI_STRINGS_BASE: Record<string, string> = {
   "dreamBuilder.question.base":
     "Looking 5 to 10 years ahead, which major opportunities or threats do you see, and which positive changes do you hope for? Formulate them as clear statements.",
   "dreamBuilder.question.more":
-    "What else do you see changing in the future, positive or negative? Let your imagination run free and formulate them as clear statements.",
+    "Looking 5 to 10 years ahead, which other major opportunities or threats do you see, and which positive changes do you hope for? Formulate them as clear statements.",
   "dreamBuilder.switchSelf.headline": "Continue with the Dream Exercise.",
   "dreamBuilder.switchSelf.body.helper": "Take a moment to write a draft of your dream. I'll help you refine it if needed.",
   "dreamBuilder.switchSelf.body.intro": "That's a great way to start. Writing your own dream helps clarify what really matters to you and your business.",
@@ -179,8 +179,16 @@ const UI_STRINGS_BASE: Record<string, string> = {
   "productsservices.classifier.service.tokens": "service|services|consulting|advisory|coaching|support|maintenance|strategy|branding|design|development|training|workshop|workshops",
   "strategy.focuspoints.count.template": "You now have {0} focus points within your strategy.",
   "strategy.focuspoints.warning.template": "More than 7 focus points are currently shown.",
+  "strategy.focuspoints.guidance.min.template":
+    "You now have {0} of the minimum {1} focus points.",
+  "strategy.focuspoints.guidance.max.template":
+    "I recommend keeping it to at most {0} focus points so it stays clear.",
   "rulesofthegame.count.template":
     "You now have {0} Rules of the Game.",
+  "rulesofthegame.guidance.min.template":
+    "You now have {0} of the minimum {1} Rules of the Game.",
+  "rulesofthegame.guidance.max.template":
+    "I recommend keeping it to at most {0} Rules of the Game so it stays clear.",
   "rulesofthegame.current.template": "Your current Rules of the Game for {0} are:",
   "rules.policy.overflow.rationale":
     "More than 5 Rules of the Game makes this feel like a handbook. Keep it short and practical.",
@@ -272,6 +280,9 @@ const UI_STRINGS_BASE: Record<string, string> = {
     "Your formulation is longer than 28 words. Short and clear is better, so please provide a compact version.",
   "bigwhy.tooLong.question": "Can you rewrite it in 28 words or fewer?",
   "scoring.categoryFallback": "Category {0}",
+  "scoring.themeRepairFailed.message":
+    "I couldn't safely group these statements into meaningful themes yet.",
+  "scoring.themeRepairFailed.question": "Send any message and I'll try clustering them again.",
   "scoring.aria.scoreInput": "Score 1 to 10",
   "presentation.ready": "Your presentation is ready.",
   "presentation.error": "Presentation generation failed. Please check that the template exists and try again.",

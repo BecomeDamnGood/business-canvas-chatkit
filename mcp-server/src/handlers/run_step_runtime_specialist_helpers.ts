@@ -196,11 +196,17 @@ export function createRunStepRuntimeSpecialistHelpers(deps: CreateRunStepRuntime
       "dreamBuilder.question.base",
       deps.uiDefaultString("dreamBuilder.question.base")
     );
-    const moreQuestion = deps.uiStringFromStateMap(
-      params.state,
-      "dreamBuilder.question.more",
-      deps.uiDefaultString("dreamBuilder.question.more")
-    );
+    const moreQuestion =
+      deps.uiStringFromStateMap(
+        params.state,
+        "dreamBuilder.question.more",
+        deps.uiDefaultString("dreamBuilder.question.more")
+      ) ||
+      deps.uiStringFromStateMap(
+        params.state,
+        "dreamBuilder.question.base",
+        deps.uiDefaultString("dreamBuilder.question.base")
+      );
 
     if (!hasCollectedInput) {
       if (stage !== "base" && stage !== "") return specialist;

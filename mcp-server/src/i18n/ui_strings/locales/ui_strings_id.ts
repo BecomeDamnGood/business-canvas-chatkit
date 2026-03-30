@@ -27,7 +27,7 @@ export const UI_STRINGS_LOCALE_ID: Record<string, string> = {
     "dev.error.unhandled_rejection": "penolakan yang tidak tertangani",
     "dev.error.unknown": "kesalahan tidak diketahui",
     "dreamBuilder.question.base": "Jika Anda melihat 5 hingga 10 tahun ke depan, peluang atau ancaman besar apa yang Anda lihat, dan perubahan positif apa yang Anda harapkan? Rumuskan sebagai pernyataan yang jelas.",
-    "dreamBuilder.question.more": "Apa lagi yang Anda lihat akan berubah di masa depan, positif maupun negatif? Biarkan imajinasi Anda mengalir bebas dan rumuskan sebagai pernyataan yang jelas.",
+    "dreamBuilder.question.more": "Jika Anda melihat 5 hingga 10 tahun ke depan, peluang atau ancaman besar lain apa yang Anda lihat, dan perubahan positif apa yang Anda harapkan? Rumuskan sebagai pernyataan yang jelas.",
     "dreamBuilder.startExercise": "Mulai latihan",
     "dreamBuilder.resumeExercise": "Lanjutkan latihan kecil yang membantu mendefinisikan mimpi Anda.",
     "dreamBuilder.statements.count": "N pernyataan dari minimal 20 sejauh ini",
@@ -159,7 +159,15 @@ export const UI_STRINGS_LOCALE_ID: Record<string, string> = {
     "strategy.current.template": "Strategi Anda saat ini untuk {0} adalah:",
     "strategy.focuspoints.count.template": "Anda sekarang memiliki {0} poin fokus dalam Strategi Anda.",
     "strategy.focuspoints.warning.template": "Saat ini ditampilkan lebih dari 7 poin fokus.",
+    "strategy.focuspoints.guidance.min.template":
+      "Anda sekarang memiliki {0} dari minimum {1} poin fokus.",
+    "strategy.focuspoints.guidance.max.template":
+      "Saya sarankan membatasinya hingga maksimal {0} poin fokus agar tetap jelas.",
     "rulesofthegame.count.template": "Anda sekarang memiliki {0} Aturan main.",
+    "rulesofthegame.guidance.min.template":
+      "Anda sekarang memiliki {0} dari minimum {1} aturan main.",
+    "rulesofthegame.guidance.max.template":
+      "Saya sarankan membatasinya hingga maksimal {0} aturan main agar tetap jelas.",
     "rulesofthegame.current.template": "Aturan main Anda saat ini untuk {0} adalah:",
     "thinking": "Sedang berpikir…",
     "title.bigwhy": "Alasan Utama",

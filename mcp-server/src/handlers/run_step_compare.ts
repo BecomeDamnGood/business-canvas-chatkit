@@ -21,7 +21,6 @@ import type { PendingInteractionCompareRenderModel } from "./run_step_runtime_ty
 import { resolveBusinessListTurn } from "./run_step_business_list_turn.js";
 import {
   clearDreamBuilderCompareRuntime,
-  patchDreamBuilderCompareRuntime,
   readDreamBuilderCompareRuntime,
 } from "./dream_builder_compare_runtime.js";
 
@@ -63,8 +62,6 @@ type BuildCompareFromTurnParams = {
   acceptedOutputUserTurnClassification?: AcceptedOutputUserTurnClassification | null;
 };
 
-type DreamBuilderCompareKind = "batch_rewrite_compare" | "overlap_merge_compare";
-
 type ComparePickSelectionParams = {
   stepId: string;
   routeToken: string;
@@ -79,6 +76,7 @@ type ComparePickSelectionResult = {
   actionCodes?: string[];
   renderedActions?: RenderedAction[];
   contractMeta?: UiContractMeta | null;
+  continueUserMessage?: string;
 };
 
 type CompareCompareUnit = {
@@ -558,14 +556,10 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
     dreamRuntimeModeRaw?: unknown
   ): boolean {
     void activeSpecialist;
+    void specialist;
+    void previousSpecialist;
     if (!isCompareEligibleStep(stepId)) return false;
     if (!isDreamBuilderContext(stepId, dreamRuntimeModeRaw)) return true;
-    const current = specialist || {};
-    const previous = previousSpecialist || {};
-    if (deps.normalizeDreamRuntimeMode(dreamRuntimeModeRaw) === "builder_scoring") return false;
-    const currentScoringPhase = String(current.scoring_phase || "").trim() === "true";
-    const previousScoringPhase = String(previous.scoring_phase || "").trim() === "true";
-    if (currentScoringPhase || previousScoringPhase) return false;
     return true;
   }
 
@@ -741,8 +735,7 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
     suggestionItems: string[];
   }): boolean {
     if (isBusinessListIntentScope(params.stepId)) return true;
-    if (!params.dreamBuilderContext) return false;
-    return false;
+    return params.dreamBuilderContext;
   }
 
   function resolveBusinessListIntent(params: {
@@ -1521,107 +1514,6 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
     });
   }
 
-  function buildDreamBuilderPendingCompareSpecialist(params: {
-    specialistResult: Record<string, unknown>;
-    comparePlan: BusinessListComparePlan;
-    compareKind: DreamBuilderCompareKind;
-    message: string;
-    rationale: string;
-    currentLabel: string;
-    suggestedLabel: string;
-    targetField: string;
-    committedText: string;
-    baseItems: string[];
-  }): Record<string, unknown> {
-    const {
-      specialistResult,
-      comparePlan,
-      compareKind,
-      message,
-      rationale,
-      currentLabel,
-      suggestedLabel,
-      targetField,
-      committedText,
-      baseItems,
-    } = params;
-    return patchDreamBuilderCompareRuntime(
-      {
-        ...clearDreamBuilderCompareRuntime(clearPendingInteractionState(specialistResult)),
-        ...clearedResolvedCompareTransientFields(),
-        message,
-        feedback_reason_text: rationale,
-        ...(targetField ? { [targetField]: committedText } : {}),
-        statements: baseItems,
-        refined_formulation: committedText,
-      },
-      {
-        kind: compareKind,
-        current_items: comparePlan.initialUnit.user_items,
-        suggested_items: comparePlan.initialUnit.suggestion_items,
-        segments: comparePlan.segments,
-        rationale,
-        current_label: currentLabel,
-        suggested_label: suggestedLabel,
-      }
-    );
-  }
-
-  function buildDreamBuilderPendingSimpleCompareSpecialist(params: {
-    specialistResult: Record<string, unknown>;
-    compareKind: DreamBuilderCompareKind;
-    message: string;
-    rationale: string;
-    currentLabel: string;
-    suggestedLabel: string;
-    targetField: string;
-    committedText: string;
-    baseItems: string[];
-    currentItems: string[];
-    suggestedItems: string[];
-    retainedItems: string[];
-  }): Record<string, unknown> {
-    const {
-      specialistResult,
-      compareKind,
-      message,
-      rationale,
-      currentLabel,
-      suggestedLabel,
-      targetField,
-      committedText,
-      baseItems,
-      currentItems,
-      suggestedItems,
-      retainedItems,
-    } = params;
-    const segments: CompareCompareSegment[] = [];
-    if (retainedItems.length > 0) {
-      segments.push({ kind: "retained", items: retainedItems });
-    }
-    segments.push({ kind: "unit", unit_id: "unit_1" });
-    return patchDreamBuilderCompareRuntime(
-      {
-        ...clearDreamBuilderCompareRuntime(clearPendingInteractionState(specialistResult)),
-        ...clearedResolvedCompareTransientFields(),
-        message,
-        feedback_reason_text: rationale,
-        ...(targetField ? { [targetField]: committedText } : {}),
-        statements: baseItems,
-        refined_formulation: committedText,
-      },
-      {
-        kind: compareKind,
-        current_items: currentItems,
-        suggested_items: suggestedItems,
-        segments,
-        rationale,
-        current_label: currentLabel,
-        suggested_label: suggestedLabel,
-      }
-    );
-  }
-
   function hasDreamBuilderPendingCompare(specialist: Record<string, unknown>): boolean {
     return Boolean(readDreamBuilderCompareRuntime(specialist));
   }
@@ -1826,6 +1718,21 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
       rawReason: compact,
       resolveString: (key, fallback = "") =>
         deps.uiStringFromStateMap(params.state, key, fallback || deps.uiDefaultString(key, fallback)),
+      });
+  }
+
+  function feedbackReasonFromMessage(params: {
+    stepId: string;
+    state: CanvasState;
+    message: string;
+  }): string {
+    const compact = normalizeCompactFeedbackSentence(String(params.message || "").trim(), "");
+    if (!compact) return "";
+    return sanitizeFeedbackReasonForDisplay({
+      stepId: params.stepId,
+      rawReason: compact,
+      resolveString: (key, fallback = "") =>
+        deps.uiStringFromStateMap(params.state, key, fallback || deps.uiDefaultString(key, fallback)),
     });
   }
 
@@ -1857,6 +1764,7 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
     mode: CompareMode;
     forcePending: boolean;
     specialistResult: Record<string, unknown>;
+    pendingMessage: string;
     suggestionRaw: string;
     userRaw: string;
     knownItems: string[];
@@ -1865,21 +1773,12 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
     void params.knownItems;
     const explicitReason = resolveFeedbackReasonFromSpecialist(params.state, params.specialistResult);
     if (explicitReason) return explicitReason;
-    if (
-      params.stepId === deps.dreamStepId &&
-      deps.isMaterialRewriteCandidate(params.userRaw, params.suggestionRaw)
-    ) {
-      return sanitizeFeedbackReasonForDisplay({
-        stepId: params.stepId,
-        rawReason: deps.uiStringFromStateMap(
-          params.state,
-          "compare.feedback.dream_builder.rewrite.default",
-          deps.uiDefaultString("compare.feedback.dream_builder.rewrite.default", "")
-        ),
-        resolveString: (key, fallback = "") =>
-          deps.uiStringFromStateMap(params.state, key, fallback || deps.uiDefaultString(key, fallback)),
-      });
-    }
+    const messageReason = feedbackReasonFromMessage({
+      stepId: params.stepId,
+      state: params.state,
+      message: params.pendingMessage,
+    });
+    if (messageReason) return messageReason;
     return "";
   }
 
@@ -1900,21 +1799,12 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
     }
     const explicitReason = resolveFeedbackReasonFromSpecialist(params.state, params.specialistResult);
     if (explicitReason) return explicitReason;
-    if (
-      params.stepId === deps.dreamStepId &&
-      deps.isMaterialRewriteCandidate(params.unit.user_text, params.unit.suggestion_text)
-    ) {
-      return sanitizeFeedbackReasonForDisplay({
-        stepId: params.stepId,
-        rawReason: deps.uiStringFromStateMap(
-          params.state,
-          "compare.feedback.dream_builder.rewrite.default",
-          deps.uiDefaultString("compare.feedback.dream_builder.rewrite.default", "")
-        ),
-        resolveString: (key, fallback = "") =>
-          deps.uiStringFromStateMap(params.state, key, fallback || deps.uiDefaultString(key, fallback)),
-      });
-    }
+    const messageReason = feedbackReasonFromMessage({
+      stepId: params.stepId,
+      state: params.state,
+      message: String(params.specialistResult.message || ""),
+    });
+    if (messageReason) return messageReason;
     return "";
   }
 
@@ -1992,11 +1882,10 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
       suggestion_text: currentUnit.suggestion_text,
       user_items: currentUnit.user_items,
       suggestion_items: currentUnit.suggestion_items,
-      instruction: isDreamBuilderCompare
-        ? (isDreamBuilderMergeChoice
-            ? dreamBuilderMergeInstructionForState(params.state)
-            : groupedListBaseInstructionForState(params.state))
-        : groupedListInstructionForState(params.state, retainedItems),
+      instruction:
+        isDreamBuilderCompare && isDreamBuilderMergeChoice
+          ? dreamBuilderMergeInstructionForState(params.state)
+          : groupedListInstructionForState(params.state, retainedItems),
     };
   }
 
@@ -2133,7 +2022,16 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
     selectedItems: string[]
   ): CanvasState {
     if (stepId !== deps.dreamStepId) return state;
-    const canonicalItems = mergeListItems([], selectedItems);
+    const selectedCanonicalItems = mergeListItems([], selectedItems);
+    const existingCanonicalItems = Array.isArray((state as Record<string, unknown>).dream_builder_statements)
+      ? ((state as Record<string, unknown>).dream_builder_statements as unknown[])
+          .map((line) => String(line || "").trim())
+          .filter(Boolean)
+      : [];
+    const canonicalItems =
+      existingCanonicalItems.length > selectedCanonicalItems.length
+        ? mergeListItems(existingCanonicalItems, selectedCanonicalItems)
+        : selectedCanonicalItems;
     return {
       ...state,
       dream_builder_statements: canonicalItems,
@@ -2474,6 +2372,7 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
       mode,
       forcePending: Boolean(forcePending),
       specialistResult,
+      pendingMessage,
       suggestionRaw,
       userRaw,
       knownItems: mergeListItems(baseItems, suggestionFullItems),
@@ -2555,6 +2454,10 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
     const groupedRemainingUnits = comparePlan
       ? groupedPendingUnitsForRender(comparePlan.units.slice(1))
       : [];
+    const simpleRetainedItems =
+      mode === "list" && !comparePlan && listSemantics !== "full"
+        ? mergeListItems([], baseItems)
+        : [];
     const compareRenderModel = comparePlan
       ? buildPendingInteractionRenderModel({
           stepId,
@@ -2585,6 +2488,7 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
           userItems: effectiveUserItems,
           suggestionItems,
           instruction: compareInstructionForState(state),
+          retainedItems: simpleRetainedItems,
         });
     const pendingState = {
       id: String(previousCompare?.id || "").trim(),
@@ -2622,72 +2526,6 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
     if (comparePlan && !String(comparePlan.initialUnit.feedback_reason_text || effectiveFeedbackReason || "").trim()) {
       return {
         specialist: clearCompareForResolvedDisplay(enriched),
-        compare: null,
-        pendingState: null,
-      };
-    }
-    if (dreamBuilderContext && comparePlan) {
-      const compareKind: DreamBuilderCompareKind = dreamBuilderOverlapComparePlan
-        ? "overlap_merge_compare"
-        : "batch_rewrite_compare";
-      const currentLabel = wordingLabels.userLabel || "";
-      const suggestedLabel = wordingLabels.suggestionLabel || "";
-      const dreamBuilderSpecialist = buildDreamBuilderPendingCompareSpecialist({
-        specialistResult: enriched,
-        comparePlan,
-        compareKind,
-        message: pendingMessage,
-        rationale: String(comparePlan.initialUnit.feedback_reason_text || effectiveFeedbackReason || "").trim(),
-        currentLabel,
-        suggestedLabel,
-        targetField,
-        committedText,
-        baseItems,
-      });
-      return {
-        specialist: dreamBuilderSpecialist,
-        compare: null,
-        pendingState: null,
-      };
-    }
-    const dreamBuilderSuggestedItems =
-      suggestionItems.length > 0
-        ? suggestionItems
-        : suggestionFullItems;
-    if (dreamBuilderContext && effectiveUserItems.length > 0 && dreamBuilderSuggestedItems.length > 0) {
-      const overlapExisting = String(specialistResult.__dream_builder_overlap_existing_statement || "").trim();
-      const overlapIncoming = String(specialistResult.__dream_builder_overlap_incoming_statement || "").trim();
-      const compareKind: DreamBuilderCompareKind =
-        overlapExisting && overlapIncoming ? "overlap_merge_compare" : "batch_rewrite_compare";
-      const currentItems = compareKind === "overlap_merge_compare"
-        ? [overlapExisting, overlapIncoming].filter(Boolean)
-        : effectiveUserItems;
-      const suggestedItems = dreamBuilderSuggestedItems;
-      const retainedItems = compareKind === "overlap_merge_compare" && overlapExisting
-        ? baseItems.filter((item) => item !== overlapExisting)
-        : baseItems;
-      const labels = compareKind === "overlap_merge_compare"
-        ? {
-            userLabel: dreamBuilderKeepBothLabelForState(state),
-            suggestionLabel: dreamBuilderMergeLabelForState(state),
-          }
-        : wordingLabels;
-      const dreamBuilderSpecialist = buildDreamBuilderPendingSimpleCompareSpecialist({
-        specialistResult: enriched,
-        compareKind,
-        message: pendingMessage,
-        rationale: effectiveFeedbackReason,
-        currentLabel: labels.userLabel || "",
-        suggestedLabel: labels.suggestionLabel || "",
-        targetField,
-        committedText,
-        baseItems,
-        currentItems,
-        suggestedItems,
-        retainedItems,
-      });
-      return {
-        specialist: dreamBuilderSpecialist,
         compare: null,
         pendingState: null,
       };
@@ -2785,10 +2623,20 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
           : (rendered.textKeys || []),
       };
       const nextState: CanvasState = {
-        ...state,
-        dream_builder_statements: composedItems,
+        ...withAcceptedListSelectionState(state, stepId, composedItems),
         last_specialist_result: selectedWithContract,
       };
+      const nextDreamStatementCount = Array.isArray((nextState as Record<string, unknown>).dream_builder_statements)
+        ? ((nextState as Record<string, unknown>).dream_builder_statements as unknown[]).length
+        : 0;
+      if (stepId === deps.dreamStepId && nextDreamStatementCount >= 20) {
+        return {
+          handled: true,
+          specialist: selectedWithContract,
+          nextState,
+          continueUserMessage: "__ROUTE__DREAM_EXPLAINER_CONTINUE__",
+        };
+      }
       return {
         handled: true,
         specialist: selectedWithContract,
@@ -2947,21 +2795,26 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
         ? prevRenderModel.list_semantics
         : "delta";
     const committedItems = mode === "list" ? extractCommittedListItems(stepId, prevRaw) : [];
+    const explicitRetainedItems = mode === "list"
+      ? toTrimmedStringArray(prevRenderModel.retained_items)
+      : [];
     const retainedItemsForAcceptedSelection = mode === "list"
       ? retainedItemsForAcceptedListSelection({
         listSemantics: acceptedListSemantics,
         committedItems,
-        retainedItems: toTrimmedStringArray(prevRenderModel.retained_items),
+        retainedItems: explicitRetainedItems,
         currentItems: toTrimmedStringArray(prevRenderModel.user_items),
       })
       : [];
     const mergedPickedItems = mode === "list"
       ? mergeListItems(
-        acceptedListSemantics === "full"
-          ? []
-          : acceptedListSemantics === "overlap_merge"
-            ? retainedItemsForAcceptedSelection
-            : committedItems,
+        explicitRetainedItems.length > 0
+          ? explicitRetainedItems
+          : acceptedListSemantics === "full"
+            ? []
+            : acceptedListSemantics === "overlap_merge"
+              ? retainedItemsForAcceptedSelection
+              : committedItems,
         pickedItems
       )
       : [];
@@ -3025,6 +2878,17 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
       last_specialist_result: clearPendingInteractionState(selectedWithContract),
     };
     deps.applyUiPhaseByStep(nextState, stepId, selectedContractId);
+    const nextDreamStatementCount = Array.isArray((nextState as Record<string, unknown>).dream_builder_statements)
+      ? ((nextState as Record<string, unknown>).dream_builder_statements as unknown[]).length
+      : 0;
+    if (stepId === deps.dreamStepId && nextDreamStatementCount >= 20) {
+      return {
+        handled: true,
+        specialist: selectedWithContract,
+        nextState,
+        continueUserMessage: "__ROUTE__DREAM_EXPLAINER_CONTINUE__",
+      };
+    }
     return {
       handled: true,
       specialist: selectedWithContract,
@@ -3049,9 +2913,6 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
   ): CompareUiPayload | null {
     const compareState = readPendingInteractionState(state);
     const stepId = String(stepIdHint || "").trim();
-    if (stepId === deps.dreamStepId && String(dreamRuntimeModeRaw || "").trim() !== "self") {
-      return null;
-    }
     const dreamBuilderComparePending =
       stepId === deps.dreamStepId &&
       Boolean(readDreamBuilderCompareRuntime(specialist));

@@ -27,7 +27,7 @@ export const UI_STRINGS_LOCALE_JA: Record<string, string> = {
     "dev.error.unhandled_rejection": "未処理の拒否",
     "dev.error.unknown": "不明なエラー",
     "dreamBuilder.question.base": "5年から10年先を見たとき、どんな大きな機会や脅威が見えますか？また、どんな前向きな変化を望みますか？それらを明確なステートメントとして書いてください。",
-    "dreamBuilder.question.more": "未来に向けて、ほかに何が変わると思いますか？良いことでも悪いことでもかまいません。想像力を自由に広げ、明確なステートメントとして書いてください。",
+    "dreamBuilder.question.more": "5年から10年先を見たとき、ほかにどんな大きな機会や脅威が見えますか？また、どんな前向きな変化を望みますか？それらを明確なステートメントとして書いてください。",
     "dreamBuilder.startExercise": "エクササイズを開始",
     "dreamBuilder.resumeExercise": "夢を定義するのに役立つ小さなエクササイズを続ける。",
     "dreamBuilder.statements.count": "これまでに最低20件のうち N 件のステートメント",
@@ -159,7 +159,15 @@ export const UI_STRINGS_LOCALE_JA: Record<string, string> = {
     "strategy.current.template": "{0} の現在の 戦略 は：",
     "strategy.focuspoints.count.template": "あなたの戦略には現在 {0} 個の注力ポイントがあります。",
     "strategy.focuspoints.warning.template": "現在、注力ポイントが 7 個を超えて表示されています。",
+    "strategy.focuspoints.guidance.min.template":
+      "現在、最低 {1} 個のうち {0} 個の注力ポイントがあります。",
+    "strategy.focuspoints.guidance.max.template":
+      "わかりやすさを保つため、注力ポイントは最大 {0} 個までにすることをおすすめします。",
     "rulesofthegame.count.template": "現在、ゲームのルールは {0} 個あります。",
+    "rulesofthegame.guidance.min.template":
+      "現在、最低 {1} 個のうち {0} 個のゲームのルールがあります。",
+    "rulesofthegame.guidance.max.template":
+      "わかりやすさを保つため、ゲームのルールは最大 {0} 個までにすることをおすすめします。",
     "rulesofthegame.current.template": "{0} の現在の ゲームのルール は：",
     "thinking": "考え中…",
     "title.bigwhy": "大きな理由",
