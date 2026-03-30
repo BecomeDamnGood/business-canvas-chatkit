@@ -189,13 +189,14 @@ export const UI_STRINGS_LOCALE_IT: Record<string, string> = {
     "uiSubtitle": "Usa il widget Business Strategy Canvas Builder per continuare (non la chat)",
     "uiTitle.template": "Business Strategy Canvas Builder",
     "uiUseWidgetToContinue": "Usa il widget Business Strategy Canvas Builder per continuare (non la chat).",
-    "compare.choice.context.default": "Scegli la formulazione che si adatta meglio.",
+    "compare.choice.context.default": "Scegli la formulazione che senti più adatta a te.",
     "compare.feedback.compare.intro.template":
       "Ecco un confronto per il tuo {0}.",
-    "compare.feedback.user_pick.ack.default": "La tua formulazione è stata mantenuta.",
+    "compare.feedback.user_pick.ack.default": "Tenere la tua formulazione va benissimo.",
     "compare.feedback.dream_builder.rewrite.default":
       "Questo suggerimento amplia la formulazione per questo Passo.",
-    "compare.feedback.user_pick.reason.default": "La formulazione resta adatta a questo Passo.",
+    "compare.feedback.user_pick.reason.default":
+      "Se continui con questa, fai in modo che la formulazione resti chiara, centrata sulle persone e abbastanza specifica per questo Passo.",
     "compare.chooseVersion": "Scegli questa versione",
     "compare.useInputFallback": "Usa questo input",
     "compareHeading": "Questo è il tuo input:",
@@ -203,6 +204,7 @@ export const UI_STRINGS_LOCALE_IT: Record<string, string> = {
     "compareGroupedCompareSuggestionLabel": "Questo è il mio suggerimento:",
     "compareGroupedCompareInstruction": "Scegli la versione che si adatta meglio alla differenza rimanente.",
     "compareGroupedCompareRetainedHeading": "Questi punti restano gia nella lista finale:",
-    "compareInstruction": "Clicca su ciò che ti si addice di più.",
+    "compareInstruction":
+      "Scegli la versione più vicina a ciò che vuoi dire. Puoi tenere la tua formulazione se è quella che funziona meglio.",
     "compareSuggestionLabel": "Questo sarebbe il mio suggerimento:",
 } as const;

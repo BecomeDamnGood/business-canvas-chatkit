@@ -189,13 +189,14 @@ export const UI_STRINGS_LOCALE_ID: Record<string, string> = {
     "uiSubtitle": "Gunakan widget Business Strategy Canvas Builder untuk melanjutkan (bukan kotak chat)",
     "uiTitle.template": "Business Strategy Canvas Builder",
     "uiUseWidgetToContinue": "Gunakan widget Business Strategy Canvas Builder untuk melanjutkan (bukan kotak chat).",
-    "compare.choice.context.default": "Silakan pilih kata-kata yang paling cocok.",
+    "compare.choice.context.default": "Pilih rumusan yang terasa paling pas untuk Anda.",
     "compare.feedback.compare.intro.template":
       "Berikut perbandingan untuk {0} Anda.",
-    "compare.feedback.user_pick.ack.default": "Rumusan Anda dipertahankan.",
+    "compare.feedback.user_pick.ack.default": "Mempertahankan rumusan Anda sendiri sepenuhnya boleh.",
     "compare.feedback.dream_builder.rewrite.default":
       "Saran ini memperluas rumusan untuk langkah ini.",
-    "compare.feedback.user_pick.reason.default": "Rumusannya tetap selaras dengan langkah ini.",
+    "compare.feedback.user_pick.reason.default":
+      "Jika Anda melanjutkan dengan ini, pastikan rumusannya tetap jelas, berpusat pada manusia, dan cukup spesifik untuk langkah ini.",
     "compare.chooseVersion": "Pilih versi ini",
     "compare.useInputFallback": "Gunakan input ini",
     "compareHeading": "Ini input Anda:",
@@ -203,6 +204,7 @@ export const UI_STRINGS_LOCALE_ID: Record<string, string> = {
     "compareGroupedCompareSuggestionLabel": "Ini saran saya:",
     "compareGroupedCompareInstruction": "Pilih versi yang paling sesuai untuk perbedaan yang tersisa.",
     "compareGroupedCompareRetainedHeading": "Poin-poin ini sudah tetap berada dalam daftar final:",
-    "compareInstruction": "Silakan klik yang paling cocok untuk Anda.",
+    "compareInstruction":
+      "Pilih versi yang paling mendekati apa yang Anda maksud. Anda boleh tetap memakai rumusan Anda sendiri jika itu yang paling pas.",
     "compareSuggestionLabel": "Ini saran saya:",
 } as const;

@@ -189,13 +189,14 @@ export const UI_STRINGS_LOCALE_PT_BR: Record<string, string> = {
     "uiSubtitle": "Use o widget The Business Strategy Canvas Builder para continuar (não a caixa de chat)",
     "uiTitle.template": "Business Strategy Canvas Builder",
     "uiUseWidgetToContinue": "Use o widget The Business Strategy Canvas Builder para continuar (não a caixa de chat).",
-    "compare.choice.context.default": "Por favor, escolha a redação que melhor se encaixa.",
+    "compare.choice.context.default": "Escolha a redação que melhor combina com você.",
     "compare.feedback.compare.intro.template":
       "Aqui está uma comparação para seu {0}.",
-    "compare.feedback.user_pick.ack.default": "Sua redação foi mantida.",
+    "compare.feedback.user_pick.ack.default": "Manter a sua própria redação está totalmente certo.",
     "compare.feedback.dream_builder.rewrite.default":
       "Esta sugestão amplia a redação para esta etapa.",
-    "compare.feedback.user_pick.reason.default": "A redação continua alinhada a esta etapa.",
+    "compare.feedback.user_pick.reason.default":
+      "Se você seguir com ela, cuide para que a redação continue clara, humana e específica o bastante para esta etapa.",
     "compare.chooseVersion": "Escolher esta versão",
     "compare.useInputFallback": "Usar este texto",
     "compareHeading": "Este é o seu texto:",
@@ -203,6 +204,7 @@ export const UI_STRINGS_LOCALE_PT_BR: Record<string, string> = {
     "compareGroupedCompareSuggestionLabel": "Esta é a minha sugestão:",
     "compareGroupedCompareInstruction": "Escolha a versão que melhor se encaixa na diferença restante.",
     "compareGroupedCompareRetainedHeading": "Estes pontos já permanecem na lista final:",
-    "compareInstruction": "Por favor, clique na opção que combina melhor com você.",
+    "compareInstruction":
+      "Escolha a versão que mais se aproxima do que você quer dizer. Você pode manter a sua própria redação se ela for a melhor opção.",
     "compareSuggestionLabel": "Esta seria a minha sugestão:",
 } as const;

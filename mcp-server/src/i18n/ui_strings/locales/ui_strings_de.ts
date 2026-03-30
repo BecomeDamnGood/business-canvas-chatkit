@@ -189,13 +189,14 @@ export const UI_STRINGS_LOCALE_DE: Record<string, string> = {
     "uiSubtitle": "Nutze das Business Strategy Canvas Builder-Widget, um fortzufahren (nicht das Chatfeld).",
     "uiTitle.template": "Business Strategy Canvas Builder",
     "uiUseWidgetToContinue": "Nutze das Business Strategy Canvas Builder-Widget, um fortzufahren (nicht das Chatfeld).",
-    "compare.choice.context.default": "Bitte wähle die Formulierung, die am besten passt.",
+    "compare.choice.context.default": "Wähle die Formulierung, die sich für dich am besten anfühlt.",
     "compare.feedback.compare.intro.template":
       "Hier ist ein Vergleich für dein {0}.",
-    "compare.feedback.user_pick.ack.default": "Deine Formulierung wurde beibehalten.",
+    "compare.feedback.user_pick.ack.default": "Deine eigene Formulierung zu behalten, ist völlig in Ordnung.",
     "compare.feedback.dream_builder.rewrite.default":
       "Dieser Vorschlag fasst die Formulierung für diesen Schritt breiter.",
-    "compare.feedback.user_pick.reason.default": "Die Formulierung bleibt für diesen Schritt passend.",
+    "compare.feedback.user_pick.reason.default":
+      "Wenn du damit weitermachst, achte darauf, dass die Formulierung klar, menschlich und für diesen Schritt konkret genug bleibt.",
     "compare.chooseVersion": "Diese Version wählen",
     "compare.useInputFallback": "Diesen Input verwenden",
     "compareHeading": "Das ist dein Input:",
@@ -203,6 +204,7 @@ export const UI_STRINGS_LOCALE_DE: Record<string, string> = {
     "compareGroupedCompareSuggestionLabel": "Das ist mein Vorschlag:",
     "compareGroupedCompareInstruction": "Wähle die Version, die am besten zum verbleibenden Unterschied passt.",
     "compareGroupedCompareRetainedHeading": "Diese Punkte bleiben bereits in der finalen Liste:",
-    "compareInstruction": "Bitte klicke an, was am besten zu dir passt.",
+    "compareInstruction":
+      "Wähle die Version, die deinem Anliegen am nächsten kommt. Du kannst deine eigene Formulierung behalten, wenn sie besser passt.",
     "compareSuggestionLabel": "Das wäre mein Vorschlag:",
 } as const;

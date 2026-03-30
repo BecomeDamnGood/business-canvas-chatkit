@@ -2869,6 +2869,28 @@
     };
   }
 
+  // ui/lib/step0_prewarm.ts
+  var ACTION_STEP0_PREWARM = "ACTION_STEP0_PREWARM";
+  var STEP0_PREWARM_DEBOUNCE_MS = 350;
+  function normalizeStep0PrewarmText(input) {
+    return String(input || "").replace(/\s+/g, " ").trim();
+  }
+  function buildStep0PrewarmKey(input) {
+    return normalizeStep0PrewarmText(input);
+  }
+  function shouldScheduleStep0Prewarm(params) {
+    const currentStep = String(params.currentStep || "").trim();
+    const started = String(params.started || "").trim().toLowerCase() === "true";
+    const key = buildStep0PrewarmKey(params.inputValue);
+    if (currentStep !== "step_0" || started || !key) {
+      return { shouldSchedule: false, key };
+    }
+    if (key === String(params.lastScheduledKey || "") || key === String(params.inFlightKey || "")) {
+      return { shouldSchedule: false, key };
+    }
+    return { shouldSchedule: true, key };
+  }
+
   // ui/lib/ui_actions.ts
   var _render;
   var _t;
@@ -3030,7 +3052,7 @@
   }
   function prepareWidgetScrollForAction(messageText) {
     const normalized = String(messageText || "").trim().toUpperCase();
-    if (!normalized || normalized === ACTION_BOOTSTRAP_POLL) return;
+    if (!normalized || normalized === ACTION_BOOTSTRAP_POLL || normalized === ACTION_STEP0_PREWARM) return;
     const hadFocusedInput = blurWidgetInputFocus();
     if (pendingWidgetScrollTimer) {
       clearTimeout(pendingWidgetScrollTimer);
@@ -4026,6 +4048,32 @@
   function applyToolResult(raw) {
     return normalizeToolResult(raw).normalized;
   }
+  function stripActionLivenessFromCanonicalEnvelope(raw) {
+    const normalized = applyToolResult(raw);
+    const root = toRecord2(normalized);
+    const result = toRecord2(root.result);
+    const state = toRecord2(result.state);
+    const stateLiveness = toRecord2(state.ui_action_liveness);
+    const nextState = { ...state };
+    delete nextState.ack_status;
+    delete nextState.state_advanced;
+    delete nextState.reason_code;
+    delete nextState.action_code_echo;
+    delete nextState.client_action_id_echo;
+    if (Object.keys(stateLiveness).length > 0) {
+      delete nextState.ui_action_liveness;
+    }
+    const nextResult = { ...result, state: nextState };
+    delete nextResult.ack_status;
+    delete nextResult.state_advanced;
+    delete nextResult.reason_code;
+    delete nextResult.action_code_echo;
+    delete nextResult.client_action_id_echo;
+    return {
+      ...root,
+      result: nextResult
+    };
+  }
   function setLastToolOutput(raw) {
     const normalized = hydrateWidgetResultEnvelope(raw);
     if (!Object.keys(normalized).length) return;
@@ -4666,10 +4714,11 @@
     }
     return { failure_class: "none", reason_code: "", message: "" };
   }
-  async function callRunStep(message, extraState) {
+  async function callRunStep(message, extraState, options) {
     const o = oa();
     const messageText = String(message || "").trim();
     const isStartAction = messageText === "ACTION_START";
+    const isBackgroundDispatch = options?.background === true || String(extraState?.__background_dispatch || "").trim().toLowerCase() === "true";
     const cleanExtraState = extraState && typeof extraState === "object" ? { ...extraState } : void 0;
     const latestSnapshot = globalThis.__BSC_LATEST__ || {};
     const latestState = toRecord2(latestSnapshot.state);
@@ -4683,6 +4732,9 @@
     const hasCallTool = transportStatus === "ready_callTool";
     const hasBridgePath = transportStatus === "ready_bridge" || transportStatus === "unknown";
     if (!hasCallTool && !hasBridgePath) {
+      if (isBackgroundDispatch) {
+        return;
+      }
       const livenessState = Object.assign({}, activeClientState, persistedWidgetState);
       if (cleanExtraState && typeof cleanExtraState === "object") {
         Object.assign(livenessState, cleanExtraState);
@@ -4726,8 +4778,10 @@
     }
     if (isRateLimited()) return;
     const now = Date.now();
-    if (now - lastCallAt < CLICK_DEBOUNCE_MS) return;
-    lastCallAt = now;
+    if (!isBackgroundDispatch) {
+      if (now - lastCallAt < CLICK_DEBOUNCE_MS) return;
+      lastCallAt = now;
+    }
     const hasToolOutput = Boolean(o.toolOutput) || Boolean(getLastToolOutput() && Object.keys(getLastToolOutput()).length);
     const persistedStarted = String(widgetState().started || "").toLowerCase() === "true";
     const isBootstrapPollCall = messageText === ACTION_BOOTSTRAP_POLL || String(cleanExtraState?.__bootstrap_poll || "").trim().toLowerCase() === "true";
@@ -4807,8 +4861,10 @@
         user_message: messageText
       });
     }
-    prepareWidgetScrollForAction(messageText);
-    setLoading(true);
+    if (!isBackgroundDispatch) {
+      prepareWidgetScrollForAction(messageText);
+      setLoading(true);
+    }
     let timeoutId = null;
     let didTimeout = false;
     const timeoutMs = RUN_STEP_TIMEOUT_MS;
@@ -4823,14 +4879,16 @@
           timeout_ms: timeoutMs
         });
       }
-      setInlineNotice(uiText(nextState, "transient.timeout", ""));
+      if (!isBackgroundDispatch) {
+        setInlineNotice(uiText(nextState, "transient.timeout", ""));
+      }
       if (isStartAction) {
         setWidgetStateSafe({
           start_dispatch_state: "failed",
           transport_ready: "true"
         });
       }
-      setLoading(false);
+      if (!isBackgroundDispatch) setLoading(false);
     }, timeoutMs);
     try {
       const transportPrimary = hasCallTool ? "callTool" : "bridge";
@@ -4868,6 +4926,7 @@
       }
       const orderingBeforeIngest = readBootstrapOrderingState(widgetState());
       const normalizedRaw = toRecord2(resp);
+      const payloadForIngest = isBackgroundDispatch ? stripActionLivenessFromCanonicalEnvelope(applyToolResult(normalizedRaw)) : normalizedRaw;
       const resolvedResponse = resolveWidgetPayload2(normalizedRaw);
       const directResult = resolvedResponse.result;
       const responseCorrelation = resolveClientCorrelation({
@@ -4886,7 +4945,7 @@
         payload_source: resolvedResponse.source,
         payload_reason_code: resolvedResponse.source_reason_code
       });
-      const ingestedResult = handleToolResultAndMaybeScheduleBootstrapRetry(normalizedRaw, {
+      const ingestedResult = handleToolResultAndMaybeScheduleBootstrapRetry(payloadForIngest, {
         source: "call_run_step",
         client_action_id: clientActionId,
         request_id: requestId
@@ -4947,15 +5006,17 @@
         ordering_before: describeBootstrapOrdering(orderingBeforeIngest),
         ordering_after: describeBootstrapOrdering(orderingAfterIngest)
       });
-      setWidgetStateSafe({
-        ui_action_liveness_ack_status: liveness.ack_status,
-        ui_action_liveness_state_advanced: liveness.state_advanced ? "true" : "false",
-        ui_action_liveness_reason_code: liveness.reason_code,
-        ui_action_liveness_failure_class: livenessNotice.failure_class,
-        ui_action_liveness_action_code: liveness.action_code_echo,
-        ui_action_liveness_client_action_id: liveness.client_action_id_echo
-      });
-      if (hasExplicitError) {
+      if (!isBackgroundDispatch) {
+        setWidgetStateSafe({
+          ui_action_liveness_ack_status: liveness.ack_status,
+          ui_action_liveness_state_advanced: liveness.state_advanced ? "true" : "false",
+          ui_action_liveness_reason_code: liveness.reason_code,
+          ui_action_liveness_failure_class: livenessNotice.failure_class,
+          ui_action_liveness_action_code: liveness.action_code_echo,
+          ui_action_liveness_client_action_id: liveness.client_action_id_echo
+        });
+      }
+      if (!isBackgroundDispatch && hasExplicitError) {
         console.warn("[ui_action_liveness_explicit_error]", {
           action_code: liveness.action_code_echo,
           client_action_id: liveness.client_action_id_echo,
@@ -4995,7 +5056,7 @@
           });
         }
         if (transientRetryError) return;
-      } else {
+      } else if (!isBackgroundDispatch) {
         if (isStartAction) {
           setWidgetStateSafe({
             start_dispatch_state: "ready",
@@ -5008,6 +5069,9 @@
       const msg = e && e.message ? String(e.message) : "";
       const lowerMsg = msg.toLowerCase();
       const transportError = lowerMsg.includes("bridge unavailable") || lowerMsg.includes("bridge timeout") || lowerMsg.includes("transport");
+      if (isBackgroundDispatch) {
+        return;
+      }
       if (isStartAction && transportError) {
         console.log("[ui_start_dispatch_failed]", {
           reason: "transport_error",
@@ -5044,7 +5108,7 @@
         bootstrapPollInFlightSignature = "";
       }
       if (timeoutId) clearTimeout(timeoutId);
-      if (!didTimeout) setLoading(false);
+      if (!didTimeout && !isBackgroundDispatch) setLoading(false);
     }
   }
 
@@ -6816,6 +6880,69 @@ ${String(item || "").trim()}`.trim())
   }
 
   // ui/lib/main.ts
+  var pendingStep0PrewarmTimer = null;
+  var pendingStep0PrewarmKey = "";
+  var inFlightStep0PrewarmKey = "";
+  function clearPendingStep0Prewarm() {
+    if (pendingStep0PrewarmTimer) {
+      clearTimeout(pendingStep0PrewarmTimer);
+      pendingStep0PrewarmTimer = null;
+    }
+  }
+  function latestStep0PrewarmState() {
+    const state = latestWidgetState();
+    return {
+      currentStep: String(state.current_step || ""),
+      started: String(state.started || "false"),
+      initialUserMessage: String(state.initial_user_message || "")
+    };
+  }
+  function maybeScheduleStep0Prewarm() {
+    const inputEl2 = document.getElementById("input");
+    if (!inputEl2) return;
+    const rawValue = String(inputEl2.value || "");
+    const state = latestStep0PrewarmState();
+    const schedule = shouldScheduleStep0Prewarm({
+      currentStep: state.currentStep,
+      started: state.started,
+      inputValue: rawValue,
+      lastScheduledKey: pendingStep0PrewarmKey,
+      inFlightKey: inFlightStep0PrewarmKey
+    });
+    if (!schedule.shouldSchedule) {
+      if (!schedule.key) pendingStep0PrewarmKey = "";
+      clearPendingStep0Prewarm();
+      return;
+    }
+    clearPendingStep0Prewarm();
+    pendingStep0PrewarmTimer = setTimeout(() => {
+      pendingStep0PrewarmTimer = null;
+      const liveInput = document.getElementById("input");
+      if (!liveInput) return;
+      const liveValue = String(liveInput.value || "");
+      const liveKey = buildStep0PrewarmKey(liveValue);
+      const liveState = latestStep0PrewarmState();
+      if (liveKey !== schedule.key) return;
+      if (String(liveState.currentStep || "") !== "step_0") return;
+      if (String(liveState.started || "false").trim().toLowerCase() === "true") return;
+      if (liveKey === String(liveState.initialUserMessage || "").trim()) {
+        pendingStep0PrewarmKey = liveKey;
+        return;
+      }
+      inFlightStep0PrewarmKey = liveKey;
+      pendingStep0PrewarmKey = liveKey;
+      void callRunStep(
+        ACTION_STEP0_PREWARM,
+        {
+          initial_user_message: liveKey,
+          __step0_prewarm: "true"
+        },
+        { background: true }
+      ).finally(() => {
+        if (inFlightStep0PrewarmKey === liveKey) inFlightStep0PrewarmKey = "";
+      });
+    }, STEP0_PREWARM_DEBOUNCE_MS);
+  }
   initActionsConfig({ render, t });
   var isLocalDev = globalThis.LOCAL_DEV === "1" || typeof location !== "undefined" && location.hostname === "localhost";
   async function callToolViaLocalMcp(toolName, toolArgs) {
@@ -7073,6 +7200,7 @@ ${String(item || "").trim()}`.trim())
     if (input?.disabled === true || input?.readOnly === true) return;
     const inputVal = (input?.value || "").trim();
     if (!inputVal) return;
+    clearPendingStep0Prewarm();
     const submitActionCode = actionCodeFromState("ui_action_text_submit");
     const submitPayloadMode = actionPayloadModeFromState("ui_action_text_submit") || "text";
     if (!submitActionCode) {
@@ -7112,7 +7240,10 @@ ${String(item || "").trim()}`.trim())
   }
   var inputEl = document.getElementById("input");
   if (inputEl) {
-    const sync = () => syncSendButtonState(inputEl);
+    const sync = () => {
+      syncSendButtonState(inputEl);
+      maybeScheduleStep0Prewarm();
+    };
     inputEl.addEventListener("input", sync);
     inputEl.addEventListener("change", sync);
     inputEl.addEventListener("keydown", (event) => {
@@ -7168,6 +7299,7 @@ ${String(item || "").trim()}`.trim())
   if (btnStart) {
     btnStart.addEventListener("click", () => {
       if (getIsLoading()) return;
+      clearPendingStep0Prewarm();
       const actionCode = actionCodeFromState("ui_action_start");
       if (!actionCode) {
         console.warn("[ui_action_missing]", { state_key: "ui_action_start" });

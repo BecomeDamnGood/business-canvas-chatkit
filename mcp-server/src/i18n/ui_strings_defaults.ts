@@ -96,15 +96,26 @@ const UI_STRINGS_BASE: Record<string, string> = {
   compareDreamBuilderMergeInstruction:
     "Choose whether you want to keep both similar statements or merge them into one stronger statement.",
   compareSuggestionLabel: "This would be my suggestion:",
-  compareInstruction: "Choose the version that feels closest to what you mean.",
-  "compare.choice.context.default": "Please choose the wording that fits best.",
+  compareInstruction:
+    "Choose the version that feels closest to what you mean. You can keep your own wording if that fits best.",
+  "compare.choice.context.default": "Choose the wording that fits best for you.",
   "compare.feedback.compare.intro.template":
     "Here is a comparison for your {0}.",
-  "compare.feedback.user_pick.ack.default": "Your wording has been kept.",
+  "compare.feedback.user_pick.ack.default": "Keeping your own wording is completely okay.",
   "compare.feedback.user_pick.nudge.template":
     "You can refine it further if you want.",
   "compare.feedback.user_pick.reason.default":
-    "The wording stays aligned with this step.",
+    "If you continue with it, keep the wording clear, human-centered, and specific enough for this step.",
+  "compare.feedback.reason.soft.provider_future.default":
+    "I can see the direction, and for this step it helps to make the wording broader, more human-centered, and clearer about the future you want to create.",
+  "compare.feedback.reason.soft.more_focus.default":
+    "I can see the direction, and a little more focus would make this easier to use in this step.",
+  "compare.feedback.reason.soft.more_specific.default":
+    "I can see what you mean, and a little more specificity would make this easier to use in this step.",
+  "compare.feedback.reason.soft.targetgroup.too_broad.default":
+    "I can see the direction, and one more layer of focus would make this target group easier to act on.",
+  "compare.feedback.reason.soft.targetgroup.too_generic.default":
+    "I can see who you have in mind, and a bit more focus would make this target group much easier to work with.",
   "compare.feedback.dream_builder.rewrite.default":
     "This suggestion broadens the wording for this step.",
   "generic.choicePrompt.shareOrOption": "Share your thoughts or choose an option",

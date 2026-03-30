@@ -10,6 +10,7 @@ import { isSingleValueCompareStep } from "../steps/step_registry.js";
 import {
   formatCompareFeedbackForDisplay,
   formatUserPickFeedbackForDisplay,
+  isMeaningfulUserPickFeedbackText,
   sanitizeFeedbackReasonForDisplay,
   sanitizeUserPickFeedbackTextForDisplay,
 } from "../core/feedback_display.js";
@@ -1752,9 +1753,38 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
     return "";
   }
 
+  function resolveFeedbackReasonFromPendingCompare(
+    state: CanvasState,
+    prev: Record<string, unknown>
+  ): string {
+    const resolveString = (key: string, fallback = "") =>
+      deps.uiStringFromStateMap(state, key, fallback || deps.uiDefaultString(key, fallback));
+    const stepId = String((state as any)?.current_step || "").trim();
+    const candidates = [readPendingInteractionState(state), readPendingInteractionState(prev)]
+      .map((pending) => String(pending?.render_model.feedback_reason_text || "").trim())
+      .filter(Boolean);
+    for (const candidate of candidates) {
+      const sanitized = sanitizeFeedbackReasonForDisplay({
+        stepId,
+        rawReason: normalizeCompactFeedbackSentence(candidate, ""),
+        resolveString,
+      });
+      if (sanitized) return sanitized;
+    }
+    return "";
+  }
+
   function userPickFeedbackReason(state: CanvasState, prev: Record<string, unknown>): string {
     const explicitReason = resolveFeedbackReasonFromSpecialist(state, prev);
     if (explicitReason) return explicitReason;
+    const pendingReason = resolveFeedbackReasonFromPendingCompare(state, prev);
+    if (pendingReason) return pendingReason;
+    const messageReason = feedbackReasonFromMessage({
+      stepId: String((state as any)?.current_step || "").trim(),
+      state,
+      message: String(prev.message || ""),
+    });
+    if (messageReason) return messageReason;
     return "";
   }
 
@@ -1986,21 +2016,34 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
     state: CanvasState,
     prev: Record<string, unknown>,
     activeSpecialist = "",
-    telemetry?: unknown
+    telemetry?: unknown,
+    selectedValueOverride = ""
   ): string {
     void telemetry;
-    const compare = readPendingInteractionState(prev);
-    const selectedValue = String(compare?.render_model.user_text || prev.refined_formulation || "").trim();
+    const compareFromState = readPendingInteractionState(state);
+    const compareFromPrev = readPendingInteractionState(prev);
+    const selectedValue = String(
+      selectedValueOverride ||
+      compareFromState?.render_model.user_text ||
+      compareFromPrev?.render_model.user_text ||
+      prev.refined_formulation ||
+      ""
+    ).trim();
     const selection = deps.compareSelectionMessage(stepId, state, activeSpecialist, selectedValue);
-    const explicitUserPickFeedback = sanitizeUserPickFeedbackTextForDisplay(
-      String(prev.user_pick_feedback_text || "").trim()
-    );
+    const resolveString = (key: string, fallback = "") =>
+      deps.uiStringFromStateMap(state, key, fallback || deps.uiDefaultString(key, fallback));
+    const explicitUserPickFeedbackRaw = String(prev.user_pick_feedback_text || "").trim();
+    const explicitUserPickFeedback = isMeaningfulUserPickFeedbackText({
+      stepId,
+      rawText: explicitUserPickFeedbackRaw,
+      resolveString,
+    })
+      ? sanitizeUserPickFeedbackTextForDisplay(explicitUserPickFeedbackRaw)
+      : "";
     if (explicitUserPickFeedback) {
       return [explicitUserPickFeedback, selection].filter((part) => String(part || "").trim()).join("\n\n").trim();
     }
     const rawFeedbackReason = userPickFeedbackReason(state, prev);
-    const resolveString = (key: string, fallback = "") =>
-      deps.uiStringFromStateMap(state, key, fallback || deps.uiDefaultString(key, fallback));
     const feedbackReason = formatUserPickFeedbackForDisplay({
       stepId,
       rawReason: rawFeedbackReason,
@@ -2588,6 +2631,7 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
           message: selectedMessage,
           refined_formulation: chosen,
           feedback_reason_text: pickedUser ? userPickFeedbackReason(state, prevRaw) : "",
+          user_pick_feedback_text: pickedUser ? String(prevRaw.user_pick_feedback_text || "").trim() : "",
           statements: composedItems,
         },
         stepId,
@@ -2717,6 +2761,7 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
           message: selectedMessage,
           refined_formulation: chosen,
           feedback_reason_text: pickedUser ? userPickFeedbackReason(state, prevRaw) : "",
+          user_pick_feedback_text: pickedUser ? String(prevRaw.user_pick_feedback_text || "").trim() : "",
           ...(mode === "list" ? { statements: composedItems } : {}),
         },
         stepId,
@@ -2824,7 +2869,14 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
     const chosenRaw = stepId === deps.entityStepId ? deps.normalizeEntityPhrase(rawChosen) || rawChosen : rawChosen;
     const chosen = stripMarkupPreserveLines(chosenRaw);
     if (!chosen) return { handled: false, specialist: prevRaw, nextState: state };
-    const userFeedback = userChoiceFeedbackMessage(stepId, state, prevRaw, activeSpecialist, params.telemetry);
+    const userFeedback = userChoiceFeedbackMessage(
+      stepId,
+      state,
+      prevRaw,
+      activeSpecialist,
+      params.telemetry,
+      chosen
+    );
     const selectedMessage = pickedUser
       ? userFeedback
       : deps.compareSelectionMessage(stepId, state, activeSpecialist, chosen);
@@ -2835,6 +2887,7 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
         message: selectedMessage,
         refined_formulation: chosen,
         feedback_reason_text: pickedUser ? userPickFeedbackReason(state, prevRaw) : "",
+        user_pick_feedback_text: pickedUser ? String(prevRaw.user_pick_feedback_text || "").trim() : "",
         ...(mode === "list" ? { statements: mergedPickedItems } : {}),
       },
       stepId,

@@ -1,4 +1,7 @@
-import { __hasInjectedTestClient, callStrictJson, type LLMUsage } from "../core/llm.js";
+import { loadModule as loadCld3 } from "cld3-asm";
+import type { ZodType } from "zod";
+
+import { __hasInjectedTestClient, callStrictJson, type LLMUsage, type StrictJsonSchema } from "../core/llm.js";
 import { normalizeDreamBuilderStatements, type CanvasState } from "../core/state.js";
 import type { OrchestratorOutput } from "../core/orchestrator.js";
 
@@ -243,6 +246,296 @@ function isPlannerContextDedupEnabled(): boolean {
   return String(process.env.BSC_DEDUP_CONTEXT_PLANNER_V1 || "1").trim() !== "0";
 }
 
+const LANGUAGE_GUARD_EXCLUDED_KEYS = new Set([
+  "action",
+  "feedback_mode",
+  "step_support_state",
+  "wants_recap",
+  "is_offtopic",
+  "user_intent",
+  "meta_topic",
+  "recognized",
+  "status",
+  "scoring_phase",
+  "suggest_dreambuilder",
+  "user_state",
+  "selected_option",
+  "submit_action",
+  "submit_enabled",
+  "__content_locale",
+  "__content_language",
+  "content_locale",
+  "content_language",
+]);
+
+const LANGUAGE_GUARD_MIN_ALPHA = 8;
+let _languageGuardCld3Promise: Promise<any> | null = null;
+let _languageGuardIdentifier: any | null = null;
+
+function normalizeLanguageGuardCode(raw: string): string {
+  return String(raw || "")
+    .trim()
+    .toLowerCase()
+    .split("-")[0]
+    .trim();
+}
+
+function countAlphabeticChars(input: string): number {
+  return (String(input || "").match(/\p{L}/gu) || []).length;
+}
+
+function isMachineLikeLanguageGuardValue(raw: string): boolean {
+  const value = String(raw || "").trim();
+  if (!value) return true;
+  if (/^(__ROUTE__|ACTION_|choice:)/i.test(value)) return true;
+  if (/^https?:\/\//i.test(value)) return true;
+  if (/^\{[0-9]+\}$/.test(value)) return true;
+  if (/^(true|false|existing|starting)$/i.test(value)) return true;
+  return false;
+}
+
+function collectUserFacingLanguageGuardStrings(value: unknown, currentKey = ""): string[] {
+  if (typeof value === "string") {
+    if (LANGUAGE_GUARD_EXCLUDED_KEYS.has(currentKey)) return [];
+    if (isMachineLikeLanguageGuardValue(value)) return [];
+    return [String(value || "").trim()].filter(Boolean);
+  }
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => collectUserFacingLanguageGuardStrings(item, currentKey));
+  }
+  if (value && typeof value === "object") {
+    return Object.entries(value as Record<string, unknown>).flatMap(([key, child]) =>
+      collectUserFacingLanguageGuardStrings(child, String(key || "").trim())
+    );
+  }
+  return [];
+}
+
+async function getLanguageGuardIdentifier(): Promise<any> {
+  if (_languageGuardIdentifier) return _languageGuardIdentifier;
+  if (!_languageGuardCld3Promise) {
+    _languageGuardCld3Promise = loadCld3();
+  }
+  const factory = await _languageGuardCld3Promise;
+  _languageGuardIdentifier = factory.create(0, 512);
+  return _languageGuardIdentifier;
+}
+
+export async function detectLanguageGuardLanguage(text: string): Promise<{ lang: string; confident: boolean }> {
+  const raw = String(text || "").trim();
+  if (!raw || countAlphabeticChars(raw) < LANGUAGE_GUARD_MIN_ALPHA) {
+    return { lang: "", confident: false };
+  }
+  try {
+    const id = await getLanguageGuardIdentifier();
+    const res = id.findLanguage(raw) || {};
+    const lang = normalizeLanguageGuardCode(String(res.language || ""));
+    const probability =
+      typeof res.probability === "number" ? res.probability :
+      typeof res.prob === "number" ? res.prob : 0;
+    const reliable =
+      typeof res.isReliable === "boolean" ? res.isReliable :
+      typeof res.is_reliable === "boolean" ? res.is_reliable : false;
+    return { lang, confident: Boolean(lang && (reliable || probability >= 0.7)) };
+  } catch {
+    return { lang: "", confident: false };
+  }
+}
+
+export async function shouldNormalizeSpecialistResultLanguage(params: {
+  specialistResult: Record<string, unknown>;
+  targetLanguage: string;
+  detectLanguage?: (text: string) => Promise<{ lang: string; confident: boolean }>;
+}): Promise<boolean> {
+  const targetLanguage = normalizeLanguageGuardCode(params.targetLanguage);
+  if (!targetLanguage || targetLanguage === "und") return false;
+  const detectLanguage = params.detectLanguage || detectLanguageGuardLanguage;
+  const userFacingStrings = collectUserFacingLanguageGuardStrings(params.specialistResult);
+  for (const candidate of userFacingStrings) {
+    if (countAlphabeticChars(candidate) < LANGUAGE_GUARD_MIN_ALPHA) continue;
+    const detected = await detectLanguage(candidate);
+    const detectedLanguage = normalizeLanguageGuardCode(String(detected.lang || ""));
+    if (detected.confident && detectedLanguage && detectedLanguage !== targetLanguage) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function mergeUsageLocal(first: LLMUsage, second: LLMUsage): LLMUsage {
+  const inputUnknown = first.input_tokens === null || second.input_tokens === null;
+  const outputUnknown = first.output_tokens === null || second.output_tokens === null;
+  const totalUnknown = first.total_tokens === null || second.total_tokens === null;
+  return {
+    input_tokens: inputUnknown ? null : (first.input_tokens || 0) + (second.input_tokens || 0),
+    output_tokens: outputUnknown ? null : (first.output_tokens || 0) + (second.output_tokens || 0),
+    total_tokens: totalUnknown ? null : (first.total_tokens || 0) + (second.total_tokens || 0),
+    provider_available: first.provider_available || second.provider_available,
+  };
+}
+
+function buildLanguageRepairInstructions(schemaName: string): string {
+  const specialStep0Rule =
+    schemaName === "ValidationAndBusinessName"
+      ? [
+          "- The field step_0 uses a fixed storage pattern.",
+          '- Keep the exact keys/tokens "Venture:", "Name:", "Status:" and the exact status values "existing" / "starting".',
+          "- Do not break or restructure the step_0 line.",
+        ].join("\n")
+      : "";
+  return [
+    "SPECIALIST OUTPUT LANGUAGE REPAIR (HARD)",
+    "- You receive valid JSON that already matches the schema exactly.",
+    "- Translate every user-facing JSON string value into LANGUAGE.",
+    "- Keep the JSON structure exactly unchanged.",
+    "- Do NOT change keys, enum values, booleans, numbers, route tokens, action codes, placeholders, URLs, or control fields.",
+    "- Do NOT translate or alter the product name 'The Business Strategy Canvas Builder'.",
+    "- Do NOT translate business names or proper names.",
+    "- If a string is already in LANGUAGE, keep it as-is.",
+    "- Never mix languages across user-facing strings in the result.",
+    specialStep0Rule,
+    "- Return ONLY valid JSON matching the schema exactly.",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+function buildLanguageRepairPlannerInput(params: {
+  targetLanguage: string;
+  specialistResult: Record<string, unknown>;
+  state: CanvasState;
+}): string {
+  const businessName = String((params.state as any).business_name || "").trim();
+  return [
+    `LANGUAGE: ${params.targetLanguage}`,
+    businessName && businessName !== "TBD" ? `BUSINESS_NAME: ${businessName}` : "",
+    "CURRENT_JSON:",
+    JSON.stringify(params.specialistResult),
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+export async function normalizeSpecialistResultLanguage<T>(params: {
+  specialistResult: T;
+  targetLanguage: string;
+  model: string;
+  schemaName: string;
+  jsonSchema: StrictJsonSchema;
+  zodSchema: ZodType<T>;
+  state: CanvasState;
+  detectLanguage?: (text: string) => Promise<{ lang: string; confident: boolean }>;
+}): Promise<{
+  specialistResult: T;
+  attempts: number;
+  usage: LLMUsage;
+  normalized: boolean;
+}> {
+  const targetLanguage = normalizeLanguageGuardCode(params.targetLanguage);
+  if (!targetLanguage || targetLanguage === "und") {
+    return {
+      specialistResult: params.specialistResult,
+      attempts: 0,
+      usage: { input_tokens: 0, output_tokens: 0, total_tokens: 0, provider_available: false },
+      normalized: false,
+    };
+  }
+
+  const specialistResultRecord =
+    params.specialistResult && typeof params.specialistResult === "object"
+      ? (params.specialistResult as Record<string, unknown>)
+      : {};
+  const shouldNormalize = await shouldNormalizeSpecialistResultLanguage({
+    specialistResult: specialistResultRecord,
+    targetLanguage,
+    detectLanguage: params.detectLanguage,
+  });
+  if (!shouldNormalize) {
+    return {
+      specialistResult: params.specialistResult,
+      attempts: 0,
+      usage: { input_tokens: 0, output_tokens: 0, total_tokens: 0, provider_available: false },
+      normalized: false,
+    };
+  }
+
+  const repaired = await callStrictJson<T>({
+    model: params.model,
+    instructions: buildLanguageRepairInstructions(params.schemaName),
+    includeGlossary: false,
+    plannerInput: buildLanguageRepairPlannerInput({
+      targetLanguage,
+      specialistResult: specialistResultRecord,
+      state: params.state,
+    }),
+    schemaName: `${params.schemaName}LanguageRepair`,
+    jsonSchema: params.jsonSchema,
+    zodSchema: params.zodSchema,
+    temperature: 0,
+    topP: 1,
+    maxOutputTokens: 10000,
+    debugLabel: `${params.schemaName}:language_repair`,
+  });
+
+  return {
+    specialistResult: repaired.data,
+    attempts: repaired.attempts,
+    usage: repaired.usage,
+    normalized: true,
+  };
+}
+
+async function callLocalizedStrictJson<T>(params: {
+  model: string;
+  state: CanvasState;
+  targetLanguage: string;
+  instructions: string;
+  includeGlossary: boolean;
+  plannerInput: string;
+  schemaName: string;
+  jsonSchema: StrictJsonSchema;
+  zodSchema: ZodType<T>;
+  temperature: number;
+  topP: number;
+  maxOutputTokens: number;
+  debugLabel: string;
+  enableLanguageGuard?: boolean;
+}): Promise<{ data: T; attempts: number; usage: LLMUsage }> {
+  const res = await callStrictJson<T>({
+    model: params.model,
+    instructions: params.instructions,
+    includeGlossary: params.includeGlossary,
+    plannerInput: params.plannerInput,
+    schemaName: params.schemaName,
+    jsonSchema: params.jsonSchema,
+    zodSchema: params.zodSchema,
+    temperature: params.temperature,
+    topP: params.topP,
+    maxOutputTokens: params.maxOutputTokens,
+    debugLabel: params.debugLabel,
+  });
+
+  if (params.enableLanguageGuard === false) {
+    return { data: res.data, attempts: res.attempts, usage: res.usage };
+  }
+
+  const normalized = await normalizeSpecialistResultLanguage<T>({
+    specialistResult: res.data,
+    targetLanguage: params.targetLanguage,
+    model: params.model,
+    schemaName: params.schemaName,
+    jsonSchema: params.jsonSchema,
+    zodSchema: params.zodSchema,
+    state: params.state,
+  });
+
+  return {
+    data: normalized.specialistResult,
+    attempts: res.attempts + normalized.attempts,
+    usage: mergeUsageLocal(res.usage, normalized.usage),
+  };
+}
+
 export function composeSpecialistInstructions(
   baseInstructions: string,
   contextBlock: string,
@@ -262,6 +555,40 @@ export function composeSpecialistInstructions(
   blocks.push(instructionBlocks.metaTopicContractInstruction);
   blocks.push(instructionBlocks.offtopicFlagContractInstruction);
   return blocks.join("\n\n");
+}
+
+export function shouldIncludeBigWhyGlossary(userMessage: string): boolean {
+  return !String(userMessage || "").trim().startsWith("__SHORTEN_BIGWHY__");
+}
+
+export function shouldIncludeGlossaryForInternalRoute(
+  specialist: string,
+  userMessage: string
+): boolean {
+  const normalizedSpecialist = String(specialist || "").trim();
+  const normalizedUserMessage = String(userMessage || "").trim();
+
+  if (normalizedSpecialist === BIGWHY_SPECIALIST) {
+    return shouldIncludeBigWhyGlossary(normalizedUserMessage);
+  }
+
+  if (normalizedSpecialist === DREAM_SPECIALIST) {
+    return !normalizedUserMessage.startsWith("__ROUTE__DREAM_FORCE_REFINE__");
+  }
+
+  if (normalizedSpecialist === DREAM_EXPLAINER_SPECIALIST) {
+    return !(
+      normalizedUserMessage.startsWith("__ROUTE__DREAM_EXPLAINER_MULTI_REWRITE_REPAIR__") ||
+      normalizedUserMessage.startsWith("__ROUTE__DREAM_EXPLAINER_OVERLAP_REPAIR__") ||
+      normalizedUserMessage.startsWith("__ROUTE__DREAM_EXPLAINER_CLUSTER_THEME_REPAIR__")
+    );
+  }
+
+  if (normalizedSpecialist === STRATEGY_SPECIALIST) {
+    return !normalizedUserMessage.startsWith("__ROUTE__STRATEGY_CONSOLIDATE__");
+  }
+
+  return true;
 }
 
 export async function callSpecialistStrict(
@@ -346,8 +673,10 @@ export async function callSpecialistStrict(
     const langExplicit = String((state as any).language ?? "").trim();
     const plannerInput = buildStep0SpecialistInput(userMessage, langExplicit ? lang : "");
 
-    const res = await callStrictJson<ValidationAndBusinessNameOutput>({
+    const res = await callLocalizedStrictJson<ValidationAndBusinessNameOutput>({
       model,
+      state,
+      targetLanguage: lang,
       instructions: composeInstructions(VALIDATION_AND_BUSINESS_NAME_INSTRUCTIONS),
       includeGlossary: false,
       plannerInput,
@@ -367,8 +696,10 @@ export async function callSpecialistStrict(
     const langExplicit = String((state as any).language ?? "").trim();
     const plannerInput = buildStep0BootstrapSpecialistInput(userMessage, langExplicit ? lang : "");
 
-    const res = await callStrictJson<Step0BootstrapExtractionOutput>({
+    const res = await callLocalizedStrictJson<Step0BootstrapExtractionOutput>({
       model,
+      state,
+      targetLanguage: lang,
       instructions: composeInstructions(STEP_0_BOOTSTRAP_INSTRUCTIONS),
       includeGlossary: false,
       plannerInput,
@@ -379,6 +710,7 @@ export async function callSpecialistStrict(
       topP: 1,
       maxOutputTokens: 400,
       debugLabel: "Step0BootstrapExtractor",
+      enableLanguageGuard: false,
     });
 
     return { specialistResult: res.data, attempts: res.attempts, usage: res.usage, model };
@@ -395,8 +727,10 @@ export async function callSpecialistStrict(
       language: langExplicit ? lang : "",
     });
 
-    const res = await callStrictJson<Step0TurnIntentOutput>({
+    const res = await callLocalizedStrictJson<Step0TurnIntentOutput>({
       model,
+      state,
+      targetLanguage: lang,
       instructions: composeInstructions(STEP_0_TURN_INTENT_INSTRUCTIONS),
       includeGlossary: false,
       plannerInput,
@@ -407,6 +741,7 @@ export async function callSpecialistStrict(
       topP: 1,
       maxOutputTokens: 120,
       debugLabel: "Step0TurnIntentClassifier",
+      enableLanguageGuard: false,
     });
 
     return { specialistResult: res.data, attempts: res.attempts, usage: res.usage, model };
@@ -421,10 +756,12 @@ export async function callSpecialistStrict(
       langExplicitDream ? lang : ""
     );
 
-    const res = await callStrictJson<DreamOutput>({
+    const res = await callLocalizedStrictJson<DreamOutput>({
       model,
+      state,
+      targetLanguage: lang,
       instructions: composeInstructions(DREAM_INSTRUCTIONS),
-      includeGlossary: true,
+      includeGlossary: shouldIncludeGlossaryForInternalRoute(specialist, userMessage),
       plannerInput,
       schemaName: "Dream",
       jsonSchema: DreamJsonSchema as any,
@@ -493,12 +830,14 @@ export async function callSpecialistStrict(
       plannerDreamRuntimeMode
     );
 
-    const res = await callStrictJson<DreamExplainerOutput>({
+    const res = await callLocalizedStrictJson<DreamExplainerOutput>({
       model,
+      state,
+      targetLanguage: lang,
       instructions: composeInstructions(DREAM_EXPLAINER_INSTRUCTIONS, {
         includeUniversalMeta: true,
       }),
-      includeGlossary: true,
+      includeGlossary: shouldIncludeGlossaryForInternalRoute(specialist, userMessage),
       plannerInput,
       schemaName: "DreamExplainer",
       jsonSchema: DreamExplainerJsonSchema as any,
@@ -520,8 +859,10 @@ export async function callSpecialistStrict(
       lang
     );
 
-    const res = await callStrictJson<PurposeOutput>({
+    const res = await callLocalizedStrictJson<PurposeOutput>({
       model,
+      state,
+      targetLanguage: lang,
       instructions: composeInstructions(PURPOSE_INSTRUCTIONS, {
         includeUniversalMeta: true,
       }),
@@ -547,12 +888,14 @@ export async function callSpecialistStrict(
       lang
     );
 
-    const res = await callStrictJson<BigWhyOutput>({
+    const res = await callLocalizedStrictJson<BigWhyOutput>({
       model,
+      state,
+      targetLanguage: lang,
       instructions: composeInstructions(BIGWHY_INSTRUCTIONS, {
         includeUniversalMeta: true,
       }),
-      includeGlossary: !String(userMessage || "").trim().startsWith("__SHORTEN_BIGWHY__"),
+      includeGlossary: shouldIncludeGlossaryForInternalRoute(specialist, userMessage),
       plannerInput,
       schemaName: "BigWhy",
       jsonSchema: BigWhyJsonSchema as any,
@@ -574,8 +917,10 @@ export async function callSpecialistStrict(
       lang
     );
 
-    const res = await callStrictJson<RoleOutput>({
+    const res = await callLocalizedStrictJson<RoleOutput>({
       model,
+      state,
+      targetLanguage: lang,
       instructions: composeInstructions(ROLE_INSTRUCTIONS, {
         includeUniversalMeta: true,
       }),
@@ -601,8 +946,10 @@ export async function callSpecialistStrict(
       lang
     );
 
-    const res = await callStrictJson<EntityOutput>({
+    const res = await callLocalizedStrictJson<EntityOutput>({
       model,
+      state,
+      targetLanguage: lang,
       instructions: composeInstructions(ENTITY_INSTRUCTIONS, {
         includeUniversalMeta: true,
       }),
@@ -631,12 +978,14 @@ export async function callSpecialistStrict(
       statementsFromLast
     );
 
-    const res = await callStrictJson<StrategyOutput>({
+    const res = await callLocalizedStrictJson<StrategyOutput>({
       model,
+      state,
+      targetLanguage: lang,
       instructions: composeInstructions(STRATEGY_INSTRUCTIONS, {
         includeUniversalMeta: true,
       }),
-      includeGlossary: true,
+      includeGlossary: shouldIncludeGlossaryForInternalRoute(specialist, userMessage),
       plannerInput,
       schemaName: "Strategy",
       jsonSchema: StrategyJsonSchema as any,
@@ -659,8 +1008,10 @@ export async function callSpecialistStrict(
       plannerContextBlock
     );
 
-    const res = await callStrictJson<TargetGroupOutput>({
+    const res = await callLocalizedStrictJson<TargetGroupOutput>({
       model,
+      state,
+      targetLanguage: lang,
       instructions: composeInstructions(TARGETGROUP_INSTRUCTIONS, {
         includeUniversalMeta: true,
       }),
@@ -690,8 +1041,10 @@ export async function callSpecialistStrict(
       plannerContextBlock
     );
 
-    const res = await callStrictJson<ProductsServicesOutput>({
+    const res = await callLocalizedStrictJson<ProductsServicesOutput>({
       model,
+      state,
+      targetLanguage: lang,
       instructions: composeInstructions(PRODUCTSSERVICES_INSTRUCTIONS, {
         includeUniversalMeta: true,
       }),
@@ -720,8 +1073,10 @@ export async function callSpecialistStrict(
       statementsFromLast
     );
 
-    const res = await callStrictJson<RulesOfTheGameOutput>({
+    const res = await callLocalizedStrictJson<RulesOfTheGameOutput>({
       model,
+      state,
+      targetLanguage: lang,
       instructions: composeInstructions(RULESOFTHEGAME_INSTRUCTIONS, {
         includeUniversalMeta: true,
       }),
@@ -767,8 +1122,10 @@ export async function callSpecialistStrict(
       lang
     );
 
-    const res = await callStrictJson<PresentationOutput>({
+    const res = await callLocalizedStrictJson<PresentationOutput>({
       model,
+      state,
+      targetLanguage: lang,
       instructions: composeInstructions(PRESENTATION_INSTRUCTIONS, {
         includeUniversalMeta: true,
       }),

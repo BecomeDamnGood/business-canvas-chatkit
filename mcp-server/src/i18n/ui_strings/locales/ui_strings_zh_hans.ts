@@ -185,13 +185,14 @@ export const UI_STRINGS_LOCALE_ZH_HANS: Record<string, string> = {
     "uiSubtitle": "请使用“商业战略画布构建器”小组件继续（不要使用聊天框）",
     "uiTitle.template": "商业战略画布构建器",
     "uiUseWidgetToContinue": "请使用“商业战略画布构建器”小组件继续（不要使用聊天框）。",
-    "compare.choice.context.default": "请选择最合适的表述。",
+    "compare.choice.context.default": "请选择对你来说最合适的表述。",
     "compare.feedback.compare.intro.template":
       "这里是针对你的 {0} 的对比。",
-    "compare.feedback.user_pick.ack.default": "你的表述已被保留。",
+    "compare.feedback.user_pick.ack.default": "保留你自己的表述完全没问题。",
     "compare.feedback.dream_builder.rewrite.default":
       "这个建议会为这一步把表述放宽一些。",
-    "compare.feedback.user_pick.reason.default": "这个表述仍然符合这一步。",
+    "compare.feedback.user_pick.reason.default":
+      "如果你继续使用它，请记得让这句话保持清晰、以人为中心，并且对这一步来说足够具体。",
     "compare.chooseVersion": "选择这个版本",
     "compare.useInputFallback": "使用这个输入",
     "compareHeading": "这是你的输入：",
@@ -199,6 +200,7 @@ export const UI_STRINGS_LOCALE_ZH_HANS: Record<string, string> = {
     "compareGroupedCompareSuggestionLabel": "这是我的建议：",
     "compareGroupedCompareInstruction": "请选择最适合剩余差异的版本。",
     "compareGroupedCompareRetainedHeading": "这些要点已经会保留在最终列表中：",
-    "compareInstruction": "请选择最适合你的版本。",
+    "compareInstruction":
+      "请选择最接近你本意的版本。如果你自己的表述更合适，也可以保留它。",
     "compareSuggestionLabel": "这是我的建议：",
 } as const;

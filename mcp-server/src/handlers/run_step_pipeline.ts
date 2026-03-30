@@ -326,6 +326,32 @@ export function shouldForcePendingCompareFromIntent(params: {
   return intent === "feedback_on_suggestion" || intent === "reject_suggestion_explicit";
 }
 
+export function shouldAttemptDreamForceRefine(params: {
+  isOfftopic: boolean;
+  isMetaFallback: boolean;
+  hasContributingInput: boolean;
+  candidateMissing: boolean;
+}): boolean {
+  return (
+    !params.isOfftopic &&
+    !params.isMetaFallback &&
+    params.hasContributingInput &&
+    params.candidateMissing
+  );
+}
+
+export function shouldClassifyDreamAcceptedOutputTurn(params: {
+  isOfftopic: boolean;
+  isMetaFallback: boolean;
+  candidateMissing: boolean;
+}): boolean {
+  return (
+    !params.isOfftopic &&
+    !params.isMetaFallback &&
+    params.candidateMissing
+  );
+}
+
 export function resolveProvisionalSourceForTurn(params: {
   actionCodeRaw: string;
   submittedTextIntent: string;
@@ -1274,15 +1300,29 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
         userMessage,
         specialistResult,
       });
-      const dreamTurnClassification = await deps.classifyAcceptedOutputUserTurn({
-        model: params.model,
-        stepId: deps.dreamStepId,
-        userMessage: String(userMessage || "").trim(),
-        language: params.lang,
-      });
-      const hasContributingInput = isSemanticallyContributingAcceptedOutputTurn(dreamTurnClassification);
       const candidateMissing = !deps.hasDreamSpecialistCandidate(specialistResult);
-      if (!isOfftopic && !isMetaFallback && hasContributingInput && candidateMissing) {
+      const shouldClassifyAcceptedTurn = shouldClassifyDreamAcceptedOutputTurn({
+        isOfftopic,
+        isMetaFallback,
+        candidateMissing,
+      });
+      const dreamTurnClassification = shouldClassifyAcceptedTurn
+        ? await deps.classifyAcceptedOutputUserTurn({
+            model: params.model,
+            stepId: deps.dreamStepId,
+            userMessage: String(userMessage || "").trim(),
+            language: params.lang,
+          })
+        : null;
+      const hasContributingInput = dreamTurnClassification
+        ? isSemanticallyContributingAcceptedOutputTurn(dreamTurnClassification)
+        : false;
+      if (shouldAttemptDreamForceRefine({
+        isOfftopic,
+        isMetaFallback,
+        hasContributingInput,
+        candidateMissing,
+      })) {
         const repairSeed = String(userMessage || "").trim();
         const repairInput = repairSeed
           ? `${deps.dreamForceRefineRoutePrefix}\n${repairSeed}`

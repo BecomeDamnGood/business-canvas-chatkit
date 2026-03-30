@@ -269,6 +269,151 @@ type RouteTurnIntent = {
   debug?: Record<string, unknown>;
 };
 
+export type Step0BootstrapMemoValue =
+  | {
+      recognized: false;
+      venture: "";
+      name: "";
+      status: "starting";
+    }
+  | {
+      recognized: true;
+      venture: string;
+      name: string;
+      status: "existing" | "starting";
+    };
+
+type Step0BootstrapMemoEntry = {
+  value: Step0BootstrapMemoValue;
+  expiresAt: number;
+};
+
+const STEP0_BOOTSTRAP_MEMO_MAX_ENTRIES = 64;
+const STEP0_BOOTSTRAP_MEMO_TTL_MS = 15 * 60 * 1000;
+
+export function normalizeStep0BootstrapMemoLanguage(language: string): string {
+  return String(language || "").trim().toLowerCase();
+}
+
+export function buildStep0BootstrapMemoKey(firstUserMessage: string, language: string): string {
+  return JSON.stringify({
+    firstUserMessage: String(firstUserMessage || "").trim(),
+    language: normalizeStep0BootstrapMemoLanguage(language),
+  });
+}
+
+export function resolveStep0BootstrapMemoLanguage(state: CanvasState, language: string): string {
+  const explicitLanguage = String((state as Record<string, unknown>).language ?? "").trim();
+  return explicitLanguage ? String(language || "").trim() : "";
+}
+
+export function createStep0BootstrapMemoCache(params?: {
+  maxEntries?: number;
+  ttlMs?: number;
+  now?: () => number;
+}) {
+  const maxEntries = Math.max(1, Math.trunc(params?.maxEntries ?? STEP0_BOOTSTRAP_MEMO_MAX_ENTRIES));
+  const ttlMs = Math.max(1, Math.trunc(params?.ttlMs ?? STEP0_BOOTSTRAP_MEMO_TTL_MS));
+  const now = params?.now ?? (() => Date.now());
+  const entries = new Map<string, Step0BootstrapMemoEntry>();
+
+  const evictExpired = (currentTime: number) => {
+    for (const [key, entry] of entries) {
+      if (entry.expiresAt > currentTime) continue;
+      entries.delete(key);
+    }
+  };
+
+  return {
+    get(key: string): Step0BootstrapMemoValue | null {
+      const currentTime = now();
+      evictExpired(currentTime);
+      const entry = entries.get(key);
+      if (!entry) return null;
+      entries.delete(key);
+      entries.set(key, entry);
+      return entry.value;
+    },
+    set(key: string, value: Step0BootstrapMemoValue): void {
+      const currentTime = now();
+      evictExpired(currentTime);
+      if (entries.has(key)) entries.delete(key);
+      entries.set(key, {
+        value,
+        expiresAt: currentTime + ttlMs,
+      });
+      while (entries.size > maxEntries) {
+        const oldestKey = entries.keys().next().value;
+        if (!oldestKey) break;
+        entries.delete(oldestKey);
+      }
+    },
+  };
+}
+
+const step0BootstrapMemoCache = createStep0BootstrapMemoCache();
+
+export async function resolveMemoizedStep0Bootstrap(params: {
+  cache: ReturnType<typeof createStep0BootstrapMemoCache>;
+  firstUserMessage: string;
+  language: string;
+  load: () => Promise<Step0BootstrapMemoValue | null>;
+}): Promise<{ value: Step0BootstrapMemoValue | null; fromCache: boolean }> {
+  const key = buildStep0BootstrapMemoKey(params.firstUserMessage, params.language);
+  const cached = params.cache.get(key);
+  if (cached) return { value: cached, fromCache: true };
+  const loaded = await params.load();
+  if (loaded) params.cache.set(key, loaded);
+  return { value: loaded, fromCache: false };
+}
+
+export function shouldHydrateStep0BootstrapFromSpecialist(params: {
+  currentBootstrap: Record<string, unknown>;
+  initialUserMessageSeed: string;
+}): boolean {
+  const hasBootstrap =
+    sanitizeStep0SeedToken(params.currentBootstrap.venture, "") !== "" &&
+    sanitizeStep0SeedToken(params.currentBootstrap.name, "") !== "";
+  if (hasBootstrap) return false;
+  return String(params.initialUserMessageSeed || "").trim() !== "";
+}
+
+export function resolveStartPrestartRouteMode(params: {
+  started: unknown;
+  currentStep: unknown;
+  introShownSession: unknown;
+  actionCodeRaw: string;
+  hasLastSpecialist: boolean;
+  isBootstrapPollCall: boolean;
+  step0Id: string;
+}): {
+  allowStartActionWithSnapshot: boolean;
+  shouldReturnPrestartGate: boolean;
+  isStartTrigger: boolean;
+} {
+  const startedAtTrigger = String(params.started ?? "").trim().toLowerCase() === "true";
+  const currentStep = String(params.currentStep || "");
+  const introShown = String(params.introShownSession || "");
+  const allowStartActionWithSnapshot =
+    params.actionCodeRaw === "ACTION_START" && params.hasLastSpecialist;
+  const isStartTrigger =
+    params.actionCodeRaw === "ACTION_START" &&
+    currentStep === params.step0Id &&
+    introShown !== "true" &&
+    (!params.hasLastSpecialist || allowStartActionWithSnapshot);
+  const shouldReturnPrestartGate =
+    !startedAtTrigger &&
+    currentStep === params.step0Id &&
+    introShown !== "true" &&
+    params.actionCodeRaw !== "ACTION_START" &&
+    !params.isBootstrapPollCall;
+  return {
+    allowStartActionWithSnapshot,
+    shouldReturnPrestartGate,
+    isStartTrigger,
+  };
+}
+
 export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TResponse>) {
   const deps = flattenRunStepRoutePorts(ports);
 
@@ -1001,47 +1146,30 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
     start_prestart: {
       id: "start_prestart",
       canHandle: (context) => {
-        const startedAtTrigger = String((context.state as Record<string, unknown>).started ?? "").trim().toLowerCase() === "true";
-        const currentStep = String((context.state as Record<string, unknown>).current_step || "");
-        const introShown = String((context.state as Record<string, unknown>).intro_shown_session || "");
         const lastSpecialist = asRecord((context.state as Record<string, unknown>).last_specialist_result || {});
-        const hasLastSpecialist = Object.keys(lastSpecialist).length > 0;
-        const allowStartActionWithSnapshot =
-          context.actionCodeRaw === "ACTION_START" && hasLastSpecialist;
-        const isStartTrigger =
-          context.actionCodeRaw === "ACTION_START" &&
-          currentStep === deps.step0Id &&
-          introShown !== "true" &&
-          (!hasLastSpecialist || allowStartActionWithSnapshot);
-        const shouldReturnPrestartGate =
-          !startedAtTrigger &&
-          currentStep === deps.step0Id &&
-          introShown !== "true" &&
-          context.actionCodeRaw !== "ACTION_START" &&
-          !context.isBootstrapPollCall;
-        return shouldReturnPrestartGate || isStartTrigger;
+        const routeMode = resolveStartPrestartRouteMode({
+          started: (context.state as Record<string, unknown>).started,
+          currentStep: (context.state as Record<string, unknown>).current_step,
+          introShownSession: (context.state as Record<string, unknown>).intro_shown_session,
+          actionCodeRaw: context.actionCodeRaw,
+          hasLastSpecialist: Object.keys(lastSpecialist).length > 0,
+          isBootstrapPollCall: context.isBootstrapPollCall,
+          step0Id: deps.step0Id,
+        });
+        return routeMode.shouldReturnPrestartGate || routeMode.isStartTrigger;
       },
       handle: async (context) => {
-        const startedAtTrigger = String((context.state as Record<string, unknown>).started ?? "").trim().toLowerCase() === "true";
-        const currentStep = String((context.state as Record<string, unknown>).current_step || "");
-        const introShown = String((context.state as Record<string, unknown>).intro_shown_session || "");
         const lastSpecialist = asRecord((context.state as Record<string, unknown>).last_specialist_result || {});
-        const hasLastSpecialist = Object.keys(lastSpecialist).length > 0;
-        const allowStartActionWithSnapshot =
-          context.actionCodeRaw === "ACTION_START" && hasLastSpecialist;
-
-        const shouldReturnPrestartGate =
-          !startedAtTrigger &&
-          currentStep === deps.step0Id &&
-          introShown !== "true" &&
-          context.actionCodeRaw !== "ACTION_START" &&
-          !context.isBootstrapPollCall;
-
-        const isStartTrigger =
-          context.actionCodeRaw === "ACTION_START" &&
-          currentStep === deps.step0Id &&
-          introShown !== "true" &&
-          (!hasLastSpecialist || allowStartActionWithSnapshot);
+        const routeMode = resolveStartPrestartRouteMode({
+          started: (context.state as Record<string, unknown>).started,
+          currentStep: (context.state as Record<string, unknown>).current_step,
+          introShownSession: (context.state as Record<string, unknown>).intro_shown_session,
+          actionCodeRaw: context.actionCodeRaw,
+          hasLastSpecialist: Object.keys(lastSpecialist).length > 0,
+          isBootstrapPollCall: context.isBootstrapPollCall,
+          step0Id: deps.step0Id,
+        });
+        const { shouldReturnPrestartGate, isStartTrigger } = routeMode;
 
         if (!shouldReturnPrestartGate && !isStartTrigger) return null;
 
@@ -1051,11 +1179,11 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
 
         const maybeHydrateBootstrapFromStep0Specialist = async (persistFinal: boolean): Promise<string> => {
           const currentBootstrap = asRecord((context.state as Record<string, unknown>).step0_bootstrap || {});
-          const hasBootstrap =
-            sanitizeStep0SeedToken(currentBootstrap.venture, "") !== "" &&
-            sanitizeStep0SeedToken(currentBootstrap.name, "") !== "";
-          if (hasBootstrap) return "";
-          if (!initialUserMessageSeed) return "";
+          if (!shouldHydrateStep0BootstrapFromSpecialist({
+            currentBootstrap,
+            initialUserMessageSeed,
+          })) return "";
+          const bootstrapLanguage = resolveStep0BootstrapMemoLanguage(context.state, context.lang);
 
           const bootstrapDecision = {
             specialist_to_call: STEP_0_BOOTSTRAP_SPECIALIST,
@@ -1070,28 +1198,54 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
             show_step_intro: "false",
             show_session_intro: "false",
           } as unknown as OrchestratorOutput;
-          const bootstrapCall = await deps.callSpecialistStrictSafe(
-            {
-              model: context.model,
-              state: context.state,
-              decision: bootstrapDecision,
-              userMessage: initialUserMessageSeed,
-            },
-            deps.buildRoutingContext(initialUserMessageSeed),
-            context.state
-          );
-          if (!bootstrapCall.ok) return "";
+          const memoized = await resolveMemoizedStep0Bootstrap({
+            cache: step0BootstrapMemoCache,
+            firstUserMessage: initialUserMessageSeed,
+            language: bootstrapLanguage,
+            load: async () => {
+              const bootstrapCall = await deps.callSpecialistStrictSafe(
+                {
+                  model: context.model,
+                  state: context.state,
+                  decision: bootstrapDecision,
+                  userMessage: initialUserMessageSeed,
+                },
+                deps.buildRoutingContext(initialUserMessageSeed),
+                context.state
+              );
+              if (!bootstrapCall.ok) return null;
 
-          deps.rememberLlmCall(bootstrapCall.value);
-          const bootstrapResult = asRecord(bootstrapCall.value.specialistResult || {});
-          const recognized = bootstrapResult.recognized === true ||
-            String(bootstrapResult.recognized || "").trim().toLowerCase() === "true";
-          if (!recognized) return "";
-          const seededVenture = sanitizeStep0SeedToken(bootstrapResult.venture, "");
-          const seededName = sanitizeStep0SeedToken(bootstrapResult.name, "");
-          if (!seededVenture || !seededName) return "";
-          const seededStatus =
-            String(bootstrapResult.status || "").trim().toLowerCase() === "existing" ? "existing" : "starting";
+              deps.rememberLlmCall(bootstrapCall.value);
+              const bootstrapResult = asRecord(bootstrapCall.value.specialistResult || {});
+              const recognized =
+                bootstrapResult.recognized === true ||
+                String(bootstrapResult.recognized || "").trim().toLowerCase() === "true";
+              if (!recognized) {
+                return {
+                  recognized: false,
+                  venture: "",
+                  name: "",
+                  status: "starting",
+                };
+              }
+              const seededVenture = sanitizeStep0SeedToken(bootstrapResult.venture, "");
+              const seededName = sanitizeStep0SeedToken(bootstrapResult.name, "");
+              if (!seededVenture || !seededName) return null;
+              return {
+                recognized: true,
+                venture: seededVenture,
+                name: seededName,
+                status:
+                  String(bootstrapResult.status || "").trim().toLowerCase() === "existing"
+                    ? "existing"
+                    : "starting",
+              };
+            },
+          });
+          if (!memoized.value || !memoized.value.recognized) return "";
+          const seededVenture = memoized.value.venture;
+          const seededName = memoized.value.name;
+          const seededStatus = memoized.value.status;
           const canonicalStep0Final = `Venture: ${seededVenture} | Name: ${seededName || "TBD"} | Status: ${seededStatus}`;
           if (seededName && seededName.toLowerCase() !== "tbd") {
             (context.state as Record<string, unknown>).business_name = seededName;

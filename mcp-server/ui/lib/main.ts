@@ -3,6 +3,12 @@ import { t } from "./ui_constants.js";
 import { collectPartialPendingScoresForContractAction, render } from "./ui_render.js";
 import { stripInlineText } from "./ui_text.js";
 import {
+  ACTION_STEP0_PREWARM,
+  STEP0_PREWARM_DEBOUNCE_MS,
+  buildStep0PrewarmKey,
+  shouldScheduleStep0Prewarm,
+} from "./step0_prewarm.js";
+import {
   applyToolResult,
   callRunStep,
   handleBridgeResponse,
@@ -19,6 +25,70 @@ import {
   toolData,
 } from "./ui_actions.js";
 import { getIsLoading, setSessionStarted, setSessionWelcomeShown } from "./ui_state.js";
+
+  let pendingStep0PrewarmTimer = null;
+  let pendingStep0PrewarmKey = "";
+  let inFlightStep0PrewarmKey = "";
+  function clearPendingStep0Prewarm() {
+    if (pendingStep0PrewarmTimer) {
+      clearTimeout(pendingStep0PrewarmTimer);
+      pendingStep0PrewarmTimer = null;
+    }
+  }
+  function latestStep0PrewarmState() {
+    const state = latestWidgetState();
+    return {
+      currentStep: String(state.current_step || ""),
+      started: String(state.started || "false"),
+      initialUserMessage: String(state.initial_user_message || ""),
+    };
+  }
+  function maybeScheduleStep0Prewarm() {
+    const inputEl = document.getElementById("input");
+    if (!inputEl) return;
+    const rawValue = String(inputEl.value || "");
+    const state = latestStep0PrewarmState();
+    const schedule = shouldScheduleStep0Prewarm({
+      currentStep: state.currentStep,
+      started: state.started,
+      inputValue: rawValue,
+      lastScheduledKey: pendingStep0PrewarmKey,
+      inFlightKey: inFlightStep0PrewarmKey,
+    });
+    if (!schedule.shouldSchedule) {
+      if (!schedule.key) pendingStep0PrewarmKey = "";
+      clearPendingStep0Prewarm();
+      return;
+    }
+    clearPendingStep0Prewarm();
+    pendingStep0PrewarmTimer = setTimeout(() => {
+      pendingStep0PrewarmTimer = null;
+      const liveInput = document.getElementById("input");
+      if (!liveInput) return;
+      const liveValue = String(liveInput.value || "");
+      const liveKey = buildStep0PrewarmKey(liveValue);
+      const liveState = latestStep0PrewarmState();
+      if (liveKey !== schedule.key) return;
+      if (String(liveState.currentStep || "") !== "step_0") return;
+      if (String(liveState.started || "false").trim().toLowerCase() === "true") return;
+      if (liveKey === String(liveState.initialUserMessage || "").trim()) {
+        pendingStep0PrewarmKey = liveKey;
+        return;
+      }
+      inFlightStep0PrewarmKey = liveKey;
+      pendingStep0PrewarmKey = liveKey;
+      void callRunStep(
+        ACTION_STEP0_PREWARM,
+        {
+          initial_user_message: liveKey,
+          __step0_prewarm: "true",
+        },
+        { background: true }
+      ).finally(() => {
+        if (inFlightStep0PrewarmKey === liveKey) inFlightStep0PrewarmKey = "";
+      });
+    }, STEP0_PREWARM_DEBOUNCE_MS);
+  }
 
   initActionsConfig({ render, t });
   var isLocalDev = globalThis.LOCAL_DEV === "1" || typeof location !== "undefined" && location.hostname === "localhost";
@@ -320,6 +390,7 @@ import { getIsLoading, setSessionStarted, setSessionWelcomeShown } from "./ui_st
     if (input?.disabled === true || input?.readOnly === true) return;
     const inputVal = (input?.value || "").trim();
     if (!inputVal) return;
+    clearPendingStep0Prewarm();
     const submitActionCode = actionCodeFromState("ui_action_text_submit");
     const submitPayloadMode = actionPayloadModeFromState("ui_action_text_submit") || "text";
     if (!submitActionCode) {
@@ -359,7 +430,10 @@ import { getIsLoading, setSessionStarted, setSessionWelcomeShown } from "./ui_st
   }
   var inputEl = document.getElementById("input");
   if (inputEl) {
-    const sync = () => syncSendButtonState(inputEl);
+    const sync = () => {
+      syncSendButtonState(inputEl);
+      maybeScheduleStep0Prewarm();
+    };
     inputEl.addEventListener("input", sync);
     inputEl.addEventListener("change", sync);
     inputEl.addEventListener("keydown", (event) => {
@@ -415,6 +489,7 @@ import { getIsLoading, setSessionStarted, setSessionWelcomeShown } from "./ui_st
   if (btnStart) {
     btnStart.addEventListener("click", () => {
       if (getIsLoading()) return;
+      clearPendingStep0Prewarm();
       const actionCode = actionCodeFromState("ui_action_start");
       if (!actionCode) {
         console.warn("[ui_action_missing]", { state_key: "ui_action_start" });

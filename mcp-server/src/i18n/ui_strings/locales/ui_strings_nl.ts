@@ -299,14 +299,24 @@ export const UI_STRINGS_LOCALE_NL: Record<string, string> = {
     "uiSubtitle": "Gebruik de Business Strategy Canvas Builder-widget om door te gaan (niet het chatvak).",
     "uiTitle.template": "Business Strategy Canvas Builder",
     "uiUseWidgetToContinue": "Gebruik de Business Strategy Canvas Builder-widget om door te gaan (niet het chatvak).",
-    "compare.choice.context.default": "Kies alsjeblieft de bewoording die het beste past.",
+    "compare.choice.context.default": "Kies de formulering die voor jou het beste past.",
     "compare.feedback.compare.intro.template":
       "Hier is een vergelijking voor je {0}.",
-    "compare.feedback.user_pick.ack.default": "Je formulering is behouden.",
+    "compare.feedback.user_pick.ack.default": "Je eigen formulering houden is helemaal oké.",
     "compare.feedback.user_pick.nudge.template":
       "Je kunt dit verder aanscherpen als je wilt.",
     "compare.feedback.user_pick.reason.default":
-      "De formulering blijft passend bij deze stap.",
+      "Als je hiermee verdergaat, zorg dan dat de formulering helder, mensgericht en specifiek genoeg blijft voor deze stap.",
+    "compare.feedback.reason.soft.provider_future.default":
+      "Ik zie de richting, en voor deze stap helpt het als de formulering breder, mensgerichter en duidelijker maakt welke toekomst je wilt helpen creëren.",
+    "compare.feedback.reason.soft.more_focus.default":
+      "Ik zie de richting, en met iets meer focus wordt dit veel bruikbaarder in deze stap.",
+    "compare.feedback.reason.soft.more_specific.default":
+      "Ik snap wat je bedoelt, en met iets meer specificiteit wordt dit veel bruikbaarder in deze stap.",
+    "compare.feedback.reason.soft.targetgroup.too_broad.default":
+      "Ik zie de richting al, en met nog iets meer focus wordt deze doelgroep veel makkelijker om op te sturen.",
+    "compare.feedback.reason.soft.targetgroup.too_generic.default":
+      "Ik snap op wie je doelt, en met iets meer focus wordt deze doelgroep veel makkelijker om mee te werken.",
     "compare.feedback.dream_builder.rewrite.default":
       "Deze suggestie maakt de formulering breder voor deze stap.",
     "compare.chooseVersion": "Kies deze versie",
@@ -317,6 +327,7 @@ export const UI_STRINGS_LOCALE_NL: Record<string, string> = {
     "compareGroupedCompareSuggestionLabel": "Mijn suggestie is dit:",
     "compareGroupedCompareInstruction": "Kies de versie die het beste past bij het resterende verschil.",
     "compareGroupedCompareRetainedHeading": "Deze punten blijven al in de definitieve lijst:",
-    "compareInstruction": "Kies de versie die het dichtst ligt bij wat je bedoelt.",
+    "compareInstruction":
+      "Kies de versie die het dichtst ligt bij wat je bedoelt. Je mag je eigen formulering houden als die het beste past.",
     "compareSuggestionLabel": "Dit zou mijn suggestie zijn:",
 } as const;

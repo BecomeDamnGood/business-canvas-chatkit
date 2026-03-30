@@ -189,13 +189,14 @@ export const UI_STRINGS_LOCALE_HI: Record<string, string> = {
     "uiSubtitle": "आगे बढ़ने के लिए Business Strategy Canvas Builder विजेट का उपयोग करें (चैट बॉक्स नहीं)",
     "uiTitle.template": "Business Strategy Canvas Builder",
     "uiUseWidgetToContinue": "आगे बढ़ने के लिए Business Strategy Canvas Builder विजेट का उपयोग करें (चैट बॉक्स नहीं)।",
-    "compare.choice.context.default": "कृपया सबसे उपयुक्त शब्दावली चुनें।",
+    "compare.choice.context.default": "वही शब्दावली चुनें जो आपको सबसे सही लगे।",
     "compare.feedback.compare.intro.template":
       "यह आपके {0} के लिए एक तुलना है।",
-    "compare.feedback.user_pick.ack.default": "आपकी शब्दावली को रखा गया है।",
+    "compare.feedback.user_pick.ack.default": "अपनी ही शब्दावली रखना बिल्कुल ठीक है।",
     "compare.feedback.dream_builder.rewrite.default":
       "यह सुझाव इस चरण के लिए शब्दावली को थोड़ा व्यापक बनाता है।",
-    "compare.feedback.user_pick.reason.default": "यह शब्दावली इस चरण के अनुरूप रहती है।",
+    "compare.feedback.user_pick.reason.default":
+      "यदि आप इसी के साथ आगे बढ़ते हैं, तो ध्यान रखें कि यह शब्दावली इस चरण के लिए स्पष्ट, मानवीय और पर्याप्त रूप से विशिष्ट रहे।",
     "compare.chooseVersion": "यह संस्करण चुनें",
     "compare.useInputFallback": "यह इनपुट उपयोग करें",
     "compareHeading": "यह आपका इनपुट है:",
@@ -203,6 +204,7 @@ export const UI_STRINGS_LOCALE_HI: Record<string, string> = {
     "compareGroupedCompareSuggestionLabel": "यह मेरा सुझाव है:",
     "compareGroupedCompareInstruction": "जो संस्करण बाकी अंतर के लिए सबसे सही लगे, उसे चुनें।",
     "compareGroupedCompareRetainedHeading": "ये बिंदु पहले से अंतिम सूची में बने रहेंगे:",
-    "compareInstruction": "कृपया जो सबसे अच्छा लगे उस पर क्लिक करें।",
+    "compareInstruction":
+      "वह संस्करण चुनें जो आपके मतलब के सबसे करीब हो। अगर आपकी अपनी शब्दावली बेहतर बैठती है, तो आप उसे रख सकते हैं।",
     "compareSuggestionLabel": "मेरी सुझावित भाषा यह होगी:",
 } as const;

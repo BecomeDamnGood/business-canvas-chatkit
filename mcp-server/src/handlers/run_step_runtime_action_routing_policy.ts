@@ -1,5 +1,5 @@
 import { getFinalFieldForStepId, readPendingInteractionState } from "../core/state.js";
-import { isValidStepValueForStorage } from "./run_step_value_shape.js";
+import { isValidStepValueForStorage, looksLikeExamplesFramingLine } from "./run_step_value_shape.js";
 
 export const BIGWHY_MAX_WORDS = 28;
 
@@ -87,6 +87,23 @@ export function resolveRequiredFinalValue(params: {
   const specialistField = stepId === presentationStepId ? "presentation_brief" : stepId;
   const previousCanonicalText = pickCanonicalTextFromUiContent(previousSpecialist);
   const pendingInteraction = readPendingInteractionState(state);
+  const provisionalSources =
+    state && typeof state.provisional_source_by_step === "object" && state.provisional_source_by_step !== null
+      ? (state.provisional_source_by_step as Record<string, unknown>)
+      : {};
+  const provisionalSource = String(provisionalSources[stepId] || "").trim();
+  const explicitComparePickValue = String(provisionalValue || "").trim();
+  const allowExplicitComparePickCommit =
+    stepId === "dream" &&
+    provisionalSource === "compare_pick" &&
+    explicitComparePickValue &&
+    !looksLikeExamplesFramingLine(explicitComparePickValue);
+  if (allowExplicitComparePickCommit) {
+    return {
+      field: finalField,
+      value: explicitComparePickValue,
+    };
+  }
   return {
     field: finalField,
     value: pickFirstValidForStep(

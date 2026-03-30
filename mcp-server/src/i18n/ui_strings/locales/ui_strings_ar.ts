@@ -18,8 +18,9 @@ export const UI_STRINGS_LOCALE_AR: Record<string, string> = {
       "إليك مقارنة خاصة بـ {0}.",
     "compare.feedback.dream_builder.rewrite.default":
       "هذا الاقتراح يوسّع الصياغة لهذه الخطوة.",
-    "compare.feedback.user_pick.ack.default": "تم الإبقاء على صياغتك.",
-    "compare.feedback.user_pick.reason.default": "تظل الصياغة مناسبة لهذه الخطوة.",
+    "compare.feedback.user_pick.ack.default": "لا بأس تمامًا في الاحتفاظ بصياغتك الخاصة.",
+    "compare.feedback.user_pick.reason.default":
+      "إذا تابعت بها، فتذكّر أن تبقي الصياغة واضحة، إنسانية، ومحددة بما يكفي لهذه الخطوة.",
     "compareGroupedUserLabel": "هذه هي صياغتك المختصرة:",
     "compareGroupedCompareSuggestionLabel": "هذا هو اقتراحي:",
     "compareGroupedCompareInstruction": "اختر النسخة التي تناسب الاختلاف المتبقي بشكل أفضل.",

@@ -189,13 +189,14 @@ export const UI_STRINGS_LOCALE_JA: Record<string, string> = {
     "uiSubtitle": "続行するには Business Strategy Canvas Builder のウィジェットを使用してください（チャット欄ではありません）",
     "uiTitle.template": "Business Strategy Canvas Builder",
     "uiUseWidgetToContinue": "続行するには Business Strategy Canvas Builder のウィジェットを使用してください（チャット欄ではありません）。",
-    "compare.choice.context.default": "最も合う言い回しを選んでください。",
+    "compare.choice.context.default": "あなたにいちばんしっくりくる表現を選んでください。",
     "compare.feedback.compare.intro.template":
       "これは {0} の比較です。",
-    "compare.feedback.user_pick.ack.default": "あなたの表現はそのまま保持されました。",
+    "compare.feedback.user_pick.ack.default": "ご自身の表現をそのまま使っても大丈夫です。",
     "compare.feedback.dream_builder.rewrite.default":
       "この提案は、このステップに向けて表現をより広げています。",
-    "compare.feedback.user_pick.reason.default": "この表現はこのステップに引き続き合っています。",
+    "compare.feedback.user_pick.reason.default":
+      "このまま進めるなら、このステップに合うように、表現を明確に、人を中心に、十分具体的に保つことを意識してください。",
     "compare.chooseVersion": "このバージョンを選ぶ",
     "compare.useInputFallback": "この入力を使う",
     "compareHeading": "あなたの入力：",
@@ -203,6 +204,7 @@ export const UI_STRINGS_LOCALE_JA: Record<string, string> = {
     "compareGroupedCompareSuggestionLabel": "私の提案はこちらです：",
     "compareGroupedCompareInstruction": "残っている違いに最も合う方を選んでください。",
     "compareGroupedCompareRetainedHeading": "これらの項目は最終リストにそのまま残ります：",
-    "compareInstruction": "一番しっくりくるものをクリックしてください。",
+    "compareInstruction":
+      "自分の意図にいちばん近い版を選んでください。自分の表現のほうが合っていれば、そのまま残してかまいません。",
     "compareSuggestionLabel": "私の提案：",
 } as const;

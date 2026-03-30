@@ -31,34 +31,49 @@ function splitFeedbackSentences(input: string): string[] {
     .filter(Boolean);
 }
 
-function softenTargetGroupFeedbackSentence(input: string): string {
-  const sentence = ensureSentence(input);
+function softenKnownHarshFeedbackSentence(params: {
+  stepId: string;
+  input: string;
+  resolveString: FeedbackStringResolver;
+}): string {
+  const sentence = ensureSentence(params.input);
   if (!sentence) return "";
 
-  const targetedRewrites: Array<{ pattern: RegExp; replacement: string }> = [
+  const targetedRewrites: Array<{ pattern: RegExp; key: string }> = [
     {
       pattern: /^["'“”‘’]?[^.!?]+["'“”‘’]?\s+is too broad to guide your choices[.!?]*$/i,
-      replacement:
-        "I can see the direction, and one more layer of focus would make this target group easier to act on.",
+      key: "compare.feedback.reason.soft.targetgroup.too_broad.default",
     },
     {
       pattern: /^["'“”‘’]?[^.!?]+["'“”‘’]?\s+is too generic to create a usable target group[.!?]*$/i,
-      replacement:
-        "I can see who you have in mind, and a bit more focus would make this target group much easier to work with.",
+      key: "compare.feedback.reason.soft.targetgroup.too_generic.default",
     },
     {
       pattern: /^["'“”‘’]?[^.!?]+["'“”‘’]?\s+is te breed om richting te geven aan je keuzes[.!?]*$/i,
-      replacement:
-        "Ik zie de richting al, en met nog iets meer focus wordt deze doelgroep veel makkelijker om op te sturen.",
+      key: "compare.feedback.reason.soft.targetgroup.too_broad.default",
     },
     {
       pattern: /^["'“”‘’]?[^.!?]+["'“”‘’]?\s+is te algemeen om er een bruikbare doelgroep van te maken[.!?]*$/i,
-      replacement:
-        "Ik snap op wie je doelt, en met iets meer focus wordt deze doelgroep veel makkelijker om mee te werken.",
+      key: "compare.feedback.reason.soft.targetgroup.too_generic.default",
+    },
+    {
+      pattern:
+        /\b(?:too focused on the provider side|te veel gericht op de aanbiederskant)\b[\s\S]*\b(?:broader human effect|bredere menselijke effect|desired future state|gewenste toekomstige situatie)\b/i,
+      key: "compare.feedback.reason.soft.provider_future.default",
+    },
+    {
+      pattern: /\b(?:is too broad|is te breed)\b/i,
+      key: "compare.feedback.reason.soft.more_focus.default",
+    },
+    {
+      pattern: /\b(?:is too generic|is te algemeen)\b/i,
+      key: "compare.feedback.reason.soft.more_specific.default",
     },
   ];
   for (const rewrite of targetedRewrites) {
-    if (rewrite.pattern.test(sentence)) return rewrite.replacement;
+    if (!rewrite.pattern.test(sentence)) continue;
+    const localized = ensureSentence(params.resolveString(rewrite.key, ""));
+    if (localized) return localized;
   }
   return sentence;
 }
@@ -96,7 +111,7 @@ export function sanitizeSupportTextForDisplay(rawText: string): string {
 }
 
 export function sanitizeUserPickFeedbackTextForDisplay(rawText: string): string {
-  return sanitizeSupportTextForDisplay(rawText);
+  return splitFeedbackSentences(rawText).join(" ").trim();
 }
 
 export function sanitizeFeedbackReasonForDisplay(params: {
@@ -113,8 +128,11 @@ export function sanitizeFeedbackReasonForDisplay(params: {
     return true;
   });
   if (!candidate) return "";
-  if (params.stepId === "targetgroup") return softenTargetGroupFeedbackSentence(candidate);
-  return candidate;
+  return softenKnownHarshFeedbackSentence({
+    stepId: params.stepId,
+    input: candidate,
+    resolveString: params.resolveString,
+  });
 }
 
 function stripStepPrefix(value: string): string {
@@ -154,6 +172,31 @@ export function formatCompareFeedbackForDisplay(params: {
 
 export function userPickAcknowledgmentForDisplay(resolveString: FeedbackStringResolver): string {
   return ensureSentence(resolveString("compare.feedback.user_pick.ack.default", ""));
+}
+
+export function isMeaningfulUserPickFeedbackText(params: {
+  stepId: string;
+  rawText: string;
+  resolveString: FeedbackStringResolver;
+}): boolean {
+  const sanitized = sanitizeUserPickFeedbackTextForDisplay(params.rawText);
+  if (!sanitized) return false;
+  const comparable = normalizeComparable(sanitized);
+  if (!comparable) return false;
+  const acknowledgment = userPickAcknowledgmentForDisplay(params.resolveString);
+  const defaultReason = ensureSentence(
+    params.resolveString("compare.feedback.user_pick.reason.default", "")
+  );
+  const fallbackCombined = [acknowledgment, defaultReason].filter(Boolean).join(" ");
+  const blocked = [
+    acknowledgment,
+    defaultReason,
+    fallbackCombined,
+  ]
+    .map((value) => normalizeComparable(value))
+    .filter(Boolean);
+  if (blocked.includes(comparable)) return false;
+  return true;
 }
 
 export function userPickFeedbackReasonForDisplay(params: {

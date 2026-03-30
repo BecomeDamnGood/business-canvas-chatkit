@@ -189,13 +189,14 @@ export const UI_STRINGS_LOCALE_KO: Record<string, string> = {
     "uiSubtitle": "계속하려면 Business Strategy Canvas Builder 위젯을 사용하세요(채팅창 아님)",
     "uiTitle.template": "Business Strategy Canvas Builder",
     "uiUseWidgetToContinue": "계속하려면 Business Strategy Canvas Builder 위젯을 사용하세요(채팅창 아님).",
-    "compare.choice.context.default": "가장 잘 맞는 표현을 선택해 주세요.",
+    "compare.choice.context.default": "당신에게 가장 잘 맞는 표현을 선택해 주세요.",
     "compare.feedback.compare.intro.template":
       "{0}에 대한 비교입니다.",
-    "compare.feedback.user_pick.ack.default": "당신의 표현이 유지되었습니다.",
+    "compare.feedback.user_pick.ack.default": "자신의 표현을 그대로 유지해도 괜찮습니다.",
     "compare.feedback.dream_builder.rewrite.default":
       "이 제안은 이 단계에 맞게 표현을 더 넓힙니다.",
-    "compare.feedback.user_pick.reason.default": "이 표현은 이 단계에 계속 맞습니다.",
+    "compare.feedback.user_pick.reason.default":
+      "이대로 진행한다면, 이 단계에 맞게 표현이 명확하고 사람 중심이며 충분히 구체적인지 기억해 주세요.",
     "compare.chooseVersion": "이 버전 선택",
     "compare.useInputFallback": "이 입력 사용",
     "compareHeading": "당신의 입력:",
@@ -203,6 +204,7 @@ export const UI_STRINGS_LOCALE_KO: Record<string, string> = {
     "compareGroupedCompareSuggestionLabel": "제 제안은 이것입니다:",
     "compareGroupedCompareInstruction": "남아 있는 차이에 가장 잘 맞는 버전을 선택해 주세요.",
     "compareGroupedCompareRetainedHeading": "이 항목들은 이미 최종 목록에 유지됩니다:",
-    "compareInstruction": "가장 잘 맞는 것을 클릭해 주세요.",
+    "compareInstruction":
+      "당신이 말하고 싶은 뜻에 가장 가까운 버전을 선택해 주세요. 자신의 표현이 더 잘 맞으면 그대로 유지해도 됩니다.",
     "compareSuggestionLabel": "제 제안:",
 } as const;

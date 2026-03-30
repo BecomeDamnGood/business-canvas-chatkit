@@ -33,8 +33,10 @@ import {
   feedbackStepLabel,
   formatCompareFeedbackForDisplay,
   formatUserPickFeedbackForDisplay,
+  isMeaningfulUserPickFeedbackText,
   sanitizeFeedbackReasonForDisplay,
   sanitizeSupportTextForDisplay,
+  sanitizeUserPickFeedbackTextForDisplay,
 } from "./feedback_display.js";
 import { UI_STRINGS_SOURCE_EN } from "../i18n/ui_strings_defaults.js";
 import { productsServicesItemsFromText } from "../shared/productsservices_items.js";
@@ -150,25 +152,34 @@ function isRenderableAcceptedValue(stepId: string, raw: unknown): boolean {
   return true;
 }
 
+function isCommittedAcceptedValue(stepId: string, raw: unknown): boolean {
+  const value = String(raw || "").trim();
+  if (!value) return false;
+  if (stepId === "presentation") return isStructuredPresentationRecap(value);
+  if (stepId === "dream") return true;
+  return isRenderableAcceptedValue(stepId, value);
+}
+
 function isAcceptedProvisional(state: CanvasState, stepId: string): boolean {
   const provisional = provisionalForStep(state, stepId);
   if (!provisional) return false;
-  if (!isRenderableAcceptedValue(stepId, provisional)) return false;
   const source = provisionalSourceForStep(state, stepId);
-  return source === "user_input" || source === "compare_pick" || source === "action_route";
+  if (source === "compare_pick") return true;
+  if (!isRenderableAcceptedValue(stepId, provisional)) return false;
+  return source === "user_input" || source === "action_route";
 }
 
 function isAcceptedOutput(stepId: string, state: CanvasState): boolean {
   const finalField = getFinalFieldForStepId(stepId);
   const committedFinal = finalField ? String((state as any)[finalField] || "").trim() : "";
-  if (isRenderableAcceptedValue(stepId, committedFinal)) return true;
+  if (isCommittedAcceptedValue(stepId, committedFinal)) return true;
   return isAcceptedProvisional(state, stepId);
 }
 
 function acceptedCanonicalValueForStep(stepId: string, state: CanvasState): string {
   const finalField = getFinalFieldForStepId(stepId);
   const committedFinal = finalField ? String((state as any)[finalField] || "").trim() : "";
-  if (isRenderableAcceptedValue(stepId, committedFinal)) return committedFinal;
+  if (isCommittedAcceptedValue(stepId, committedFinal)) return committedFinal;
   if (isAcceptedProvisional(state, stepId)) return provisionalForStep(state, stepId);
   return "";
 }
@@ -428,7 +439,7 @@ function autoSuggestHeading(stepId: string, state: CanvasState): string {
 function hasCommittedAcceptedValue(stepId: string, state: CanvasState): boolean {
   const finalField = getFinalFieldForStepId(stepId);
   const committedFinal = finalField ? String((state as any)[finalField] || "").trim() : "";
-  return isRenderableAcceptedValue(stepId, committedFinal);
+  return isCommittedAcceptedValue(stepId, committedFinal);
 }
 
 function shouldUseCurrentValueHeading(stepId: string, state: CanvasState): boolean {
@@ -624,6 +635,7 @@ function buildSingleValueUiContent(params: {
   message: string;
   canonicalValue: string;
   headingOverride?: string;
+  supportTextOverride?: string;
   feedbackReasonText?: string;
   rawFeedbackReasonText?: string;
 }): UiSingleValueContent | undefined {
@@ -634,13 +646,16 @@ function buildSingleValueUiContent(params: {
   if (isDreamBuilderSingleValueContext(stepId, state, specialist)) return undefined;
   const heading = String(params.headingOverride || "").trim() || singleValueConfirmHeading(stepId, state);
   const feedbackReasonText = String(params.feedbackReasonText || "").trim();
-  const supportText = singleValueSupportText({
-    message,
-    heading,
-    canonicalValue: canonicalText,
-    feedbackReasonText,
-    rawFeedbackReasonText: String(params.rawFeedbackReasonText || "").trim(),
-  });
+  const supportTextOverride = sanitizeSupportTextForDisplay(String(params.supportTextOverride || "").trim());
+  const supportText =
+    supportTextOverride ||
+    singleValueSupportText({
+      message,
+      heading,
+      canonicalValue: canonicalText,
+      feedbackReasonText,
+      rawFeedbackReasonText: String(params.rawFeedbackReasonText || "").trim(),
+    });
   return {
     kind: "single_value",
     ...(heading ? { heading } : {}),
@@ -1451,9 +1466,9 @@ function isRecapRequestedSpecialist(specialist: Record<string, unknown>): boolea
 function knownValueForStep(state: CanvasState, stepId: string): string {
   const finalField = getFinalFieldForStepId(stepId);
   const finalValue = finalField ? String((state as any)[finalField] || "").trim() : "";
-  if (isRenderableAcceptedValue(stepId, finalValue)) return finalValue;
-  const provisional = provisionalForStep(state, stepId);
-  return isRenderableAcceptedValue(stepId, provisional) ? provisional : "";
+  if (isCommittedAcceptedValue(stepId, finalValue)) return finalValue;
+  if (isAcceptedProvisional(state, stepId)) return provisionalForStep(state, stepId);
+  return "";
 }
 
 function isPersistentRecapContextStep(stepId: string): boolean {
@@ -1952,6 +1967,14 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
   });
   const effectiveFeedbackReasonForDisplay = feedbackReasonForDisplay;
   const effectiveRawFeedbackReasonForDisplay = rawFeedbackReasonForDisplay;
+  const explicitUserPickFeedbackRaw = String((specialistForDisplay as any).user_pick_feedback_text || "").trim();
+  const explicitUserPickFeedbackForDisplay = isMeaningfulUserPickFeedbackText({
+    stepId,
+    rawText: explicitUserPickFeedbackRaw,
+    resolveString: (key, fallback = "") => uiStringFromState(state, key, uiDefaultString(key, fallback)),
+  })
+    ? sanitizeUserPickFeedbackTextForDisplay(explicitUserPickFeedbackRaw)
+    : "";
   const rawMessageForSemanticContracts = String(message || "").trim();
   const singleValueUiCanonicalValue = (() => {
     if (recapRequested) return "";
@@ -1975,6 +1998,28 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     !normalizedComparePending &&
     effectiveStatus === "valid_output" &&
     !shouldUseCurrentValueHeading(stepId, state);
+  const comparePickAcceptedForDisplay =
+    !normalizedComparePending &&
+    provisionalSourceForStep(state, stepId) === "compare_pick" &&
+    Boolean(canonicalAcceptedValue);
+  const messageDerivedUserPickSupportForDisplay =
+    comparePickAcceptedForDisplay && canonicalAcceptedValue
+      ? singleValueSupportText({
+          message: rawMessageForSemanticContracts,
+          heading: offTopicCurrentContextHeading(stepId, state),
+          canonicalValue: canonicalAcceptedValue,
+        })
+      : "";
+  const fallbackUserPickFeedbackForDisplay = comparePickAcceptedForDisplay
+    ? formatUserPickFeedbackForDisplay({
+        stepId,
+        rawReason: explicitFeedbackReasonForDisplay || rawFeedbackReasonForDisplay,
+        resolveString: (key, fallback = "") => uiStringFromState(state, key, uiDefaultString(key, fallback)),
+      })
+    : "";
+  const userPickSupportForDisplay = comparePickAcceptedForDisplay
+    ? explicitUserPickFeedbackForDisplay || messageDerivedUserPickSupportForDisplay || fallbackUserPickFeedbackForDisplay
+    : "";
   let messageForDisplay =
     isSemanticInvariantsV1Enabled() &&
     normalizedComparePending &&
@@ -1995,9 +2040,15 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     !recapRequested;
   if (useSingleValueConfirmSsot && !shouldPublishCanonicalSuggestionFeedbackContract) {
     const canonicalMessage = singleValueConfirmCanonicalMessage(stepId, state, canonicalAcceptedValue);
-    messageForDisplay = feedbackReasonForDisplay
-      ? `${feedbackReasonForDisplay}\n\n${canonicalMessage}`.trim()
-      : canonicalMessage;
+    messageForDisplay = userPickSupportForDisplay
+      ? ensureCanonicalContextBlockInMessage({
+          message: userPickSupportForDisplay,
+          canonicalValue: canonicalAcceptedValue,
+          heading: offTopicCurrentContextHeading(stepId, state),
+        })
+      : feedbackReasonForDisplay
+        ? `${feedbackReasonForDisplay}\n\n${canonicalMessage}`.trim()
+        : canonicalMessage;
   } else if (
     shouldEnforceConfirmVisibility &&
     canonicalAcceptedValue &&
@@ -2019,7 +2070,8 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     specialist: specialistForDisplay,
     message: messageForDisplay,
     canonicalValue: singleValueUiCanonicalValue,
-    feedbackReasonText: effectiveFeedbackReasonForDisplay,
+    supportTextOverride: userPickSupportForDisplay,
+    feedbackReasonText: userPickSupportForDisplay ? "" : effectiveFeedbackReasonForDisplay,
     rawFeedbackReasonText: effectiveRawFeedbackReasonForDisplay,
   });
   const structuredSuggestionsUiContent = buildStructuredSuggestionsContentOwner({

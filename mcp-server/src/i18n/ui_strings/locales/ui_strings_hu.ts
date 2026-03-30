@@ -200,13 +200,14 @@ export const UI_STRINGS_LOCALE_HU: Record<string, string> = {
     "transient.timeout": "Ez a szokásosnál tovább tart. Kérlek próbáld újra.",
     "uiSubtitle": "A folytatáshoz használd a The Business Strategy Canvas Builder widgetet (ne a csevegőmezőt).",
     "uiUseWidgetToContinue": "A folytatáshoz használd a The Business Strategy Canvas Builder widgetet (ne a csevegőmezőt).",
-    "compare.choice.context.default": "Kérlek válaszd ki azt a megfogalmazást, ami a legjobban illik.",
+    "compare.choice.context.default": "Válaszd azt a megfogalmazást, amelyik számodra a legjobban illik.",
     "compare.feedback.compare.intro.template":
       "Itt egy összehasonlítás a(z) {0} számára.",
-    "compare.feedback.user_pick.ack.default": "A megfogalmazásod megmaradt.",
+    "compare.feedback.user_pick.ack.default": "Teljesen rendben van, ha a saját megfogalmazásodat tartod meg.",
     "compare.feedback.dream_builder.rewrite.default":
       "Ez a javaslat tágabban fogalmaz ehhez a lépéshez.",
-    "compare.feedback.user_pick.reason.default": "A megfogalmazás továbbra is illeszkedik ehhez a lépéshez.",
+    "compare.feedback.user_pick.reason.default":
+      "Ha ezzel mész tovább, figyelj arra, hogy a megfogalmazás ennél a lépésnél világos, emberközpontú és elég konkrét maradjon.",
     "compare.chooseVersion": "Válaszd ezt a verziót",
     "compare.useInputFallback": "Használd ezt a bevitelt",
     "compareHeading": "Ez a te beviteled:",
@@ -214,6 +215,7 @@ export const UI_STRINGS_LOCALE_HU: Record<string, string> = {
     "compareGroupedCompareSuggestionLabel": "Ez az én javaslatom:",
     "compareGroupedCompareInstruction": "Válaszd azt a verziót, amelyik a legjobban illik a fennmaradó különbséghez.",
     "compareGroupedCompareRetainedHeading": "Ezek a pontok már benne maradnak a végső listában:",
-    "compareInstruction": "Kérlek kattints arra, ami a legjobban megfelel.",
+    "compareInstruction":
+      "Válaszd azt a verziót, amelyik a legközelebb áll ahhoz, amit mondani szeretnél. Ha a saját megfogalmazásod jobb, azt is megtarthatod.",
     "compareSuggestionLabel": "Ez lenne a javaslatom:",
 } as const;

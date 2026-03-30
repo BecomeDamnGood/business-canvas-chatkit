@@ -189,13 +189,14 @@ export const UI_STRINGS_LOCALE_FR: Record<string, string> = {
     "uiSubtitle": "Utilisez le widget The Business Strategy Canvas Builder pour continuer (pas la zone de chat)",
     "uiTitle.template": "Business Strategy Canvas Builder",
     "uiUseWidgetToContinue": "Utilisez le widget The Business Strategy Canvas Builder pour continuer (pas la zone de chat).",
-    "compare.choice.context.default": "Choisis la formulation qui te convient le mieux.",
+    "compare.choice.context.default": "Choisis la formulation qui te correspond le mieux.",
     "compare.feedback.compare.intro.template":
       "Voici une comparaison pour votre {0}.",
-    "compare.feedback.user_pick.ack.default": "Votre formulation a été conservée.",
+    "compare.feedback.user_pick.ack.default": "Garder votre propre formulation est tout à fait possible.",
     "compare.feedback.dream_builder.rewrite.default":
       "Cette suggestion élargit la formulation pour cette étape.",
-    "compare.feedback.user_pick.reason.default": "La formulation reste adaptée à cette étape.",
+    "compare.feedback.user_pick.reason.default":
+      "Si vous continuez avec elle, veillez à ce que la formulation reste claire, humaine et assez précise pour cette étape.",
     "compare.chooseVersion": "Choisir cette version",
     "compare.useInputFallback": "Utiliser ce texte",
     "compareHeading": "Voici ton texte :",
@@ -203,6 +204,7 @@ export const UI_STRINGS_LOCALE_FR: Record<string, string> = {
     "compareGroupedCompareSuggestionLabel": "Voici ma suggestion :",
     "compareGroupedCompareInstruction": "Choisis la version qui correspond le mieux a la difference restante.",
     "compareGroupedCompareRetainedHeading": "Ces points restent deja dans la liste finale :",
-    "compareInstruction": "Clique sur ce qui te convient le mieux.",
+    "compareInstruction":
+      "Choisis la version qui se rapproche le plus de ce que tu veux dire. Tu peux garder ta propre formulation si c’est celle qui convient le mieux.",
     "compareSuggestionLabel": "Voici ma suggestion :",
 } as const;

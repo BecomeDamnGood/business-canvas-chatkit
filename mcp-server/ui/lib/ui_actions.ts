@@ -29,6 +29,7 @@ export type {
 import type { HydrationStatus, ResolvedWidgetPayload } from "./locale_bootstrap_runtime.js";
 import type { PayloadReasonCode, PayloadSource } from "./locale_bootstrap_runtime.js";
 export { mergeToolOutputWithResponseMetadata };
+import { ACTION_STEP0_PREWARM } from "./step0_prewarm.js";
 
 // Injected by main during init
 let _render: (overrideRaw?: unknown) => void;
@@ -227,7 +228,7 @@ function isPresentationMakeAction(messageText: string): boolean {
 
 export function prepareWidgetScrollForAction(messageText: string): void {
   const normalized = String(messageText || "").trim().toUpperCase();
-  if (!normalized || normalized === ACTION_BOOTSTRAP_POLL) return;
+  if (!normalized || normalized === ACTION_BOOTSTRAP_POLL || normalized === ACTION_STEP0_PREWARM) return;
   const hadFocusedInput = blurWidgetInputFocus();
   if (pendingWidgetScrollTimer) {
     clearTimeout(pendingWidgetScrollTimer);
@@ -1620,6 +1621,35 @@ export function applyToolResult(raw: unknown): Record<string, unknown> {
   return normalizeToolResult(raw).normalized;
 }
 
+export function stripActionLivenessFromCanonicalEnvelope(raw: unknown): Record<string, unknown> {
+  const normalized = applyToolResult(raw);
+  const root = toRecord(normalized);
+  const result = toRecord(root.result);
+  const state = toRecord(result.state);
+  const stateLiveness = toRecord(state.ui_action_liveness);
+  const nextState = { ...state };
+  delete nextState.ack_status;
+  delete nextState.state_advanced;
+  delete nextState.reason_code;
+  delete nextState.action_code_echo;
+  delete nextState.client_action_id_echo;
+  if (Object.keys(stateLiveness).length > 0) {
+    delete nextState.ui_action_liveness;
+  }
+
+  const nextResult: Record<string, unknown> = { ...result, state: nextState };
+  delete nextResult.ack_status;
+  delete nextResult.state_advanced;
+  delete nextResult.reason_code;
+  delete nextResult.action_code_echo;
+  delete nextResult.client_action_id_echo;
+
+  return {
+    ...root,
+    result: nextResult,
+  };
+}
+
 export function setLastToolOutput(raw: unknown): void {
   const normalized = hydrateWidgetResultEnvelope(raw);
   if (!Object.keys(normalized).length) return;
@@ -2472,11 +2502,15 @@ export function resolveActionLivenessNotice(
 
 export async function callRunStep(
   message: string | number,
-  extraState?: Record<string, unknown>
+  extraState?: Record<string, unknown>,
+  options?: { background?: boolean }
 ): Promise<void> {
   const o = oa();
   const messageText = String(message || "").trim();
   const isStartAction = messageText === "ACTION_START";
+  const isBackgroundDispatch =
+    options?.background === true ||
+    String((extraState as Record<string, unknown> | undefined)?.__background_dispatch || "").trim().toLowerCase() === "true";
   const cleanExtraState =
     extraState && typeof extraState === "object"
       ? { ...extraState }
@@ -2494,6 +2528,9 @@ export async function callRunStep(
   const hasBridgePath =
     transportStatus === "ready_bridge" || transportStatus === "unknown";
   if (!hasCallTool && !hasBridgePath) {
+    if (isBackgroundDispatch) {
+      return;
+    }
     const livenessState = Object.assign({}, activeClientState, persistedWidgetState);
     if (cleanExtraState && typeof cleanExtraState === "object") {
       Object.assign(livenessState, cleanExtraState);
@@ -2538,8 +2575,10 @@ export async function callRunStep(
 
   if (isRateLimited()) return;
   const now = Date.now();
-  if (now - lastCallAt < CLICK_DEBOUNCE_MS) return;
-  lastCallAt = now;
+  if (!isBackgroundDispatch) {
+    if (now - lastCallAt < CLICK_DEBOUNCE_MS) return;
+    lastCallAt = now;
+  }
 
   const hasToolOutput =
     Boolean((o as { toolOutput?: unknown }).toolOutput) ||
@@ -2633,8 +2672,10 @@ export async function callRunStep(
     });
   }
 
-  prepareWidgetScrollForAction(messageText);
-  setLoading(true);
+  if (!isBackgroundDispatch) {
+    prepareWidgetScrollForAction(messageText);
+    setLoading(true);
+  }
 
   let timeoutId: ReturnType<typeof setTimeout> | null = null;
   let didTimeout = false;
@@ -2650,14 +2691,16 @@ export async function callRunStep(
         timeout_ms: timeoutMs,
       });
     }
-    setInlineNotice(uiText(nextState, "transient.timeout", ""));
+    if (!isBackgroundDispatch) {
+      setInlineNotice(uiText(nextState, "transient.timeout", ""));
+    }
     if (isStartAction) {
       setWidgetStateSafe({
         start_dispatch_state: "failed",
         transport_ready: "true",
       });
     }
-    setLoading(false);
+    if (!isBackgroundDispatch) setLoading(false);
   }, timeoutMs);
 
   try {
@@ -2696,6 +2739,9 @@ export async function callRunStep(
     }
     const orderingBeforeIngest = readBootstrapOrderingState(widgetState());
     const normalizedRaw = toRecord(resp);
+    const payloadForIngest = isBackgroundDispatch
+      ? stripActionLivenessFromCanonicalEnvelope(applyToolResult(normalizedRaw))
+      : normalizedRaw;
     const resolvedResponse = resolveWidgetPayload(normalizedRaw);
     const directResult = resolvedResponse.result;
     const responseCorrelation = resolveClientCorrelation({
@@ -2714,7 +2760,7 @@ export async function callRunStep(
       payload_source: resolvedResponse.source,
       payload_reason_code: resolvedResponse.source_reason_code,
     });
-    const ingestedResult = handleToolResultAndMaybeScheduleBootstrapRetry(normalizedRaw, {
+    const ingestedResult = handleToolResultAndMaybeScheduleBootstrapRetry(payloadForIngest, {
       source: "call_run_step",
       client_action_id: clientActionId,
       request_id: requestId,
@@ -2798,15 +2844,17 @@ export async function callRunStep(
       ordering_before: describeBootstrapOrdering(orderingBeforeIngest),
       ordering_after: describeBootstrapOrdering(orderingAfterIngest),
     });
-    setWidgetStateSafe({
-      ui_action_liveness_ack_status: liveness.ack_status,
-      ui_action_liveness_state_advanced: liveness.state_advanced ? "true" : "false",
-      ui_action_liveness_reason_code: liveness.reason_code,
-      ui_action_liveness_failure_class: livenessNotice.failure_class,
-      ui_action_liveness_action_code: liveness.action_code_echo,
-      ui_action_liveness_client_action_id: liveness.client_action_id_echo,
-    });
-    if (hasExplicitError) {
+    if (!isBackgroundDispatch) {
+      setWidgetStateSafe({
+        ui_action_liveness_ack_status: liveness.ack_status,
+        ui_action_liveness_state_advanced: liveness.state_advanced ? "true" : "false",
+        ui_action_liveness_reason_code: liveness.reason_code,
+        ui_action_liveness_failure_class: livenessNotice.failure_class,
+        ui_action_liveness_action_code: liveness.action_code_echo,
+        ui_action_liveness_client_action_id: liveness.client_action_id_echo,
+      });
+    }
+    if (!isBackgroundDispatch && hasExplicitError) {
       console.warn("[ui_action_liveness_explicit_error]", {
         action_code: liveness.action_code_echo,
         client_action_id: liveness.client_action_id_echo,
@@ -2846,7 +2894,7 @@ export async function callRunStep(
         });
       }
       if (transientRetryError) return;
-    } else {
+    } else if (!isBackgroundDispatch) {
       if (isStartAction) {
         setWidgetStateSafe({
           start_dispatch_state: "ready",
@@ -2862,6 +2910,9 @@ export async function callRunStep(
       lowerMsg.includes("bridge unavailable") ||
       lowerMsg.includes("bridge timeout") ||
       lowerMsg.includes("transport");
+    if (isBackgroundDispatch) {
+      return;
+    }
     if (isStartAction && transportError) {
       console.log("[ui_start_dispatch_failed]", {
         reason: "transport_error",
@@ -2903,6 +2954,6 @@ export async function callRunStep(
       bootstrapPollInFlightSignature = "";
     }
     if (timeoutId) clearTimeout(timeoutId);
-    if (!didTimeout) setLoading(false);
+    if (!didTimeout && !isBackgroundDispatch) setLoading(false);
   }
 }

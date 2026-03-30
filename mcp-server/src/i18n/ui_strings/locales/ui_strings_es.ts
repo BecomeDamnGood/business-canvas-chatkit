@@ -189,13 +189,14 @@ export const UI_STRINGS_LOCALE_ES: Record<string, string> = {
     "uiSubtitle": "Usa el widget de The Business Strategy Canvas Builder para continuar (no el cuadro de chat)",
     "uiTitle.template": "Business Strategy Canvas Builder",
     "uiUseWidgetToContinue": "Usa el widget de The Business Strategy Canvas Builder para continuar (no el cuadro de chat).",
-    "compare.choice.context.default": "Por favor, elige la redacción que mejor encaje.",
+    "compare.choice.context.default": "Elige la redacción que mejor encaje contigo.",
     "compare.feedback.compare.intro.template":
       "Aquí tienes una comparación para tu {0}.",
-    "compare.feedback.user_pick.ack.default": "Se ha mantenido tu redacción.",
+    "compare.feedback.user_pick.ack.default": "Mantener tu propia redacción está completamente bien.",
     "compare.feedback.dream_builder.rewrite.default":
       "Esta sugerencia amplía la redacción para este paso.",
-    "compare.feedback.user_pick.reason.default": "La redacción sigue encajando con este paso.",
+    "compare.feedback.user_pick.reason.default":
+      "Si sigues con ella, procura que la redacción sea clara, centrada en las personas y lo bastante específica para este paso.",
     "compare.chooseVersion": "Elegir esta versión",
     "compare.useInputFallback": "Usar este texto",
     "compareHeading": "Este es tu texto:",
@@ -203,6 +204,7 @@ export const UI_STRINGS_LOCALE_ES: Record<string, string> = {
     "compareGroupedCompareSuggestionLabel": "Esta es mi sugerencia:",
     "compareGroupedCompareInstruction": "Elige la versión que mejor encaje con la diferencia restante.",
     "compareGroupedCompareRetainedHeading": "Estos puntos ya permanecen en la lista final:",
-    "compareInstruction": "Por favor, haz clic en lo que mejor te encaje.",
+    "compareInstruction":
+      "Elige la versión que más se acerque a lo que quieres decir. Puedes mantener tu propia redacción si es la que mejor encaja.",
     "compareSuggestionLabel": "Esta sería mi sugerencia:",
 } as const;

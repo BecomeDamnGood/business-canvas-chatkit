@@ -32,6 +32,7 @@ export const ACTIONCODE_REGISTRY: ActionCodeRegistryShape = {
   version: ACTIONCODE_REGISTRY_VERSION,
   actions: {
     // Step 0
+    ACTION_STEP0_PREWARM: { route: "", step: "step_0", dispatch_owner: "state_action", status: "system" },
     ACTION_STEP0_META_RETURN: { route: "__ROUTE__STEP0_META_RETURN__", step: "step_0" },
     ACTION_STEP0_READY_START: { route: "__ROUTE__STEP0_READY_START__", step: "step_0" },
 

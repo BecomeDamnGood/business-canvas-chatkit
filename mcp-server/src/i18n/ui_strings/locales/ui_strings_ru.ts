@@ -220,13 +220,14 @@ export const UI_STRINGS_LOCALE_RU: Record<string, string> = {
     "transient.timeout": "Это занимает больше времени, чем обычно. Пожалуйста, попробуйте ещё раз.",
     "uiSubtitle": "Используйте виджет The Business Strategy Canvas Builder, чтобы продолжить (а не окно чата)",
     "uiUseWidgetToContinue": "Используйте виджет The Business Strategy Canvas Builder, чтобы продолжить (а не окно чата).",
-    "compare.choice.context.default": "Пожалуйста, выберите формулировку, которая подходит лучше всего.",
+    "compare.choice.context.default": "Выберите формулировку, которая лучше всего подходит именно вам.",
     "compare.feedback.compare.intro.template":
       "Вот сравнение для вашего(ей) {0}.",
-    "compare.feedback.user_pick.ack.default": "Ваша формулировка сохранена.",
+    "compare.feedback.user_pick.ack.default": "Оставить свою формулировку вполне нормально.",
     "compare.feedback.dream_builder.rewrite.default":
       "Это предложение делает формулировку для этого шага шире.",
-    "compare.feedback.user_pick.reason.default": "Формулировка остаётся подходящей для этого шага.",
+    "compare.feedback.user_pick.reason.default":
+      "Если вы продолжите с ней, важно, чтобы формулировка оставалась ясной, ориентированной на людей и достаточно конкретной для этого шага.",
     "compare.chooseVersion": "Выбрать эту версию",
     "compare.useInputFallback": "Использовать этот ввод",
     "compareHeading": "Вот ваш ввод:",
@@ -234,7 +235,8 @@ export const UI_STRINGS_LOCALE_RU: Record<string, string> = {
     "compareGroupedCompareSuggestionLabel": "Это моё предложение:",
     "compareGroupedCompareInstruction": "Выберите версию, которая лучше всего подходит для оставшегося различия.",
     "compareGroupedCompareRetainedHeading": "Эти пункты уже остаются в итоговом списке:",
-    "compareInstruction": "Пожалуйста, нажмите на то, что подходит вам лучше всего.",
+    "compareInstruction":
+      "Выберите версию, которая ближе всего к тому, что вы хотите сказать. Можно оставить и свою формулировку, если она подходит лучше.",
     "compareInterpretedListHeading": "Вот что я извлёк из вашего ввода:",
     "compareSuggestionLabel": "Вот что я бы предложил:",
 } as const;
