@@ -230,21 +230,33 @@ export function prepareWidgetScrollForAction(messageText: string): void {
   const normalized = String(messageText || "").trim().toUpperCase();
   if (!normalized || normalized === ACTION_BOOTSTRAP_POLL || normalized === ACTION_STEP0_PREWARM) return;
   const hadFocusedInput = blurWidgetInputFocus();
+  const shouldUseMobileBehavior = shouldUseMobileScrollBehavior();
+  const presentationPreviewTarget = isPresentationMakeAction(normalized);
   if (pendingWidgetScrollTimer) {
     clearTimeout(pendingWidgetScrollTimer);
     pendingWidgetScrollTimer = null;
   }
-  if (hadFocusedInput && shouldUseMobileScrollBehavior()) {
+  if (shouldUseMobileBehavior) {
+    // Mobile is more stable when we use one post-click top scroll path instead of
+    // scrolling immediately and then scrolling again after the response render.
+    pendingWidgetScrollTarget = presentationPreviewTarget ? "presentation_preview" : "";
+    const mobileScrollDelay = hadFocusedInput ? MOBILE_WIDGET_SCROLL_DELAY_MS : 0;
     pendingWidgetScrollTimer = setTimeout(() => {
       pendingWidgetScrollTimer = null;
       scheduleWidgetTopScrollAfterViewportSettles();
-    }, MOBILE_WIDGET_SCROLL_DELAY_MS);
+    }, mobileScrollDelay);
+    return;
+  }
+
+  if (hadFocusedInput) {
+    pendingWidgetScrollTimer = setTimeout(() => {
+      pendingWidgetScrollTimer = null;
+      scrollWidgetTop();
+    }, 0);
   } else {
     scrollWidgetTop();
   }
-  pendingWidgetScrollTarget = isPresentationMakeAction(normalized)
-    ? "presentation_preview"
-    : "widget_top";
+  pendingWidgetScrollTarget = presentationPreviewTarget ? "presentation_preview" : "widget_top";
 }
 
 export function applyPendingWidgetScroll(): void {
