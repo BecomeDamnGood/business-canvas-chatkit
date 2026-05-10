@@ -58,22 +58,13 @@ function createAppServer(baseUrl: string): McpServer {
       return "";
     }
   })();
-  const frameDomains = Array.from(
-    new Set(
-      [
-        widgetOrigin || "",
-      ].filter(Boolean)
-    )
-  );
   const widgetUiCsp = {
     connectDomains: Array.from(new Set([widgetOrigin, s3VideoOrigin].filter(Boolean))),
     resourceDomains: Array.from(new Set([widgetOrigin, s3VideoOrigin].filter(Boolean))),
-    frameDomains,
   };
   const widgetCompatCsp = {
     connect_domains: widgetUiCsp.connectDomains,
     resource_domains: widgetUiCsp.resourceDomains,
-    frame_domains: widgetUiCsp.frameDomains,
   };
   const server = new McpServer(
     {
