@@ -1,8 +1,5 @@
 import {
-  MCP_TOOL_CONTRACT_FAMILY_VERSION,
   RUN_STEP_MODEL_RESULT_SHAPE_VERSION,
-  RUN_STEP_TOOL_INPUT_SCHEMA_VERSION,
-  RUN_STEP_TOOL_OUTPUT_SCHEMA_VERSION,
 } from "../contracts/mcp_tool_contract.js";
 import { UI_STRINGS_DEFAULT } from "../i18n/ui_strings_defaults.js";
 import { safeString } from "../server_safe_string.js";
@@ -10,11 +7,8 @@ import { safeString } from "../server_safe_string.js";
 import { getHeader } from "./observability.js";
 import {
   isLocalDev,
-  normalizeIdempotencyKey,
-  parsePositiveInt,
   port,
 } from "./server_config.js";
-import { normalizeBootstrapSessionId } from "./ordering_parity.js";
 
 const NON_EMPTY_UI_STRING_FALLBACKS: Record<string, string> = {
   "app.open_to_continue": "Open the app to continue.",
@@ -38,10 +32,6 @@ function buildModelSafeResult(result: Record<string, unknown>): Record<string, u
   const ui =
     result && typeof result.ui === "object" && result.ui
       ? (result.ui as Record<string, unknown>)
-      : {};
-  const flags =
-    ui.flags && typeof ui.flags === "object"
-      ? (ui.flags as Record<string, unknown>)
       : {};
   const currentStep = safeString(result.current_step_id || state.current_step || "step_0");
   const uiView =
@@ -74,95 +64,6 @@ function buildModelSafeResult(result: Record<string, unknown>): Record<string, u
   const uiGateReason = safeString((result as any).ui_gate_reason || state.ui_gate_reason || "");
   const uiGateSinceMs = Number((result as any).ui_gate_since_ms ?? state.ui_gate_since_ms ?? 0) || 0;
   const bootstrapPhase = safeString((result as any).bootstrap_phase || state.bootstrap_phase || "");
-  const bootstrapSessionId = normalizeBootstrapSessionId(
-    (result as any).bootstrap_session_id || state.bootstrap_session_id || ""
-  );
-  const bootstrapEpoch = parsePositiveInt((result as any).bootstrap_epoch ?? state.bootstrap_epoch);
-  const responseSeq = parsePositiveInt((result as any).response_seq ?? state.response_seq);
-  const responseKindRaw = safeString((result as any).response_kind || state.response_kind || "");
-  const responseKind = responseKindRaw === "run_step" ? "run_step" : "";
-  const idempotencyKey = normalizeIdempotencyKey(
-    (result as any).idempotency_key ||
-      state.idempotency_key ||
-      flags.idempotency_key ||
-      ""
-  );
-  const idempotencyOutcomeRaw = safeString(
-    (result as any).idempotency_outcome ||
-      state.idempotency_outcome ||
-      flags.idempotency_outcome ||
-      ""
-  );
-  const idempotencyOutcome =
-    idempotencyOutcomeRaw === "fresh" ||
-    idempotencyOutcomeRaw === "replay" ||
-    idempotencyOutcomeRaw === "conflict" ||
-    idempotencyOutcomeRaw === "inflight"
-      ? idempotencyOutcomeRaw
-      : "";
-  const idempotencyErrorCode = safeString(
-    (result as any).idempotency_error_code ||
-      state.idempotency_error_code ||
-      flags.idempotency_error_code ||
-      ""
-  );
-  const hostWidgetSessionId = safeString(
-    (result as any).host_widget_session_id ||
-      state.host_widget_session_id ||
-      flags.host_widget_session_id ||
-      ""
-  );
-  const ackStatusRaw = safeString((result as any).ack_status || (state as any).ack_status || "");
-  const ackStatus =
-    ackStatusRaw === "accepted" ||
-    ackStatusRaw === "rejected" ||
-    ackStatusRaw === "timeout" ||
-    ackStatusRaw === "dropped"
-      ? ackStatusRaw
-      : "";
-  const stateAdvancedRaw =
-    (result as any).state_advanced ??
-    (state as any).state_advanced ??
-    ((state as any).ui_action_liveness as Record<string, unknown> | undefined)?.state_advanced;
-  const stateAdvanced =
-    stateAdvancedRaw === true ||
-    String(stateAdvancedRaw || "").trim().toLowerCase() === "true";
-  const reasonCode = safeString(
-    (result as any).reason_code ||
-      (state as any).reason_code ||
-      ((state as any).ui_action_liveness as Record<string, unknown> | undefined)?.reason_code ||
-      ""
-  );
-  const actionCodeEcho = safeString(
-    (result as any).action_code_echo ||
-      (state as any).action_code_echo ||
-      ((state as any).ui_action_liveness as Record<string, unknown> | undefined)?.action_code_echo ||
-      ""
-  );
-  const clientActionIdEcho = safeString(
-    (result as any).client_action_id_echo ||
-      (state as any).client_action_id_echo ||
-      ((state as any).ui_action_liveness as Record<string, unknown> | undefined)?.client_action_id_echo ||
-      ""
-  );
-  const toolContractFamilyVersion = safeString(
-    (result as any).tool_contract_family_version ||
-      state.tool_contract_family_version ||
-      flags.tool_contract_family_version ||
-      MCP_TOOL_CONTRACT_FAMILY_VERSION
-  );
-  const runStepInputSchemaVersion = safeString(
-    (result as any).run_step_input_schema_version ||
-      state.run_step_input_schema_version ||
-      flags.run_step_input_schema_version ||
-      RUN_STEP_TOOL_INPUT_SCHEMA_VERSION
-  );
-  const runStepOutputSchemaVersion = safeString(
-    (result as any).run_step_output_schema_version ||
-      state.run_step_output_schema_version ||
-      flags.run_step_output_schema_version ||
-      RUN_STEP_TOOL_OUTPUT_SCHEMA_VERSION
-  );
   const safeState: Record<string, unknown> = {
     current_step: currentStep || "step_0",
   };
@@ -185,35 +86,7 @@ function buildModelSafeResult(result: Record<string, unknown>): Record<string, u
   if (uiGateReason) safeState.ui_gate_reason = uiGateReason;
   if (uiGateSinceMs > 0) safeState.ui_gate_since_ms = uiGateSinceMs;
   if (bootstrapPhase) safeState.bootstrap_phase = bootstrapPhase;
-  if (bootstrapSessionId) safeState.bootstrap_session_id = bootstrapSessionId;
-  if (bootstrapEpoch > 0) safeState.bootstrap_epoch = bootstrapEpoch;
-  if (responseSeq > 0) safeState.response_seq = responseSeq;
-  if (responseKind) safeState.response_kind = responseKind;
-  if (idempotencyKey) safeState.idempotency_key = idempotencyKey;
-  if (idempotencyOutcome) safeState.idempotency_outcome = idempotencyOutcome;
-  if (idempotencyErrorCode) safeState.idempotency_error_code = idempotencyErrorCode;
-  if (hostWidgetSessionId) safeState.host_widget_session_id = hostWidgetSessionId;
-  if (ackStatus) safeState.ack_status = ackStatus;
-  if (ackStatus) safeState.state_advanced = stateAdvanced ? "true" : "false";
-  if (reasonCode) safeState.reason_code = reasonCode;
-  if (actionCodeEcho) safeState.action_code_echo = actionCodeEcho;
-  if (clientActionIdEcho) safeState.client_action_id_echo = clientActionIdEcho;
-  if (ackStatus) {
-    safeState.ui_action_liveness = {
-      ack_status: ackStatus,
-      state_advanced: stateAdvanced,
-      reason_code: stateAdvanced ? "" : reasonCode,
-      action_code_echo: actionCodeEcho,
-      client_action_id_echo: clientActionIdEcho,
-    };
-  }
-  if (toolContractFamilyVersion) safeState.tool_contract_family_version = toolContractFamilyVersion;
-  if (runStepInputSchemaVersion) safeState.run_step_input_schema_version = runStepInputSchemaVersion;
-  if (runStepOutputSchemaVersion) safeState.run_step_output_schema_version = runStepOutputSchemaVersion;
-  // Keep model-visible transport renderable for fallback paths without exposing rich content.
-  // Keep the model-safe fallback aligned with the actual turn phase.
-  // Outside the real prestart shell, emitting "Click Start to begin." creates a false downgrade
-  // for any client path that temporarily falls back to structuredContent.result.
+  // Keep model-visible transport renderable for fallback paths without exposing rich widget state.
   const modelSafePrompt = isPrestartView ? (startHint || openAppToContinue) : openAppToContinue;
   const modelSafeText = result.ok === true ? modelSafePrompt : openAppToContinue;
   return {
@@ -233,22 +106,6 @@ function buildModelSafeResult(result: Record<string, unknown>): Record<string, u
     ui_strings_fallback_applied: uiStringsFallbackApplied === "true",
     ui_strings_fallback_reason: uiStringsFallbackReason,
     bootstrap_phase: bootstrapPhase,
-    ...(bootstrapSessionId ? { bootstrap_session_id: bootstrapSessionId } : {}),
-    ...(bootstrapEpoch > 0 ? { bootstrap_epoch: bootstrapEpoch } : {}),
-    ...(responseSeq > 0 ? { response_seq: responseSeq } : {}),
-    ...(responseKind ? { response_kind: responseKind } : {}),
-    ...(idempotencyKey ? { idempotency_key: idempotencyKey } : {}),
-    ...(idempotencyOutcome ? { idempotency_outcome: idempotencyOutcome } : {}),
-    ...(idempotencyErrorCode ? { idempotency_error_code: idempotencyErrorCode } : {}),
-    ...(hostWidgetSessionId ? { host_widget_session_id: hostWidgetSessionId } : {}),
-    ...(ackStatus ? { ack_status: ackStatus } : {}),
-    ...(ackStatus ? { state_advanced: stateAdvanced } : {}),
-    ...(reasonCode ? { reason_code: reasonCode } : {}),
-    ...(actionCodeEcho ? { action_code_echo: actionCodeEcho } : {}),
-    ...(clientActionIdEcho ? { client_action_id_echo: clientActionIdEcho } : {}),
-    ...(toolContractFamilyVersion ? { tool_contract_family_version: toolContractFamilyVersion } : {}),
-    ...(runStepInputSchemaVersion ? { run_step_input_schema_version: runStepInputSchemaVersion } : {}),
-    ...(runStepOutputSchemaVersion ? { run_step_output_schema_version: runStepOutputSchemaVersion } : {}),
     state: safeState,
   };
 }

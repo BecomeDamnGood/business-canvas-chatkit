@@ -21,6 +21,7 @@ echo "Running contract smoke gate..."
   node scripts/build-ui.mjs --check
   node scripts/verify-ui-runtime-artifacts.mjs
   npm run typecheck
+  npm run check:submission-forbidden
 )
 
 echo "Querying ECR for existing tags..."

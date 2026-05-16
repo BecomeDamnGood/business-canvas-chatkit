@@ -6,16 +6,23 @@
     "dev": "npm run build:ui && node scripts/dev-start.mjs",
     "build": "node scripts/prepare-presentation-assets.mjs && npm run build:ui && tsc -p tsconfig.build.json && node scripts/copy-ui-dist.mjs",
     "build:ui": "tsc -p tsconfig.ui.json --noEmit && node scripts/build-ui.mjs",
+    "check:submission-forbidden": "node scripts/check-submission-forbidden-terms.mjs",
     "verify:ui-runtime-artifacts": "node scripts/build-ui.mjs --check && node scripts/verify-ui-runtime-artifacts.mjs --dist",
     "typecheck": "tsc -p tsconfig.build.json --noEmit && tsc -p tsconfig.ui.json --noEmit",
     "start": "node dist/server.js",
     "smoke:runtime": "node scripts/runtime-smoke.mjs"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.25.3",
-    "cld3-asm": "^4.0.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "cld3-asm": "^1.0.1",
     "openai": "^6.17.0",
     "zod": "^4.3.6"
+  },
+  "overrides": {
+    "@hono/node-server": "1.19.14",
+    "ajv": "8.20.0",
+    "fast-uri": "3.1.2",
+    "hono": "4.12.19"
   },
   "devDependencies": {
     "@types/node": "^22.10.10",

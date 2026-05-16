@@ -40,7 +40,7 @@ import { loadUiHtml, runStepHandler } from "./run_step_transport.js";
 
 export const RUN_STEP_TOOL_ANNOTATIONS = Object.freeze({
   readOnlyHint: false,
-  openWorldHint: false,
+  openWorldHint: true,
   destructiveHint: false,
   idempotentHint: false,
 });

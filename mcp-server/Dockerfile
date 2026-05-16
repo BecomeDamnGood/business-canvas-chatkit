@@ -18,6 +18,7 @@ RUN node scripts/prepare-presentation-assets.mjs
 # Compile TS -> dist/
 RUN npm run build
 RUN node scripts/verify-ui-runtime-artifacts.mjs --dist
+RUN npm run check:submission-forbidden
 
 
 FROM node:20-slim AS runtime

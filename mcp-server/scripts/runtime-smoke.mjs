@@ -22,6 +22,12 @@ function extractResult(payload) {
   return result;
 }
 
+function extractWidgetResult(payload) {
+  const result = payload?.result?._meta?.widget_result ?? payload?._meta?.widget_result;
+  assert.equal(Boolean(result && typeof result === "object"), true, "widget result payload ontbreekt");
+  return result;
+}
+
 function extractJsonRpcError(payload) {
   return payload?.error && typeof payload.error === "object" ? payload.error : null;
 }
@@ -123,6 +129,22 @@ async function main() {
     false,
     "bundle bevat nog een verboden legacy publieke compare-kind string"
   );
+  const blockedRuntimeTerms = [
+    ["he", "ygen"].join(""),
+    ["app", ".", "he", "ygen", ".", "com"].join(""),
+    ["fra", "me", "Domains"].join(""),
+    ["fra", "me", "_", "domains"].join(""),
+    ["<", "if", "rame"].join(""),
+    ["open", "External"].join(""),
+    ["redirect", "_", "domains"].join(""),
+  ];
+  for (const term of blockedRuntimeTerms) {
+    assert.equal(
+      bundledHtml.toLowerCase().includes(term.toLowerCase()),
+      false,
+      `bundle bevat verboden submission term: ${term}`
+    );
+  }
 
   const server = spawn("node", ["--loader", "ts-node/esm", "server.ts"], {
     cwd: serverCwd,
@@ -178,6 +200,31 @@ async function main() {
     assert.equal(first.status, 200, "step_0 smoke request moet 200 geven");
     assert.equal(first.result.current_step_id, "step_0", "step_0 result mismatch");
     assert.equal(Boolean(first.result.state && typeof first.result.state === "object"), true, "step_0 state ontbreekt");
+    for (const key of [
+      "bootstrap_session_id",
+      "idempotency_key",
+      "host_widget_session_id",
+      "response_seq",
+      "client_action_id_echo",
+      "action_code_echo",
+    ]) {
+      assert.equal(
+        Object.prototype.hasOwnProperty.call(first.result, key),
+        false,
+        `model-visible result bevat intern veld: ${key}`
+      );
+      assert.equal(
+        Object.prototype.hasOwnProperty.call(first.result.state || {}, key),
+        false,
+        `model-visible state bevat intern veld: ${key}`
+      );
+    }
+    const firstWidgetResult = extractWidgetResult(first.json);
+    assert.equal(
+      Boolean(firstWidgetResult.state && typeof firstWidgetResult.state === "object"),
+      true,
+      "widget_result state ontbreekt"
+    );
 
     const idempotencyKey = `smoke-idem-${Date.now()}`;
     const duplicatePayload = {
@@ -185,13 +232,15 @@ async function main() {
       user_message: "Marketing agency Mindd",
       input_mode: "chat",
       idempotency_key: idempotencyKey,
-      state: first.result.state,
+      state: firstWidgetResult.state,
     };
     const duplicate1 = await callRunStep(duplicatePayload);
     const duplicate2 = await callRunStep(duplicatePayload);
+    const duplicateWidget1 = extractWidgetResult(duplicate1.json);
+    const duplicateWidget2 = extractWidgetResult(duplicate2.json);
 
-    const duplicateSeq1 = Number(duplicate1.result.response_seq || 0);
-    const duplicateSeq2 = Number(duplicate2.result.response_seq || 0);
+    const duplicateSeq1 = Number(duplicateWidget1.response_seq || duplicateWidget1.state?.response_seq || 0);
+    const duplicateSeq2 = Number(duplicateWidget2.response_seq || duplicateWidget2.state?.response_seq || 0);
     assert.equal(duplicateSeq1 > 0, true, "duplicate #1 response_seq ontbreekt");
     assert.equal(duplicateSeq2 > 0, true, "duplicate #2 response_seq ontbreekt");
 
@@ -203,8 +252,9 @@ async function main() {
       ...duplicatePayload,
       user_message: "Different payload",
     });
-    const conflictSeq = Number(conflictCandidate.result.response_seq || 0);
-    const conflictErrorType = String(conflictCandidate.result?.error?.type || "");
+    const conflictWidget = extractWidgetResult(conflictCandidate.json);
+    const conflictSeq = Number(conflictWidget.response_seq || conflictWidget.state?.response_seq || 0);
+    const conflictErrorType = String(conflictWidget?.error?.type || "");
     const conflictBehavior =
       conflictErrorType === "idempotency_conflict"
         ? "conflict"

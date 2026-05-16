@@ -33,9 +33,7 @@ const DEFAULT_CSP_OPTIONS: CSPOptions = {
     images: [],
     media: ["https://mycanvasvideos.s3.amazonaws.com"],
     connects: [],
-    frames: [
-      "'self'",
-    ],
+    frames: [],
   },
 };
 
