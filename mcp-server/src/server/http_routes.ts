@@ -53,6 +53,8 @@ import {
 import { summarizeBootstrapSessions } from "./ordering_parity.js";
 import { summarizeIdempotencyRegistry } from "./idempotency_registry.js";
 import { createAppServer } from "./mcp_registration.js";
+import { loadReportsPayload, resolveReportsDateRange } from "./reports_analytics.js";
+import { renderReportsDashboardHtml } from "./reports_dashboard.js";
 import { resolveBaseUrl } from "./run_step_model_result.js";
 import { loadUiHtml } from "./run_step_transport.js";
 
@@ -62,6 +64,18 @@ const DEFAULT_SHUTDOWN_GRACE_MS = 10_000;
 const MCP_CORS_ALLOWED_METHODS = "POST, GET, DELETE, OPTIONS";
 const MCP_CORS_ALLOWED_HEADERS =
   "Content-Type, Accept, Authorization, Last-Event-ID, Mcp-Session-Id, Mcp-Protocol-Version, X-Correlation-Id";
+const REPORTS_PATH = "/reports";
+const REPORTS_API_PATH = "/api/reports";
+const REPORTS_FRAME_ANCESTORS = [
+  "https://chat.openai.com",
+  "https://*.openai.com",
+  "https://chatgpt.com",
+  "https://*.chatgpt.com",
+  "https://www.bensteenstra.com",
+  "https://bensteenstra.com",
+  "https://*.wix.com",
+  "https://*.wixsite.com",
+];
 
 function isWithinDirectory(baseDir: string, candidatePath: string): boolean {
   const relative = path.relative(baseDir, candidatePath);
@@ -360,6 +374,88 @@ const httpServer = async (req: any, res: any) => {
       "cache-control": "public, max-age=86400",
     });
     res.end(faviconPng);
+    return;
+  }
+
+  if ((req.method === "GET" || req.method === "HEAD") && url.pathname === REPORTS_PATH) {
+    try {
+      applySecurityHeaders(res, {
+        allowInlineScripts: true,
+        allowInlineStyles: true,
+        allowEval: false,
+        frameAncestors: REPORTS_FRAME_ANCESTORS,
+        allowedDomains: {
+          fonts: [],
+          scripts: [],
+          styles: [],
+          images: [],
+          media: ["https://mycanvasvideos.s3.amazonaws.com"],
+          connects: [],
+          frames: [],
+        },
+      });
+      const payload = await loadReportsPayload({
+        from: safeString(url.searchParams.get("from") ?? "").trim(),
+        to: safeString(url.searchParams.get("to") ?? "").trim(),
+        timezone: safeString(url.searchParams.get("timezone") ?? "").trim(),
+      });
+      const html = renderReportsDashboardHtml({
+        payload,
+        apiPath: REPORTS_API_PATH,
+      });
+      res.writeHead(200, {
+        "content-type": "text/html; charset=utf-8",
+        "content-length": Buffer.byteLength(html).toString(),
+        "cache-control": "no-store",
+      });
+      if (req.method === "HEAD") {
+        res.end();
+        return;
+      }
+      res.end(html);
+    } catch (error) {
+      res.writeHead(500, { "content-type": "application/json; charset=utf-8" });
+      res.end(
+        JSON.stringify({
+          error: "reports_dashboard_failed",
+          message: safeString((error as Error)?.message ?? "Unknown error"),
+        })
+      );
+    }
+    return;
+  }
+
+  if ((req.method === "GET" || req.method === "HEAD") && url.pathname === REPORTS_API_PATH) {
+    try {
+      const payload = await loadReportsPayload({
+        from: safeString(url.searchParams.get("from") ?? "").trim(),
+        to: safeString(url.searchParams.get("to") ?? "").trim(),
+        timezone: safeString(url.searchParams.get("timezone") ?? "").trim(),
+      });
+      res.writeHead(200, {
+        "content-type": "application/json; charset=utf-8",
+        "cache-control": "no-store",
+      });
+      if (req.method === "HEAD") {
+        res.end();
+        return;
+      }
+      res.end(JSON.stringify(payload));
+    } catch (error) {
+      const fallbackRange = resolveReportsDateRange({
+        from: safeString(url.searchParams.get("from") ?? "").trim(),
+        to: safeString(url.searchParams.get("to") ?? "").trim(),
+        timezone: safeString(url.searchParams.get("timezone") ?? "").trim(),
+      });
+      res.writeHead(500, { "content-type": "application/json; charset=utf-8" });
+      res.end(
+        JSON.stringify({
+          error: "reports_api_failed",
+          message: safeString((error as Error)?.message ?? "Unknown error"),
+          range: fallbackRange,
+        })
+      );
+    }
     return;
   }
 
