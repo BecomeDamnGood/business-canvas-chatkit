@@ -1,4 +1,4 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
 
 import {
   MCP_TOOL_CONTRACT_FAMILY_VERSION,
@@ -31,7 +31,6 @@ import {
 import {
   UI_RESOURCE_NAME,
   UI_RESOURCE_PATH,
-  UI_RESOURCE_QUERY,
   VERSION,
   normalizeIdempotencyKey,
 } from "./server_config.js";
@@ -46,6 +45,65 @@ export const RUN_STEP_TOOL_ANNOTATIONS = Object.freeze({
 });
 
 export const RUN_STEP_TOOL_SECURITY_SCHEMES = Object.freeze([{ type: "noauth" }] as const);
+
+function buildUiResourceUri(version: string): string {
+  const normalizedVersion = encodeURIComponent(safeString(version || "").trim() || "v1");
+  return `ui://widget/business-canvas-step-card-${normalizedVersion}.html`;
+}
+
+function buildLegacyUiResourceBaseUri(baseUrl: string): string {
+  const raw = safeString(baseUrl || "").trim();
+  if (!raw) return "";
+  try {
+    return new URL(UI_RESOURCE_PATH, raw).toString();
+  } catch {
+    return "";
+  }
+}
+
+function buildLegacyUiResourceTemplates(baseUri: string): ResourceTemplate[] {
+  if (!baseUri) return [];
+  return [
+    new ResourceTemplate(`${baseUri}{?v}`, { list: undefined }),
+    new ResourceTemplate(`${baseUri}{?view}`, { list: undefined }),
+    new ResourceTemplate(`${baseUri}{?v,view}`, { list: undefined }),
+    new ResourceTemplate(`${baseUri}{?view,v}`, { list: undefined }),
+  ];
+}
+
+function buildUiResourceContents(params: {
+  resourceUri: string;
+  baseUrl: string;
+  widgetOrigin: string;
+  widgetUiCsp: {
+    connectDomains: string[];
+    resourceDomains: string[];
+  };
+  widgetCompatCsp: {
+    connect_domains: string[];
+    resource_domains: string[];
+  };
+}) {
+  const { resourceUri, baseUrl, widgetOrigin, widgetUiCsp, widgetCompatCsp } = params;
+  return {
+    contents: [
+      {
+        uri: resourceUri,
+        mimeType: "text/html;profile=mcp-app",
+        text: loadUiHtml(baseUrl),
+        _meta: {
+          ui: {
+            csp: widgetUiCsp,
+            ...(widgetOrigin ? { domain: widgetOrigin } : {}),
+          },
+          "openai/widgetDescription": "Business Strategy Canvas Builder widget UI",
+          "openai/widgetCSP": widgetCompatCsp,
+          ...(widgetOrigin ? { "openai/widgetDomain": widgetOrigin } : {}),
+        },
+      },
+    ],
+  };
+}
 
 function createAppServer(baseUrl: string): McpServer {
   const s3VideoOrigin = "https://mycanvasvideos.s3.amazonaws.com";
@@ -80,9 +138,8 @@ function createAppServer(baseUrl: string): McpServer {
   );
 
   // Register UI resource
-  const uiResourceUri = baseUrl
-    ? `${baseUrl}${UI_RESOURCE_PATH}${UI_RESOURCE_QUERY}`
-    : `${UI_RESOURCE_PATH}${UI_RESOURCE_QUERY}`;
+  const uiResourceUri = buildUiResourceUri(VERSION);
+  const legacyUiResourceBaseUri = buildLegacyUiResourceBaseUri(baseUrl);
   
   server.registerResource(
     UI_RESOURCE_NAME,
@@ -92,26 +149,53 @@ function createAppServer(baseUrl: string): McpServer {
       description: "Business Strategy Canvas Builder widget UI",
     },
     async () => {
-      // Return the UI HTML content
-      return {
-        contents: [
-          {
-            uri: uiResourceUri,
-            text: loadUiHtml(baseUrl),
-            _meta: {
-              ui: {
-                csp: widgetUiCsp,
-                ...(widgetOrigin ? { domain: widgetOrigin } : {}),
-              },
-              "openai/widgetDescription": "Business Strategy Canvas Builder widget UI",
-              "openai/widgetCSP": widgetCompatCsp,
-              ...(widgetOrigin ? { "openai/widgetDomain": widgetOrigin } : {}),
-            },
-          },
-        ],
-      };
+      return buildUiResourceContents({
+        resourceUri: uiResourceUri,
+        baseUrl,
+        widgetOrigin,
+        widgetUiCsp,
+        widgetCompatCsp,
+      });
     }
   );
+
+  if (legacyUiResourceBaseUri) {
+    server.registerResource(
+      `${UI_RESOURCE_NAME}-legacy-absolute`,
+      legacyUiResourceBaseUri,
+      {
+        mimeType: "text/html;profile=mcp-app",
+        description: "Legacy absolute Business Strategy Canvas Builder widget UI",
+      },
+      async () =>
+        buildUiResourceContents({
+          resourceUri: legacyUiResourceBaseUri,
+          baseUrl,
+          widgetOrigin,
+          widgetUiCsp,
+          widgetCompatCsp,
+        })
+    );
+
+    for (const [index, template] of buildLegacyUiResourceTemplates(legacyUiResourceBaseUri).entries()) {
+      server.registerResource(
+        `${UI_RESOURCE_NAME}-legacy-template-${index + 1}`,
+        template,
+        {
+          mimeType: "text/html;profile=mcp-app",
+          description: "Legacy absolute Business Strategy Canvas Builder widget UI",
+        },
+        async (requestedUri) =>
+          buildUiResourceContents({
+            resourceUri: requestedUri.toString(),
+            baseUrl,
+            widgetOrigin,
+            widgetUiCsp,
+            widgetCompatCsp,
+          })
+      );
+    }
+  }
 
   server.registerTool(
     "run_step",

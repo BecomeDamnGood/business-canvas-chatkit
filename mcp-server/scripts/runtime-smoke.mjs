@@ -8,6 +8,8 @@ import { fileURLToPath } from "node:url";
 
 const port = String(process.env.SMOKE_PORT || process.env.PORT || "8787").trim() || "8787";
 const baseUrl = `http://127.0.0.1:${port}`;
+const legacyWidgetBaseUrl =
+  String(process.env.PUBLIC_BASE_URL || process.env.BASE_URL || `http://localhost:${port}`).trim().replace(/\/+$/, "");
 const serverCwd = dirname(fileURLToPath(new URL("../server.ts", import.meta.url)));
 const readyTimeoutMs = Number(process.env.SMOKE_READY_TIMEOUT_MS || 30000);
 const bundlePath = path.resolve(serverCwd, "ui/step-card.bundled.html");
@@ -96,6 +98,81 @@ async function ensureMcpInitialized() {
   assert.equal(init.status, 200, "MCP initialize moet 200 geven");
   assert.equal(Boolean(extractJsonRpcError(init.json)), false, "MCP initialize mag geen JSON-RPC error geven");
   mcpInitialized = true;
+}
+
+async function readResourceUri(resourceUri) {
+  const readRes = await postMcp({
+    jsonrpc: "2.0",
+    id: `read-${++rpcId}`,
+    method: "resources/read",
+    params: { uri: resourceUri },
+  });
+  assert.equal(readRes.status, 200, `resources/read moet 200 geven voor ${resourceUri}`);
+  assert.equal(Boolean(extractJsonRpcError(readRes.json)), false, `resources/read mag geen JSON-RPC error geven voor ${resourceUri}`);
+
+  const content = readRes.json?.result?.contents?.[0];
+  assert.equal(Boolean(content), true, `resources/read content ontbreekt voor ${resourceUri}`);
+  assert.equal(String(content?.uri || ""), resourceUri, `resources/read content URI mismatch voor ${resourceUri}`);
+  assert.equal(
+    String(content?.mimeType || ""),
+    "text/html;profile=mcp-app",
+    `resources/read content mimeType mismatch voor ${resourceUri}`
+  );
+  assert.equal(typeof content?.text === "string" && content.text.length > 0, true, `resources/read HTML ontbreekt voor ${resourceUri}`);
+}
+
+async function readUiResource() {
+  await ensureMcpInitialized();
+
+  const toolsRes = await postMcp({
+    jsonrpc: "2.0",
+    id: `tools-${++rpcId}`,
+    method: "tools/list",
+    params: {},
+  });
+  assert.equal(toolsRes.status, 200, "tools/list moet 200 geven");
+  assert.equal(Boolean(extractJsonRpcError(toolsRes.json)), false, "tools/list mag geen JSON-RPC error geven");
+
+  const runStepTool = toolsRes.json?.result?.tools?.find?.((tool) => tool?.name === "run_step");
+  assert.equal(Boolean(runStepTool), true, "run_step tool ontbreekt in tools/list");
+
+  const resourceUri = String(runStepTool?._meta?.ui?.resourceUri || "");
+  assert.equal(resourceUri.startsWith("ui://"), true, "run_step resourceUri moet ui:// gebruiken");
+  assert.equal(
+    String(runStepTool?._meta?.["openai/outputTemplate"] || ""),
+    resourceUri,
+    "openai/outputTemplate moet exact gelijk zijn aan ui.resourceUri"
+  );
+
+  const resourcesRes = await postMcp({
+    jsonrpc: "2.0",
+    id: `resources-${++rpcId}`,
+    method: "resources/list",
+    params: {},
+  });
+  assert.equal(resourcesRes.status, 200, "resources/list moet 200 geven");
+  assert.equal(Boolean(extractJsonRpcError(resourcesRes.json)), false, "resources/list mag geen JSON-RPC error geven");
+
+  const listedResource = resourcesRes.json?.result?.resources?.find?.((resource) => resource?.uri === resourceUri);
+  assert.equal(Boolean(listedResource), true, "UI resource ontbreekt in resources/list");
+  assert.equal(
+    String(listedResource?.mimeType || ""),
+    "text/html;profile=mcp-app",
+    "resources/list UI mimeType mismatch"
+  );
+  await readResourceUri(resourceUri);
+
+  const legacyBaseUri = `${legacyWidgetBaseUrl}/ui/step-card`;
+  const legacyUris = [
+    legacyBaseUri,
+    `${legacyBaseUri}?v=v474`,
+    `${legacyBaseUri}?view=default`,
+    `${legacyBaseUri}?v=2026-08-12-ui-template-corsfix&view=default`,
+    `${legacyBaseUri}?view=default&v=2026-08-12-ui-template-corsfix`,
+  ];
+  for (const legacyUri of legacyUris) {
+    await readResourceUri(legacyUri);
+  }
 }
 
 async function callRunStep(body) {
@@ -190,6 +267,8 @@ async function main() {
     assert.equal(readyRes.ok, true, "/ready moet 200 geven");
     const readyJson = await readyRes.json();
     assert.equal(readyJson?.ready, true, "/ready payload mist ready=true");
+
+    await readUiResource();
 
     const first = await callRunStep({
       current_step_id: "step_0",
