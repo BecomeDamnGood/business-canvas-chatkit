@@ -243,7 +243,7 @@ function hydrateStep0ContextFromBootstrap(state: Record<string, unknown>): Recor
   const venture = normalizeStep0Token(bootstrap.venture);
   const name = normalizeStep0Token(bootstrap.name);
   if (!venture || !name) return state;
-  const status = safeString(bootstrap.status).trim().toLowerCase() === "existing" ? "existing" : "starting";
+  const status = safeString(bootstrap.status).trim().toLowerCase() === "starting" ? "starting" : "existing";
   const source = normalizeStep0Token(bootstrap.source);
   const businessName = normalizeStep0Token(state.business_name);
   const step0Final = normalizeStep0Token(state.step_0_final);

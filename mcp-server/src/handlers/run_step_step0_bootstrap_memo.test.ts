@@ -84,7 +84,7 @@ test("recognized false step0 bootstrap results are memoized too", async () => {
       recognized: false,
       venture: "",
       name: "",
-      status: "starting",
+      status: "existing",
     };
   };
 
@@ -103,6 +103,7 @@ test("recognized false step0 bootstrap results are memoized too", async () => {
 
   assert.equal(loaderCalls, 1);
   assert.equal(first.value?.recognized, false);
+  assert.equal(first.value?.status, "existing");
   assert.equal(second.fromCache, true);
   assert.equal(second.value?.recognized, false);
 });

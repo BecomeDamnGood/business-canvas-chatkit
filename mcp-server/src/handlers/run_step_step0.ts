@@ -27,7 +27,7 @@ export function parseStep0Final(step0Final: string, fallbackName: string): Step0
 
   const venture = (ventureMatch?.[1] || "venture").trim();
   const name = (nameMatch?.[1] || fallbackName || "TBD").trim();
-  const status = (statusMatch?.[1] || "starting").trim();
+  const status = (statusMatch?.[1] || "existing").trim();
   return { venture, name, status };
 }
 
@@ -69,7 +69,7 @@ function normalizedNameEquals(left: string, right: string): boolean {
 }
 
 function toStep0Status(rawStatus: string): "existing" | "starting" {
-  return String(rawStatus || "").trim().toLowerCase() === "existing" ? "existing" : "starting";
+  return String(rawStatus || "").trim().toLowerCase() === "starting" ? "starting" : "existing";
 }
 
 function composeStep0Final(ventureRaw: string, nameRaw: string, statusRaw: string): string {

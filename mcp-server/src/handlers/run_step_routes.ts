@@ -371,7 +371,7 @@ export type Step0BootstrapMemoValue =
       recognized: false;
       venture: "";
       name: "";
-      status: "starting";
+      status: "existing";
     }
   | {
       recognized: true;
@@ -1364,7 +1364,7 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
                   recognized: false,
                   venture: "",
                   name: "",
-                  status: "starting",
+                  status: "existing",
                 };
               }
               const seededVenture = sanitizeStep0SeedToken(bootstrapResult.venture, "");
@@ -1375,9 +1375,9 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
                 venture: seededVenture,
                 name: seededName,
                 status:
-                  String(bootstrapResult.status || "").trim().toLowerCase() === "existing"
-                    ? "existing"
-                    : "starting",
+                  String(bootstrapResult.status || "").trim().toLowerCase() === "starting"
+                    ? "starting"
+                    : "existing",
               };
             },
           });
@@ -1457,7 +1457,7 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
           const bootstrapVenture = sanitizeStep0SeedToken(rawBootstrap.venture, "");
           const bootstrapName = sanitizeStep0SeedToken(rawBootstrap.name, "");
           const bootstrapStatus =
-            String(rawBootstrap.status || "").trim().toLowerCase() === "existing" ? "existing" : "starting";
+            String(rawBootstrap.status || "").trim().toLowerCase() === "starting" ? "starting" : "existing";
           const hasBootstrap = bootstrapVenture !== "" && bootstrapName !== "";
           if (hasBootstrap) {
             step0Final = `Venture: ${bootstrapVenture} | Name: ${bootstrapName} | Status: ${bootstrapStatus}`;
@@ -1475,7 +1475,7 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
               String((context.state as Record<string, unknown>).business_name || "TBD")
             );
             const seededStatus =
-              String(seed.status || "").trim().toLowerCase() === "existing" ? "existing" : "starting";
+              String(seed.status || "").trim().toLowerCase() === "starting" ? "starting" : "existing";
             step0Final = `Venture: ${seededVenture} | Name: ${seededName || "TBD"} | Status: ${seededStatus}`;
             (context.state as Record<string, unknown>)[step0FinalField] = step0Final;
             if (seededName && seededName.toLowerCase() !== "tbd") {

@@ -88,3 +88,11 @@ test("normalizeConfirmationBaselineForStartTrigger strips prehydrated step_0_fin
   assert.equal(String(baseline.step_0_final || ""), "");
   assert.equal(String(baseline.business_name || ""), "Mindd");
 });
+
+test("parseStep0Final defaults missing status to existing", () => {
+  const parsed = parseStep0Final("Venture: creative agency | Name: Mindd", "TBD");
+
+  assert.equal(parsed.venture, "creative agency");
+  assert.equal(parsed.name, "Mindd");
+  assert.equal(parsed.status, "existing");
+});
