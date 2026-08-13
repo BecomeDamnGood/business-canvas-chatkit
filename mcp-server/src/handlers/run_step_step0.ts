@@ -258,7 +258,7 @@ export function createRunStepStep0DisplayHelpers(deps: RunStepStep0DisplayDeps) 
         normalizedInput
       );
     }
-    if (hasStep0 && (action === "ASK" || action === "ESCAPE")) {
+    if (hasStep0) {
       const parsedFromState = parseStep0Final(step0FinalRaw, String((state as any).business_name || "TBD"));
       const incomingStep0Raw = String(next.step_0 || "").trim();
       const incomingHasValidStep0 = hasValidStep0Final(incomingStep0Raw);

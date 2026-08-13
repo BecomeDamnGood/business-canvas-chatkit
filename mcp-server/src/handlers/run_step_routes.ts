@@ -160,6 +160,41 @@ export function collectStepFinalConfirmationEvents(params: {
   return events;
 }
 
+export function normalizeConfirmationBaselineForStartTrigger(params: {
+  baselineState: CanvasState | Record<string, unknown> | null | undefined;
+  actionCodeRaw: string;
+  currentStep: unknown;
+  introShownSession: unknown;
+  step0Id: string;
+}): Record<string, unknown> {
+  const baselineState = asRecord(params.baselineState || {});
+  if (String(params.actionCodeRaw || "").trim().toUpperCase() !== "ACTION_START") {
+    return baselineState;
+  }
+  if (String(params.currentStep || "").trim() !== params.step0Id) {
+    return baselineState;
+  }
+  if (String(params.introShownSession || "").trim().toLowerCase() === "true") {
+    return baselineState;
+  }
+
+  const step0FinalField = String((STEP_FINAL_FIELD_BY_STEP_ID as Record<string, string>)[params.step0Id] || "").trim();
+  if (!step0FinalField) return baselineState;
+
+  const step0Bootstrap = asRecord(baselineState.step0_bootstrap || {});
+  const hasBootstrap =
+    sanitizeStep0SeedToken(step0Bootstrap.venture, "") !== "" &&
+    sanitizeStep0SeedToken(step0Bootstrap.name, "") !== "";
+  const step0FinalValue = String(baselineState[step0FinalField] || "").trim();
+  if (!hasBootstrap || !step0FinalValue) return baselineState;
+
+  const normalizedBaseline = {
+    ...baselineState,
+  };
+  delete normalizedBaseline[step0FinalField];
+  return normalizedBaseline;
+}
+
 const SubmitScoresPayloadSchema = z.object({
   action: z.literal("submit_scores"),
   scores: z.array(z.array(z.number().finite())),
@@ -1253,7 +1288,7 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
         return routeMode.shouldReturnPrestartGate || routeMode.isStartTrigger;
       },
       handle: async (context) => {
-        const confirmationBaselineState: CanvasState = {
+        let confirmationBaselineState: CanvasState = {
           ...(context.state as Record<string, unknown>),
         } as CanvasState;
         const lastSpecialist = asRecord((context.state as Record<string, unknown>).last_specialist_result || {});
@@ -1273,6 +1308,13 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
         const initialUserMessageSeed = String((context.state as Record<string, unknown>).initial_user_message ?? "").trim();
         const startLocaleSeedText = initialUserMessageSeed || context.userMessage;
         const step0FinalField = getFinalFieldForStepId(deps.step0Id) || "step_0_final";
+        confirmationBaselineState = normalizeConfirmationBaselineForStartTrigger({
+          baselineState: confirmationBaselineState,
+          actionCodeRaw: context.actionCodeRaw,
+          currentStep: (context.state as Record<string, unknown>).current_step,
+          introShownSession: (context.state as Record<string, unknown>).intro_shown_session,
+          step0Id: deps.step0Id,
+        }) as CanvasState;
 
         const maybeHydrateBootstrapFromStep0Specialist = async (persistFinal: boolean): Promise<string> => {
           const currentBootstrap = asRecord((context.state as Record<string, unknown>).step0_bootstrap || {});

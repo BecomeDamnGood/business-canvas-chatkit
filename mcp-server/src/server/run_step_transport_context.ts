@@ -20,6 +20,8 @@ import {
 import {
   normalizeIdempotencyKey,
   parsePositiveInt,
+  RUN_STEP_STALE_INGEST_GUARD_V1_ENABLED,
+  RUN_STEP_STALE_REBASE_V1_ENABLED,
 } from "./server_config.js";
 
 export type RunStepHandlerArgs = {
@@ -380,8 +382,8 @@ export function buildRunStepContext(args: RunStepHandlerArgs): RunStepContext {
   const localeHint = safeString(args.locale_hint ?? "");
   const inputMode = safeString(args.input_mode ?? "chat");
   const action = upperMessage.startsWith("ACTION_") ? upperMessage : "text_input";
-  const staleIngestGuardEnabled = false;
-  const staleRebaseEnabled = false;
+  const staleIngestGuardEnabled = RUN_STEP_STALE_INGEST_GUARD_V1_ENABLED;
+  const staleRebaseEnabled = RUN_STEP_STALE_REBASE_V1_ENABLED;
   const staleInteractiveActionPolicy = classifyStaleInteractiveActionPolicy(action);
   const existingClientActionId = normalizeIdempotencyKey(
     safeString((stateForTool as { __client_action_id?: unknown }).__client_action_id ?? "")

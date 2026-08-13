@@ -2,7 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { getDefaultState } from "../core/state.js";
-import { collectStepFinalConfirmationEvents } from "./run_step_routes.js";
+import {
+  collectStepFinalConfirmationEvents,
+  normalizeConfirmationBaselineForStartTrigger,
+} from "./run_step_routes.js";
 import { parseStep0Final } from "./run_step_step0.js";
 
 test("collectStepFinalConfirmationEvents includes step 1 when step_0_final becomes known", () => {
@@ -59,4 +62,29 @@ test("collectStepFinalConfirmationEvents includes later confirmed steps and igno
       source: "explicit_confirmation",
     },
   ]);
+});
+
+test("normalizeConfirmationBaselineForStartTrigger strips prehydrated step_0_final for first start", () => {
+  const baseline = normalizeConfirmationBaselineForStartTrigger({
+    baselineState: {
+      ...getDefaultState(),
+      current_step: "step_0",
+      intro_shown_session: "false",
+      business_name: "Mindd",
+      step_0_final: "Venture: creative agency | Name: Mindd | Status: existing",
+      step0_bootstrap: {
+        venture: "creative agency",
+        name: "Mindd",
+        status: "existing",
+        source: "initial_user_message",
+      },
+    },
+    actionCodeRaw: "ACTION_START",
+    currentStep: "step_0",
+    introShownSession: "false",
+    step0Id: "step_0",
+  });
+
+  assert.equal(String(baseline.step_0_final || ""), "");
+  assert.equal(String(baseline.business_name || ""), "Mindd");
 });
