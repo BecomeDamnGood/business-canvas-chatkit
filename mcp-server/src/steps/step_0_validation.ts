@@ -210,7 +210,8 @@ You MUST classify the user's venture status as one of:
 - existing: the user indicates they already run / have the venture
 - starting: the user indicates they want to start / are going to start the venture
 
-If unclear, default to "starting".
+If unclear, default to "existing".
+Only classify as "starting" when the user explicitly says they want to start, are going to start, are considering starting, or are still deciding whether to start.
 
 Storage rule (HARD)
 - step_0 MUST include "| Status: existing" or "| Status: starting" using the exact Step 0 storage pattern.

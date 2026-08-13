@@ -282,6 +282,40 @@ export function createRunStepPreflightHelpers(deps: RunStepPreflightDeps) {
     }
 
     deps.syncDreamRuntimeMode(state);
+    const hasConfirmedCanvasProgress =
+      String((state as any).step_0_final ?? "").trim() !== "" ||
+      String((state as any).dream_final ?? "").trim() !== "" ||
+      String((state as any).purpose_final ?? "").trim() !== "" ||
+      String((state as any).bigwhy_final ?? "").trim() !== "" ||
+      String((state as any).role_final ?? "").trim() !== "" ||
+      String((state as any).entity_final ?? "").trim() !== "" ||
+      String((state as any).strategy_final ?? "").trim() !== "" ||
+      String((state as any).targetgroup_final ?? "").trim() !== "" ||
+      String((state as any).productsservices_final ?? "").trim() !== "" ||
+      String((state as any).rulesofthegame_final ?? "").trim() !== "" ||
+      String((state as any).presentation_brief_final ?? "").trim() !== "";
+    const hasInteractiveHistory =
+      String((state as any).intro_shown_session ?? "").trim().toLowerCase() === "true" ||
+      Object.keys(((state as any).last_specialist_result || {}) as Record<string, unknown>).length > 0;
+    const startedAtState = String((state as any).started ?? "").trim().toLowerCase() === "true";
+    const currentStepBeforeGuard = String((state as any).current_step || deps.step0Id).trim() || deps.step0Id;
+    const shouldForceFreshSessionToStep0 =
+      !startedAtState &&
+      !hasConfirmedCanvasProgress &&
+      !hasInteractiveHistory &&
+      currentStepBeforeGuard !== deps.step0Id;
+    if (shouldForceFreshSessionToStep0) {
+      (state as any).current_step = deps.step0Id;
+      deps.logStructuredEvent?.({
+        severity: "info",
+        event: "fresh_session_step_reset",
+        state,
+        step_id: deps.step0Id,
+        details: {
+          previous_step_id: currentStepBeforeGuard,
+        },
+      });
+    }
     const pristineAtEntry = deps.isPristineStateForStart(state);
 
     const userMessageRaw = String(params.args.user_message ?? "");

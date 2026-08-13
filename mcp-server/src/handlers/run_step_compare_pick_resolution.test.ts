@@ -275,6 +275,62 @@ test("pick_user keeps the step-specific compare reason when it only exists in pe
   );
 });
 
+test("pick_suggestion never shows the user-pick fallback acknowledgment or reminder", () => {
+  const helpers = createCompareHelpers();
+  const userInput = "Mensen willen eerlijke en open communicatie.";
+  const suggestionDream =
+    "Mindd dreams of a world in which people experience genuine trust and connection through honest and open communication.";
+
+  const state = {
+    current_step: "dream",
+    active_specialist: "Dream",
+    business_name: "Mindd",
+    __dream_runtime_mode: "self",
+    ui_strings: UI_STRINGS_SOURCE_EN,
+    pending_interaction_state: createPendingInteractionState({
+      id: "pi_compare_pick_suggestion",
+      kind: "text_compare",
+      render_model: {
+        mode: "text",
+        instruction: "Choose the version that feels closest to what you mean.",
+        feedback_reason_text:
+          "You named an important value, but a Dream needs to show the bigger impact on people's lives.",
+        user_label: "This is your input:",
+        suggestion_label: "This would be my suggestion:",
+        user_text: userInput,
+        suggestion_text: suggestionDream,
+        user_items: [],
+        suggestion_items: [],
+        retained_heading: "",
+        retained_items: [],
+      },
+    }),
+    last_specialist_result: {
+      refined_formulation: suggestionDream,
+      dream: suggestionDream,
+      user_pick_feedback_text:
+        "Keeping your own wording is completely okay. If you continue with it, keep the future you want to create clearly visible in the sentence.",
+      feedback_reason_text:
+        "You named an important value, but a Dream needs to show the bigger impact on people's lives.",
+    },
+  } as unknown as CanvasState;
+
+  const result = helpers.applyComparePickSelection({
+    stepId: "dream",
+    routeToken: "__COMPARE_PICK_SUGGESTION__",
+    state,
+  });
+
+  assert.equal(result.handled, true);
+  assert.doesNotMatch(String(result.specialist.message || ""), /Keeping your own wording is completely okay/i);
+  const uiContent = (result.specialist.ui_content || {}) as Record<string, unknown>;
+  assert.doesNotMatch(String(uiContent.support_text || ""), /Keeping your own wording is completely okay/i);
+  assert.doesNotMatch(
+    String(uiContent.support_text || ""),
+    /keep the wording clear, human-centered, and specific enough for this step/i
+  );
+});
+
 test("Dream confirm commits an explicit compare-pick value even when it is not stageable as a generated Dream sentence", () => {
   const chosenDream = "Dit gaat over eerlijke informatie in plaats van bedrog.";
   const finalInfo = resolveRequiredFinalValue({

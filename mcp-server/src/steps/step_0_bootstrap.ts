@@ -68,7 +68,7 @@ Hard rules
 - Use semantic understanding of the full sentence. Do not rely on a fixed vocabulary of venture types.
 - If the sentence clearly contains both a venture and a business name, set recognized=true.
 - If either venture or business name is not supported clearly enough, set recognized=false and return venture="" and name="".
-- When recognized=false, set status="starting".
+- When recognized=false, set status="existing".
 - Keep the business name exactly as the user gives it, except:
   - remove continuation text
   - remove conjunctions/pronouns that belong to the next clause
@@ -77,8 +77,8 @@ Hard rules
 - Venture should be concise and faithful to the user's compare.
 - Status is:
   - existing, if the user indicates they already have/run/are the venture
-  - starting, if the user indicates they want to start it
-  - if unclear but recognized is true, choose the most directly supported status
+  - starting, if the user indicates they want to start it, are considering starting it, or are still deciding whether to start it
+  - if unclear but recognized is true, choose existing
 
 Decision policy
 

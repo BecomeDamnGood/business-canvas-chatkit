@@ -13,6 +13,8 @@ import {
   isMeaningfulUserPickFeedbackText,
   sanitizeFeedbackReasonForDisplay,
   sanitizeUserPickFeedbackTextForDisplay,
+  userPickAcknowledgmentForDisplay,
+  userPickFeedbackReasonForDisplay,
 } from "../core/feedback_display.js";
 import type { TurnPolicyRenderResult } from "../core/turn_policy_renderer.js";
 import type { RenderedAction } from "../contracts/ui_actions.js";
@@ -2053,6 +2055,59 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
     return parts.join("\n\n").trim();
   }
 
+  function scrubSuggestionPickArtifacts(params: {
+    stepId: string;
+    state: CanvasState;
+    fallbackMessage: string;
+    result: Record<string, unknown>;
+  }): Record<string, unknown> {
+    const resolveString = (key: string, fallback = "") =>
+      deps.uiStringFromStateMap(params.state, key, fallback || deps.uiDefaultString(key, fallback));
+    const acknowledgment = String(userPickAcknowledgmentForDisplay(resolveString) || "").trim();
+    const defaultReason = String(
+      userPickFeedbackReasonForDisplay({
+        stepId: params.stepId,
+        rawReason: "",
+        resolveString,
+      }) || ""
+    ).trim();
+    const fallbackUserPickMessage = String(
+      formatUserPickFeedbackForDisplay({
+        stepId: params.stepId,
+        rawReason: "",
+        resolveString,
+      }) || ""
+    ).trim();
+    const hasUserPickFallback = (value: unknown): boolean => {
+      const text = String(value || "").trim();
+      if (!text) return false;
+      return (
+        (acknowledgment !== "" && text.includes(acknowledgment)) ||
+        (defaultReason !== "" && text.includes(defaultReason)) ||
+        (fallbackUserPickMessage !== "" && text.includes(fallbackUserPickMessage))
+      );
+    };
+
+    const next: Record<string, unknown> = { ...params.result };
+    if (hasUserPickFallback(next.message)) {
+      next.message = params.fallbackMessage;
+    }
+    const uiContent =
+      next.ui_content && typeof next.ui_content === "object" && !Array.isArray(next.ui_content)
+        ? { ...(next.ui_content as Record<string, unknown>) }
+        : null;
+    if (uiContent && hasUserPickFallback(uiContent.support_text)) {
+      delete uiContent.support_text;
+    }
+    if (uiContent && hasUserPickFallback(uiContent.feedback_reason_text)) {
+      delete uiContent.feedback_reason_text;
+    }
+    if (uiContent) {
+      next.ui_content = uiContent;
+    }
+    return next;
+  }
+
   function withUpdatedTargetField(result: Record<string, unknown>, stepId: string, value: string): Record<string, unknown> {
     const field = deps.fieldForStep(stepId);
     if (!field || !value) return result;
@@ -2666,9 +2721,17 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
           ? renderedSpecialist.ui_text_keys
           : (rendered.textKeys || []),
       };
+      const suggestionSafeSelectedWithContract = pickedUser
+        ? selectedWithContract
+        : scrubSuggestionPickArtifacts({
+            stepId,
+            state: stateForRender,
+            fallbackMessage: selectedMessage,
+            result: selectedWithContract,
+          });
       const nextState: CanvasState = {
         ...withAcceptedListSelectionState(state, stepId, composedItems),
-        last_specialist_result: selectedWithContract,
+        last_specialist_result: suggestionSafeSelectedWithContract,
       };
       const nextDreamStatementCount = Array.isArray((nextState as Record<string, unknown>).dream_builder_statements)
         ? ((nextState as Record<string, unknown>).dream_builder_statements as unknown[]).length
@@ -2676,20 +2739,20 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
       if (stepId === deps.dreamStepId && nextDreamStatementCount >= 20) {
         return {
           handled: true,
-          specialist: selectedWithContract,
+          specialist: suggestionSafeSelectedWithContract,
           nextState,
           continueUserMessage: "__ROUTE__DREAM_EXPLAINER_CONTINUE__",
         };
       }
       return {
         handled: true,
-        specialist: selectedWithContract,
+        specialist: suggestionSafeSelectedWithContract,
         nextState,
         actionCodes: Array.isArray(rendered.uiActionCodes) ? rendered.uiActionCodes : [],
         renderedActions: Array.isArray(rendered.uiActions) ? rendered.uiActions : [],
         contractMeta: {
-          contractId: String(rendered.contractId || selectedWithContract.ui_contract_id || ""),
-          contractVersion: String(rendered.contractVersion || selectedWithContract.ui_contract_version || ""),
+          contractId: String(rendered.contractId || suggestionSafeSelectedWithContract.ui_contract_id || ""),
+          contractVersion: String(rendered.contractVersion || suggestionSafeSelectedWithContract.ui_contract_version || ""),
           textKeys: Array.isArray(rendered.textKeys) ? rendered.textKeys : [],
         },
       };
@@ -2798,22 +2861,30 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
           ? renderedSpecialist.ui_text_keys
           : rendered.textKeys,
       };
-      const selectedContractId = String(rendered.contractId || selectedWithContract.ui_contract_id || "");
+      const suggestionSafeSelectedWithContract = pickedUser
+        ? selectedWithContract
+        : scrubSuggestionPickArtifacts({
+            stepId,
+            state: stateForRender,
+            fallbackMessage: selectedMessage,
+            result: selectedWithContract,
+          });
+      const selectedContractId = String(rendered.contractId || suggestionSafeSelectedWithContract.ui_contract_id || "");
       const nextState: CanvasState = {
         ...withAcceptedListSelectionState(stateForRender, stepId, composedItems),
         pending_interaction_state: {} as Record<string, unknown>,
-        last_specialist_result: clearPendingInteractionState(selectedWithContract),
+        last_specialist_result: clearPendingInteractionState(suggestionSafeSelectedWithContract),
       };
       deps.applyUiPhaseByStep(nextState, stepId, selectedContractId);
       return {
         handled: true,
-        specialist: selectedWithContract,
+        specialist: suggestionSafeSelectedWithContract,
         nextState,
         actionCodes: Array.isArray(rendered.uiActionCodes) ? rendered.uiActionCodes : [],
         renderedActions: Array.isArray(rendered.uiActions) ? rendered.uiActions : [],
         contractMeta: {
-          contractId: String(rendered.contractId || selectedWithContract.ui_contract_id || ""),
-          contractVersion: String(rendered.contractVersion || selectedWithContract.ui_contract_version || ""),
+          contractId: String(rendered.contractId || suggestionSafeSelectedWithContract.ui_contract_id || ""),
+          contractVersion: String(rendered.contractVersion || suggestionSafeSelectedWithContract.ui_contract_version || ""),
           textKeys: Array.isArray(rendered.textKeys) ? rendered.textKeys : [],
         },
       };
@@ -2924,11 +2995,19 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
         ? renderedSpecialist.ui_text_keys
         : rendered.textKeys,
     };
-    const selectedContractId = String(rendered.contractId || selectedWithContract.ui_contract_id || "");
+    const suggestionSafeSelectedWithContract = pickedUser
+      ? selectedWithContract
+      : scrubSuggestionPickArtifacts({
+          stepId,
+          state: stateForRender,
+          fallbackMessage: selectedMessage,
+          result: selectedWithContract,
+        });
+    const selectedContractId = String(rendered.contractId || suggestionSafeSelectedWithContract.ui_contract_id || "");
     const nextState: CanvasState = {
       ...withAcceptedListSelectionState(stateForRender, stepId, mergedPickedItems),
       pending_interaction_state: {} as Record<string, unknown>,
-      last_specialist_result: clearPendingInteractionState(selectedWithContract),
+      last_specialist_result: clearPendingInteractionState(suggestionSafeSelectedWithContract),
     };
     deps.applyUiPhaseByStep(nextState, stepId, selectedContractId);
     const nextDreamStatementCount = Array.isArray((nextState as Record<string, unknown>).dream_builder_statements)
@@ -2937,20 +3016,20 @@ export function createRunStepCompareHelpers(deps: RunStepCompareDeps) {
     if (stepId === deps.dreamStepId && nextDreamStatementCount >= 20) {
       return {
         handled: true,
-        specialist: selectedWithContract,
+        specialist: suggestionSafeSelectedWithContract,
         nextState,
         continueUserMessage: "__ROUTE__DREAM_EXPLAINER_CONTINUE__",
       };
     }
     return {
       handled: true,
-      specialist: selectedWithContract,
+      specialist: suggestionSafeSelectedWithContract,
       nextState,
       actionCodes: Array.isArray(rendered.uiActionCodes) ? rendered.uiActionCodes : [],
       renderedActions: Array.isArray(rendered.uiActions) ? rendered.uiActions : [],
       contractMeta: {
-        contractId: String(rendered.contractId || selectedWithContract.ui_contract_id || ""),
-        contractVersion: String(rendered.contractVersion || selectedWithContract.ui_contract_version || ""),
+        contractId: String(rendered.contractId || suggestionSafeSelectedWithContract.ui_contract_id || ""),
+        contractVersion: String(rendered.contractVersion || suggestionSafeSelectedWithContract.ui_contract_version || ""),
         textKeys: Array.isArray(rendered.textKeys) ? rendered.textKeys : [],
       },
     };
