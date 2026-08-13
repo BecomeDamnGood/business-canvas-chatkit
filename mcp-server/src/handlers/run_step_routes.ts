@@ -328,6 +328,7 @@ type RouteTurnIntent = {
   previousSpecialist: Record<string, unknown>;
   responseUiFlags: Record<string, boolean | string> | null;
   debug?: Record<string, unknown>;
+  confirmationBaselineState?: CanvasState | Record<string, unknown> | null;
 };
 
 export type Step0BootstrapMemoValue =
@@ -606,7 +607,7 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
       renderedResult.value.state,
       String(context.actionCodeRaw || context.userMessage || "")
     );
-    logStepFinalConfirmationEvents(context.state, stateWithUi);
+    logStepFinalConfirmationEvents(intent.confirmationBaselineState || context.state, stateWithUi);
 
     return deps.turnResponseEngine.attachAndFinalize({
       state: stateWithUi,
@@ -641,7 +642,7 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
     if (!renderedResult.ok) return renderedResult.payload;
 
     const stateWithUi = await deps.ensureUiStrings(renderedResult.value.state, context.userMessage);
-    logStepFinalConfirmationEvents(context.state, stateWithUi);
+    logStepFinalConfirmationEvents(intent.confirmationBaselineState || context.state, stateWithUi);
 
     return finalizeRoutePayload(
       deps.attachRegistryPayload(
@@ -1252,6 +1253,9 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
         return routeMode.shouldReturnPrestartGate || routeMode.isStartTrigger;
       },
       handle: async (context) => {
+        const confirmationBaselineState: CanvasState = {
+          ...(context.state as Record<string, unknown>),
+        } as CanvasState;
         const lastSpecialist = asRecord((context.state as Record<string, unknown>).last_specialist_result || {});
         const routeMode = resolveStartPrestartRouteMode({
           started: (context.state as Record<string, unknown>).started,
@@ -1483,6 +1487,7 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
             specialist: asRecord((nextState as Record<string, unknown>).last_specialist_result || {}),
             previousSpecialist: asRecord((context.state as Record<string, unknown>).last_specialist_result || {}),
             responseUiFlags: context.responseUiFlags,
+            confirmationBaselineState,
           });
         }
 
