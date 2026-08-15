@@ -30,6 +30,10 @@ import { STEP_0_BOOTSTRAP_SPECIALIST } from "../steps/step_0_bootstrap.js";
 import { getDreamBuilderResumeContext } from "./dream_builder_resume.js";
 import { resolveUiStringForState } from "../i18n/ui_strings_lookup.js";
 import { hasValidDreamBuilderScoringContract } from "./dream_builder_scoring.js";
+import {
+  collectStepFinalConfirmationEvents,
+  logStepFinalConfirmationEvents as emitStepFinalConfirmationEvents,
+} from "./run_step_final_confirmation_logging.js";
 
 export type RenderedRouteOutput = RunStepRenderedRouteOutput;
 export type RouteRegistryContext = RunStepRouteRegistryRequest;
@@ -100,65 +104,7 @@ function numericTurnIndex(value: unknown): number {
   return Math.trunc(parsed);
 }
 
-type StepFinalConfirmationEvent = {
-  stepId: string;
-  finalField: string;
-  finalText: string;
-  businessName: string;
-  source: "explicit_confirmation";
-};
-
-function resolveBusinessNameFromStateForReporting(
-  state: Record<string, unknown>,
-  step0Id: string,
-  parseStep0Final: (step0Final: string, fallbackName: string) => { name?: string } | null | undefined
-): string {
-  const direct = String(state.business_name || "").trim();
-  if (direct && direct.toLowerCase() !== "tbd") return direct;
-  const step0FinalField = String((STEP_FINAL_FIELD_BY_STEP_ID as Record<string, string>)[step0Id] || "").trim();
-  const step0Final = step0FinalField ? String(state[step0FinalField] || "").trim() : "";
-  if (!step0Final) return direct || "TBD";
-  const parsed = parseStep0Final(step0Final, direct || "TBD");
-  const parsedName = String(parsed?.name || "").trim();
-  if (parsedName && parsedName.toLowerCase() !== "tbd") return parsedName;
-  return direct || parsedName || "TBD";
-}
-
-export function collectStepFinalConfirmationEvents(params: {
-  previousState: CanvasState | Record<string, unknown> | null | undefined;
-  nextState: CanvasState | Record<string, unknown> | null | undefined;
-  step0Id: string;
-  parseStep0Final: (step0Final: string, fallbackName: string) => { name?: string } | null | undefined;
-}): StepFinalConfirmationEvent[] {
-  const previousState = asRecord(params.previousState || {});
-  const nextState = asRecord(params.nextState || {});
-  const businessName = resolveBusinessNameFromStateForReporting(
-    nextState,
-    params.step0Id,
-    params.parseStep0Final
-  );
-  const events: StepFinalConfirmationEvent[] = [];
-
-  for (const [stepId, finalField] of Object.entries(STEP_FINAL_FIELD_BY_STEP_ID as Record<string, string>)) {
-    const normalizedStepId = String(stepId || "").trim();
-    const normalizedFinalField = String(finalField || "").trim();
-    if (!normalizedStepId || !normalizedFinalField) continue;
-
-    const previousValue = String(previousState[normalizedFinalField] || "").trim();
-    const nextValue = String(nextState[normalizedFinalField] || "").trim();
-    if (!nextValue || previousValue === nextValue) continue;
-
-    events.push({
-      stepId: normalizedStepId,
-      finalField: normalizedFinalField,
-      finalText: nextValue,
-      businessName,
-      source: "explicit_confirmation",
-    });
-  }
-
-  return events;
-}
+export { collectStepFinalConfirmationEvents } from "./run_step_final_confirmation_logging.js";
 
 export function normalizeConfirmationBaselineForStartTrigger(params: {
   baselineState: CanvasState | Record<string, unknown> | null | undefined;
@@ -518,30 +464,12 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
     previousState: CanvasState | Record<string, unknown> | null | undefined,
     nextState: CanvasState | Record<string, unknown> | null | undefined
   ): void {
-    const events = collectStepFinalConfirmationEvents({
+    emitStepFinalConfirmationEvents({
       previousState,
       nextState,
       step0Id: deps.step0Id,
       parseStep0Final: deps.parseStep0Final,
     });
-    const nextStateRecord = asRecord(nextState || {});
-    for (const event of events) {
-      logStructuredEvent(
-        "info",
-        "app_usage_step_final_confirmed",
-        createStructuredLogContextFromState(nextStateRecord, {
-          step_id: event.stepId,
-        }),
-        {
-          analytics_schema: "bsc_app_usage_v3",
-          session_turn_index: numericTurnIndex(nextStateRecord.__session_turn_index),
-          final_field: event.finalField,
-          final_text: event.finalText,
-          business_name: event.businessName,
-          source: event.source,
-        }
-      );
-    }
   }
 
   function finalizeRoutePayload(payload: TResponse): TResponse {

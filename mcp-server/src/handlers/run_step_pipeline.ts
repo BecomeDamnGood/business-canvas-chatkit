@@ -38,6 +38,8 @@ import {
 import { normalizePendingPickerSpecialistContract } from "./run_step_compare_picker_contract.js";
 import type { AcceptedOutputUserTurnClassification } from "./run_step_accepted_output_semantics.js";
 import { resolveUiStringForState } from "../i18n/ui_strings_lookup.js";
+import { logStepFinalConfirmationEvents } from "./run_step_final_confirmation_logging.js";
+import { parseStep0Final } from "./run_step_step0.js";
 import {
   applyBusinessListTurnResolution,
   isBusinessListStep,
@@ -1970,6 +1972,13 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
     if (showSessionIntro === "true" && String(asStateRecord(nextState).intro_shown_session) !== "true") {
       asStateRecord(nextState).intro_shown_session = "true";
     }
+
+    logStepFinalConfirmationEvents({
+      previousState: state,
+      nextState,
+      step0Id: deps.step0Id,
+      parseStep0Final,
+    });
 
     return deps.turnResponseEngine.attachAndFinalize({
       state: nextState,
