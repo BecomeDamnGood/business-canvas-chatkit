@@ -138,9 +138,69 @@ export function createRunStepStateUpdateHelpers(deps: RunStepStateUpdateDeps) {
     return "";
   }
 
+  function finalFieldForStep(stepId: string): string {
+    if (stepId === deps.step0Id) return "step_0_final";
+    if (stepId === deps.dreamStepId) return "dream_final";
+    if (stepId === deps.purposeStepId) return "purpose_final";
+    if (stepId === deps.bigwhyStepId) return "bigwhy_final";
+    if (stepId === deps.roleStepId) return "role_final";
+    if (stepId === deps.entityStepId) return "entity_final";
+    if (stepId === deps.strategyStepId) return "strategy_final";
+    if (stepId === deps.targetgroupStepId) return "targetgroup_final";
+    if (stepId === deps.productsservicesStepId) return "productsservices_final";
+    if (stepId === deps.rulesofthegameStepId) return "rulesofthegame_final";
+    if (stepId === deps.presentationStepId) return "presentation_brief_final";
+    return "";
+  }
+
+  function candidateValueFromState(state: CanvasState, stepId: string): string {
+    if (!stepId) return "";
+    const finalField = finalFieldForStep(stepId);
+    const committedFinal = finalField ? String((state as any)[finalField] || "").trim() : "";
+    if (committedFinal) return committedFinal;
+
+    const provisional = String((state as any)?.provisional_by_step?.[stepId] || "").trim();
+    if (provisional && isValidStepValueForStorage(stepId, provisional)) {
+      return provisional;
+    }
+
+    const last =
+      state && typeof (state as any).last_specialist_result === "object" && (state as any).last_specialist_result !== null
+        ? ((state as any).last_specialist_result as Record<string, unknown>)
+        : {};
+    const directField = stepId === deps.step0Id ? "step_0" : stepId === deps.presentationStepId ? "presentation_brief" : stepId;
+    const directValue = String(last[directField] || last.refined_formulation || "").trim();
+    if (directValue && isValidStepValueForStorage(stepId, directValue)) {
+      return directValue;
+    }
+
+    return "";
+  }
+
+  function promotePreviousStepFinalOnAdvance(prevState: CanvasState, nextState: CanvasState): CanvasState {
+    const previousStep = String((prevState as any).current_step || "").trim();
+    const currentStep = String((nextState as any).current_step || "").trim();
+    if (!previousStep || !currentStep || previousStep === currentStep) return nextState;
+
+    const finalField = finalFieldForStep(previousStep);
+    if (!finalField) return nextState;
+
+    const existingFinal = String((nextState as any)[finalField] || "").trim();
+    if (existingFinal) {
+      return deps.withProvisionalValue(nextState, previousStep, "", "system_generated");
+    }
+
+    const promotedValue =
+      candidateValueFromState(nextState, previousStep) || candidateValueFromState(prevState, previousStep);
+    if (!promotedValue) return nextState;
+
+    (nextState as any)[finalField] = promotedValue;
+    return deps.withProvisionalValue(nextState, previousStep, "", "system_generated");
+  }
+
   /**
    * Persist state updates consistently (no nulls).
-   * Contract mode: step outputs are staged per step and only committed to *_final on explicit next-step actioncodes.
+   * Step outputs are first staged per step and are promoted to *_final when the flow advances away from that step.
    */
   function applyStateUpdate(params: ApplyStateUpdateParams): CanvasState {
     const { prev, decision, showSessionIntroUsed } = params;
@@ -347,6 +407,8 @@ export function createRunStepStateUpdateHelpers(deps: RunStepStateUpdateDeps) {
       showSessionIntroUsed: "false",
       provisionalSource,
     });
+
+    nextState = promotePreviousStepFinalOnAdvance(prevState, nextState);
 
     if (
       decision.specialist_to_call === deps.dreamExplainerSpecialist &&
