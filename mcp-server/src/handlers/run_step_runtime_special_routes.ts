@@ -18,6 +18,7 @@ export type RunStepRuntimeSpecialRoutesResult<TPayload extends Record<string, un
 export async function runStepRuntimeSpecialRoutesLayer<TPayload extends Record<string, unknown>>(params: {
   runtime: {
     state: CanvasState;
+    confirmationBaselineState?: CanvasState | Record<string, unknown> | null;
     userMessage: string;
     actionCodeRaw: string;
     responseUiFlags: Record<string, boolean | string> | null;
@@ -62,6 +63,7 @@ export async function runStepRuntimeSpecialRoutesLayer<TPayload extends Record<s
     },
     state: {
       state: params.runtime.state,
+      confirmationBaselineState: params.runtime.confirmationBaselineState,
       transientPendingScores: params.runtime.transientPendingScores,
       submittedUserText: params.runtime.submittedUserText,
       submittedTextIntent: params.runtime.submittedTextIntent,

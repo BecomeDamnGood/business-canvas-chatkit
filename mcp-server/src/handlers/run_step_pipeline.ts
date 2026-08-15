@@ -1974,7 +1974,7 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
     }
 
     logStepFinalConfirmationEvents({
-      previousState: state,
+      previousState: params.confirmationBaselineState || state,
       nextState,
       step0Id: deps.step0Id,
       parseStep0Final,

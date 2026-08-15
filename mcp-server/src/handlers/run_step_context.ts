@@ -26,6 +26,7 @@ export type RunStepRenderingContext = {
 
 export type RunStepStateContext = {
   state: CanvasState;
+  confirmationBaselineState?: CanvasState | Record<string, unknown> | null;
   transientPendingScores: number[][] | null;
   submittedUserText: string;
   submittedTextIntent: PendingCompareTextIntent | "";
@@ -64,6 +65,7 @@ export type RunStepRouteRegistryRequest = {
 
 export type RunStepPostSpecialistPipelineRequest = {
   state: CanvasState;
+  confirmationBaselineState?: CanvasState | Record<string, unknown> | null;
   userMessage: string;
   actionCodeRaw: string;
   responseUiFlags: Record<string, boolean | string> | null;
@@ -105,6 +107,7 @@ export function toRunPostSpecialistPipelineRequest(
 ): RunStepPostSpecialistPipelineRequest {
   return {
     state: context.state.state,
+    confirmationBaselineState: context.state.confirmationBaselineState,
     userMessage: context.routing.userMessage,
     actionCodeRaw: context.routing.actionCodeRaw,
     responseUiFlags: context.routing.responseUiFlags,

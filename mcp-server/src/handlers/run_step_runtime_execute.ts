@@ -573,6 +573,7 @@ export async function runStepRuntimeExecute(
   const specialRoutesLayer = await runStepRuntimeSpecialRoutesLayer({
     runtime: {
       state,
+      confirmationBaselineState: actionRoutingConfirmationBaseline,
       userMessage,
       actionCodeRaw,
       responseUiFlags,

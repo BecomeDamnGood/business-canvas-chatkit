@@ -7,6 +7,7 @@ import {
   normalizeConfirmationBaselineForStartTrigger,
 } from "./run_step_routes.js";
 import { snapshotStateForFinalConfirmation } from "./run_step_final_confirmation_logging.js";
+import { toRunPostSpecialistPipelineRequest } from "./run_step_context.js";
 import { parseStep0Final } from "./run_step_step0.js";
 
 test("collectStepFinalConfirmationEvents includes step 1 when step_0_final becomes known", () => {
@@ -125,4 +126,58 @@ test("snapshotStateForFinalConfirmation preserves previous finals before in-plac
       source: "explicit_confirmation",
     },
   ]);
+});
+
+test("post-specialist pipeline request preserves confirmation baseline captured before action routing mutation", () => {
+  const state = {
+    ...getDefaultState(),
+    business_name: "Bikers",
+    step_0_final: "Venture: fietsenwinkel | Name: Bikers | Status: existing",
+    dream_final: "Bikers droomt van een wereld waarin fietsen vrijheid geven.",
+  };
+  const confirmationBaselineState = {
+    ...snapshotStateForFinalConfirmation(state),
+    dream_final: "",
+  };
+
+  const request = toRunPostSpecialistPipelineRequest({
+    routing: {
+      userMessage: "",
+      actionCodeRaw: "ACTION_DREAM_REFINE_CONFIRM",
+      responseUiFlags: null,
+      inputMode: "widget",
+      compareEnabled: true,
+      languageResolvedThisTurn: true,
+      isBootstrapPollCall: false,
+      motivationQuotesEnabled: false,
+    },
+    rendering: {
+      uiI18nTelemetry: null,
+      lang: "nl",
+      ensureUiStrings: async (nextState) => nextState,
+    },
+    state: {
+      state,
+      confirmationBaselineState,
+      transientPendingScores: null,
+      submittedUserText: "",
+      submittedTextIntent: "",
+      submittedTextAnchor: "",
+      rawNormalized: "",
+      pristineAtEntry: false,
+    },
+    specialist: {
+      model: "gpt-5",
+      decideOrchestration: () =>
+        ({
+          specialist_to_call: "",
+          specialist_input: "",
+          current_step: "purpose",
+        }) as any,
+      rememberLlmCall: () => {},
+    },
+  });
+
+  assert.equal(String(request.confirmationBaselineState?.dream_final || ""), "");
+  assert.equal(String(request.state.dream_final || ""), "Bikers droomt van een wereld waarin fietsen vrijheid geven.");
 });
