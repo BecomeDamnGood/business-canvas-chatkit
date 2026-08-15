@@ -6,6 +6,7 @@ import {
   collectStepFinalConfirmationEvents,
   normalizeConfirmationBaselineForStartTrigger,
 } from "./run_step_routes.js";
+import { snapshotStateForFinalConfirmation } from "./run_step_final_confirmation_logging.js";
 import { parseStep0Final } from "./run_step_step0.js";
 
 test("collectStepFinalConfirmationEvents includes step 1 when step_0_final becomes known", () => {
@@ -95,4 +96,33 @@ test("parseStep0Final defaults missing status to existing", () => {
   assert.equal(parsed.venture, "creative agency");
   assert.equal(parsed.name, "Mindd");
   assert.equal(parsed.status, "existing");
+});
+
+test("snapshotStateForFinalConfirmation preserves previous finals before in-place mutation", () => {
+  const state = {
+    ...getDefaultState(),
+    business_name: "Bikers",
+    step_0_final: "Venture: fietsenwinkel | Name: Bikers | Status: existing",
+    dream_final: "",
+  };
+
+  const previousState = snapshotStateForFinalConfirmation(state);
+  state.dream_final = "Bikers droomt van een wereld waarin fietsen weer vrijheid geven.";
+
+  const events = collectStepFinalConfirmationEvents({
+    previousState,
+    nextState: state,
+    step0Id: "step_0",
+    parseStep0Final,
+  });
+
+  assert.deepEqual(events, [
+    {
+      stepId: "dream",
+      finalField: "dream_final",
+      finalText: "Bikers droomt van een wereld waarin fietsen weer vrijheid geven.",
+      businessName: "Bikers",
+      source: "explicit_confirmation",
+    },
+  ]);
 });

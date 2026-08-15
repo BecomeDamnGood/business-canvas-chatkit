@@ -15,6 +15,23 @@ export type StepFinalConfirmationEvent = {
   source: "explicit_confirmation";
 };
 
+export function snapshotStateForFinalConfirmation(
+  state: CanvasState | Record<string, unknown> | null | undefined
+): Record<string, unknown> {
+  const stateRecord = asRecord(state || {});
+  const snapshot: Record<string, unknown> = {
+    business_name: String(stateRecord.business_name || "").trim(),
+  };
+
+  for (const finalField of Object.values(STEP_FINAL_FIELD_BY_STEP_ID as Record<string, string>)) {
+    const normalizedFinalField = String(finalField || "").trim();
+    if (!normalizedFinalField) continue;
+    snapshot[normalizedFinalField] = String(stateRecord[normalizedFinalField] || "").trim();
+  }
+
+  return snapshot;
+}
+
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)

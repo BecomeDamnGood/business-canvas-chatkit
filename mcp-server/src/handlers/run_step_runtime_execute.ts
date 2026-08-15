@@ -4,7 +4,10 @@ import {
   resolveStateLocaleAuthority,
 } from "./locale_continuity.js";
 import { resolveUiStringForState } from "../i18n/ui_strings_lookup.js";
-import { logStepFinalConfirmationEvents } from "./run_step_final_confirmation_logging.js";
+import {
+  logStepFinalConfirmationEvents,
+  snapshotStateForFinalConfirmation,
+} from "./run_step_final_confirmation_logging.js";
 
 function sanitizeDreamPendingScores(raw: unknown): string[][] {
   if (!Array.isArray(raw)) return [];
@@ -412,6 +415,7 @@ export async function runStepRuntimeExecute(
     }
   }
   languageResolvedThisTurn = true;
+  const actionRoutingConfirmationBaseline = snapshotStateForFinalConfirmation(state);
 
   const actionRoutingLayer = await runStepRuntimeActionRoutingLayer({
     runtime: {
@@ -495,7 +499,7 @@ export async function runStepRuntimeExecute(
   });
   if (actionRoutingLayer.response) {
     logStepFinalConfirmationEvents({
-      previousState: state,
+      previousState: actionRoutingConfirmationBaseline,
       nextState: actionRoutingLayer.state,
       step0Id: STEP_0_ID,
       parseStep0Final,
