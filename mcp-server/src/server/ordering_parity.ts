@@ -10,21 +10,17 @@ import { safeString } from "../server_safe_string.js";
 
 import {
   BOOTSTRAP_SESSION_ID_PREFIX,
-  BOOTSTRAP_SESSION_REGISTRY_TTL_MS,
   parsePositiveInt,
 } from "./server_config.js";
+import {
+  nextSharedResponseSeq,
+  readSharedSession,
+  sharedStoreBackend,
+  writeSharedSession,
+  type SharedSessionSnapshot,
+} from "./shared_session_store.js";
 
-type BootstrapSessionSnapshot = {
-  sessionId: string;
-  hostWidgetSessionId: string;
-  epoch: number;
-  lastResponseSeq: number;
-  updatedAtMs: number;
-  lastWidgetResult: Record<string, unknown>;
-};
-
-const bootstrapSessionRegistry = new Map<string, BootstrapSessionSnapshot>();
-let bootstrapResponseSeqCounter = 0;
+type BootstrapSessionSnapshot = SharedSessionSnapshot;
 
 function isUuidV4(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
@@ -45,24 +41,12 @@ function createBootstrapSessionId(): string {
   return `${BOOTSTRAP_SESSION_ID_PREFIX}${randomUUID().toLowerCase()}`;
 }
 
-function nextBootstrapResponseSeq(): number {
-  bootstrapResponseSeqCounter += 1;
-  return bootstrapResponseSeqCounter;
+async function nextBootstrapResponseSeq(sessionId: string): Promise<number> {
+  return nextSharedResponseSeq(sessionId, Date.now());
 }
 
-function purgeExpiredBootstrapSessions(nowMs: number): void {
-  for (const [sessionId, snapshot] of bootstrapSessionRegistry.entries()) {
-    if (snapshot.updatedAtMs + BOOTSTRAP_SESSION_REGISTRY_TTL_MS <= nowMs) {
-      bootstrapSessionRegistry.delete(sessionId);
-    }
-  }
-}
-
-function summarizeBootstrapSessions(nowMs: number): {
-  total: number;
-} {
-  purgeExpiredBootstrapSessions(nowMs);
-  return { total: bootstrapSessionRegistry.size };
+function summarizeBootstrapSessions(): { backend: "memory" | "dynamodb" } {
+  return { backend: sharedStoreBackend() };
 }
 
 function attachBootstrapDiagnostics(args: {
@@ -235,22 +219,13 @@ function describeBootstrapOrdering(ordering: {
   };
 }
 
-function registerBootstrapSnapshot(params: {
+async function registerBootstrapSnapshot(params: {
   result: Record<string, unknown>;
   nowMs: number;
-}): void {
-  purgeExpiredBootstrapSessions(params.nowMs);
+}): Promise<void> {
   const ordering = readBootstrapOrdering(params.result);
   if (!ordering.sessionId || ordering.epoch <= 0 || ordering.responseSeq <= 0) return;
-  const existing = bootstrapSessionRegistry.get(ordering.sessionId);
-  if (
-    existing &&
-    (ordering.epoch < existing.epoch ||
-      (ordering.epoch === existing.epoch && ordering.responseSeq < existing.lastResponseSeq))
-  ) {
-    return;
-  }
-  bootstrapSessionRegistry.set(ordering.sessionId, {
+  await writeSharedSession({
     sessionId: ordering.sessionId,
     hostWidgetSessionId: ordering.hostWidgetSessionId,
     epoch: ordering.epoch,
@@ -260,15 +235,15 @@ function registerBootstrapSnapshot(params: {
   });
 }
 
-function isStaleBootstrapPayload(params: {
+async function isStaleBootstrapPayload(params: {
   sessionId: string;
   hostWidgetSessionId?: string;
   epoch: number;
   responseSeq: number;
   nowMs: number;
-}): { stale: boolean; latest: BootstrapSessionSnapshot | null; reason?: "host_session" | "epoch" | "response_seq" } {
-  purgeExpiredBootstrapSessions(params.nowMs);
-  const latest = bootstrapSessionRegistry.get(params.sessionId) || null;
+}): Promise<{ stale: boolean; latest: BootstrapSessionSnapshot | null; reason?: "host_session" | "epoch" | "response_seq" }> {
+  void params.nowMs;
+  const latest = await readSharedSession(params.sessionId);
   if (!latest) return { stale: false, latest: null };
   if (
     params.hostWidgetSessionId &&

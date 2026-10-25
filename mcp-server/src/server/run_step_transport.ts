@@ -25,7 +25,7 @@ import {
   logStructuredEvent,
   resolveContractIdFromRecord,
 } from "./observability.js";
-import { markIdempotencyCompleted } from "./idempotency_registry.js";
+import { markIdempotencyCompleted, releaseIdempotency } from "./idempotency_registry.js";
 import { buildModelSafeResult } from "./run_step_model_result.js";
 import {
   attachActionLivenessToResult,
@@ -196,7 +196,7 @@ async function runStepHandler(args: RunStepHandlerArgs): Promise<{ structuredCon
   const nowMs = Date.now();
   logActionLivenessDispatch({ context, incomingOrdering });
 
-  const idempotencyPreflight = preflightIdempotency({
+  const idempotencyPreflight = await preflightIdempotency({
     context,
     incomingOrdering,
     nowMs,
@@ -249,11 +249,19 @@ async function runStepHandler(args: RunStepHandlerArgs): Promise<{ structuredCon
     return enriched;
   }
 
-  const stalePreflight = preflightStalePayload({
+  const stalePreflight = await preflightStalePayload({
     context,
     incomingOrdering,
     nowMs,
     tracker: idempotencyTracker,
+  }).catch(async (error) => {
+    if (idempotencyTracker) {
+      await releaseIdempotency({
+        registryKey: idempotencyTracker.registryKey,
+        requestHash: idempotencyTracker.requestHash,
+      });
+    }
+    throw error;
   });
   if (stalePreflight.earlyResponse) {
     const staleWidgetResult = toRecord(toRecord(stalePreflight.earlyResponse.meta).widget_result);
@@ -323,8 +331,9 @@ async function runStepHandler(args: RunStepHandlerArgs): Promise<{ structuredCon
       resultForClientRaw && typeof resultForClientRaw.state === "object" && resultForClientRaw.state
         ? (resultForClientRaw.state as Record<string, unknown>)
         : {};
-    const responseSeq = nextBootstrapResponseSeq();
+    delete resultStateRaw.__client_action_id;
     const sessionId = safeString(resultStateRaw.bootstrap_session_id || incomingOrdering.sessionId);
+    const responseSeq = await nextBootstrapResponseSeq(sessionId);
     const epoch = parsePositiveInt(resultStateRaw.bootstrap_epoch || incomingOrdering.epoch);
 
     let resultForClient = attachBootstrapDiagnostics({
@@ -409,8 +418,6 @@ async function runStepHandler(args: RunStepHandlerArgs): Promise<{ structuredCon
         accept_reason_code: staleRebaseApplied ? "accepted_after_stale_rebase" : "accepted_fresh_dispatch",
         rebase_applied: staleRebaseApplied,
         rebase_reason_code: staleRebaseReasonCode,
-        stale_ingest_guard_enabled: context.staleIngestGuardEnabled,
-        stale_rebase_enabled: context.staleRebaseEnabled,
         ack_status: livenessContract.ack_status,
         state_advanced: livenessContract.state_advanced,
       reason_code: livenessContract.reason_code,
@@ -439,13 +446,13 @@ async function runStepHandler(args: RunStepHandlerArgs): Promise<{ structuredCon
       result: buildStructuredContentResult(resultForClient),
     };
 
-    registerBootstrapSnapshot({
+    await registerBootstrapSnapshot({
       result: resultForClient,
       nowMs: Date.now(),
     });
 
     if (idempotencyTracker) {
-      markIdempotencyCompleted({
+      await markIdempotencyCompleted({
         registryKey: idempotencyTracker.registryKey,
         scopeKey: idempotencyTracker.scopeKey,
         idempotencyKey: idempotencyTracker.idempotencyKey,
@@ -523,9 +530,12 @@ async function runStepHandler(args: RunStepHandlerArgs): Promise<{ structuredCon
         return getDefaultState();
       }
     })();
+    delete (currentState as Record<string, unknown>).__client_action_id;
     const currentStep = safeString((currentState as { current_step?: unknown }).current_step ?? "step_0") || "step_0";
 
-    const responseSeq = nextBootstrapResponseSeq();
+    const responseSeq = await nextBootstrapResponseSeq(
+      incomingOrdering.sessionId || context.normalizedBootstrapSessionId
+    );
     const fallbackResultBase = {
       ok: false as const,
       tool: "run_step",
@@ -584,13 +594,13 @@ async function runStepHandler(args: RunStepHandlerArgs): Promise<{ structuredCon
       liveness: fallbackLiveness,
     });
 
-    registerBootstrapSnapshot({
+    await registerBootstrapSnapshot({
       result: fallbackResult,
       nowMs: Date.now(),
     });
 
     if (idempotencyTracker) {
-      markIdempotencyCompleted({
+      await markIdempotencyCompleted({
         registryKey: idempotencyTracker.registryKey,
         scopeKey: idempotencyTracker.scopeKey,
         idempotencyKey: idempotencyTracker.idempotencyKey,

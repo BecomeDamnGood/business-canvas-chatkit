@@ -2656,6 +2656,7 @@ export async function callRunStep(
   );
   const requestId = String((nextState as any).__request_id || "");
   const clientActionId = ensuredClientActionId;
+  setWidgetStateSafe({ __client_action_id: clientActionId });
   const requestCorrelationId = coalesceString(
     (nextState as Record<string, unknown>).correlation_id,
     (nextState as Record<string, unknown>).__correlation_id,
@@ -2777,6 +2778,9 @@ export async function callRunStep(
       client_action_id: clientActionId,
       request_id: requestId,
     });
+    if (!isBackgroundDispatch) {
+      setWidgetStateSafe({ __client_action_id: "" });
+    }
     const hasIngestedResult = Object.keys(ingestedResult).length > 0;
     const orderingAfterIngest = readBootstrapOrderingState(widgetState());
     const orderingAdvanceDecision = decideOrderingPatch(orderingBeforeIngest, orderingAfterIngest);

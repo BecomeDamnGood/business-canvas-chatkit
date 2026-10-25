@@ -1,0 +1,47 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Shared session and idempotency state for the Business Canvas MCP service.
+
+Parameters:
+  InstanceRoleName:
+    Type: String
+    Default: AppRunnerBusinessCanvasMcpInstanceRole
+
+Resources:
+  SessionStateTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: business-canvas-session-state
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+      SSESpecification:
+        SSEEnabled: true
+      TimeToLiveSpecification:
+        AttributeName: expires_at
+        Enabled: true
+
+  SessionStatePolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: BusinessCanvasSessionState
+      Roles:
+        - !Ref InstanceRoleName
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - dynamodb:DescribeTable
+              - dynamodb:DeleteItem
+              - dynamodb:GetItem
+              - dynamodb:PutItem
+              - dynamodb:UpdateItem
+            Resource: !GetAtt SessionStateTable.Arn
+
+Outputs:
+  TableName:
+    Value: !Ref SessionStateTable

@@ -4845,6 +4845,7 @@
     );
     const requestId = String(nextState.__request_id || "");
     const clientActionId = ensuredClientActionId;
+    setWidgetStateSafe({ __client_action_id: clientActionId });
     const requestCorrelationId = coalesceString(
       nextState.correlation_id,
       nextState.__correlation_id,
@@ -4961,6 +4962,9 @@
         client_action_id: clientActionId,
         request_id: requestId
       });
+      if (!isBackgroundDispatch) {
+        setWidgetStateSafe({ __client_action_id: "" });
+      }
       const hasIngestedResult = Object.keys(ingestedResult).length > 0;
       const orderingAfterIngest = readBootstrapOrderingState(widgetState());
       const orderingAdvanceDecision = decideOrderingPatch(orderingBeforeIngest, orderingAfterIngest);

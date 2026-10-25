@@ -41,8 +41,6 @@ import {
   OPENAI_APPS_CHALLENGE_PATH,
   OPENAI_APPS_CHALLENGE_TOKEN,
   REQUEST_TIMEOUT_MS,
-  RUN_STEP_STALE_INGEST_GUARD_V1_ENABLED,
-  RUN_STEP_STALE_REBASE_V1_ENABLED,
   VERSION,
   delay,
   getRunStep,
@@ -52,6 +50,7 @@ import {
 } from "./server_config.js";
 import { summarizeBootstrapSessions } from "./ordering_parity.js";
 import { summarizeIdempotencyRegistry } from "./idempotency_registry.js";
+import { assertSharedStoreReady } from "./shared_session_store.js";
 import { createAppServer } from "./mcp_registration.js";
 import { loadReportsPayload, resolveReportsDateRange } from "./reports_analytics.js";
 import { renderReportsDashboardHtml } from "./reports_dashboard.js";
@@ -253,8 +252,8 @@ const httpServer = async (req: any, res: any) => {
     }
     if (isDiagnosticsEndpoint) {
       const nowMs = Date.now();
-      const bootstrapSessions = summarizeBootstrapSessions(nowMs);
-      const idempotency = summarizeIdempotencyRegistry(nowMs);
+      const bootstrapSessions = summarizeBootstrapSessions();
+      const idempotency = summarizeIdempotencyRegistry();
       const memoryUsage = process.memoryUsage();
       logStructuredEvent(
         "info",
@@ -300,12 +299,7 @@ const httpServer = async (req: any, res: any) => {
             },
             runtime: {
               local_dev: isLocalDev,
-              rollout_flags: {
-                run_step_stale_ingest_guard_v1: RUN_STEP_STALE_INGEST_GUARD_V1_ENABLED,
-                run_step_stale_rebase_v1: RUN_STEP_STALE_REBASE_V1_ENABLED,
-                run_step_stale_rebase_v1_effective:
-                  RUN_STEP_STALE_INGEST_GUARD_V1_ENABLED && RUN_STEP_STALE_REBASE_V1_ENABLED,
-              },
+              session_state_backend: bootstrapSessions.backend,
               pid: process.pid,
               memory_bytes: {
                 rss: memoryUsage.rss,
@@ -836,8 +830,9 @@ type StartServerOptions = {
 async function startServer(options: StartServerOptions = {}): Promise<Server> {
   try {
     await getRunStep();
+    await assertSharedStoreReady();
   } catch (err) {
-    console.error("[FATAL] run_step module failed to load at startup:", err);
+    console.error("[FATAL] server startup preflight failed:", err);
     process.exit(1);
   }
 

@@ -3,7 +3,6 @@ import { randomUUID } from "node:crypto";
 import { safeString } from "../server_safe_string.js";
 
 import {
-  classifyStaleInteractiveActionPolicy,
   normalizeStepId,
   resolveEffectiveHostWidgetSessionId,
 } from "./locale_resolution.js";
@@ -20,8 +19,6 @@ import {
 import {
   normalizeIdempotencyKey,
   parsePositiveInt,
-  RUN_STEP_STALE_INGEST_GUARD_V1_ENABLED,
-  RUN_STEP_STALE_REBASE_V1_ENABLED,
 } from "./server_config.js";
 
 export type RunStepHandlerArgs = {
@@ -39,13 +36,6 @@ export type RunStepHandlerArgs = {
 
 type LocaleHintSource = "openai_locale" | "webplus_i18n" | "request_header" | "message_detect" | "none";
 
-type StaleInteractiveActionPolicy = {
-  normalizedAction: string;
-  isInteractiveAction: boolean;
-  rebaseEligible: boolean;
-  reasonCode: "text_input" | "interactive_action";
-};
-
 export type RunStepContext = {
   correlationId: string;
   traceId: string;
@@ -60,9 +50,6 @@ export type RunStepContext = {
   inputMode: string;
   action: string;
   hostWidgetSessionId: string;
-  staleIngestGuardEnabled: boolean;
-  staleRebaseEnabled: boolean;
-  staleInteractiveActionPolicy: StaleInteractiveActionPolicy;
   idempotencyKey: string;
   clientActionId: string;
   normalizedBootstrapSessionId: string;
@@ -382,9 +369,6 @@ export function buildRunStepContext(args: RunStepHandlerArgs): RunStepContext {
   const localeHint = safeString(args.locale_hint ?? "");
   const inputMode = safeString(args.input_mode ?? "chat");
   const action = upperMessage.startsWith("ACTION_") ? upperMessage : "text_input";
-  const staleIngestGuardEnabled = RUN_STEP_STALE_INGEST_GUARD_V1_ENABLED;
-  const staleRebaseEnabled = RUN_STEP_STALE_REBASE_V1_ENABLED;
-  const staleInteractiveActionPolicy = classifyStaleInteractiveActionPolicy(action);
   const existingClientActionId = normalizeIdempotencyKey(
     safeString((stateForTool as { __client_action_id?: unknown }).__client_action_id ?? "")
   );
@@ -424,8 +408,7 @@ export function buildRunStepContext(args: RunStepHandlerArgs): RunStepContext {
       host_widget_session_id_present: hostWidgetSessionId ? "true" : "false",
       idempotency_key_present: idempotencyKey ? "true" : "false",
       client_action_id_present: clientActionId ? "true" : "false",
-      stale_ingest_guard_enabled: staleIngestGuardEnabled,
-      stale_rebase_enabled: staleRebaseEnabled,
+      session_state_backend: "shared",
     }
   );
 
@@ -443,9 +426,6 @@ export function buildRunStepContext(args: RunStepHandlerArgs): RunStepContext {
     inputMode,
     action,
     hostWidgetSessionId,
-    staleIngestGuardEnabled,
-    staleRebaseEnabled,
-    staleInteractiveActionPolicy,
     idempotencyKey,
     clientActionId,
     normalizedBootstrapSessionId,

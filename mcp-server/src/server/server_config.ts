@@ -78,6 +78,9 @@ const REQUEST_TIMEOUT_MS = Number(process.env.REQUEST_TIMEOUT_MS || 30000);
 const MCP_SIMULATED_HANDLE_DELAY_MS = Number(process.env.MCP_SIMULATED_HANDLE_DELAY_MS || 0);
 const BOOTSTRAP_SESSION_REGISTRY_TTL_MS = Number(process.env.BOOTSTRAP_SESSION_REGISTRY_TTL_MS || 30 * 60 * 1000);
 const IDEMPOTENCY_ENTRY_TTL_MS = Number(process.env.IDEMPOTENCY_ENTRY_TTL_MS || BOOTSTRAP_SESSION_REGISTRY_TTL_MS);
+const SESSION_STATE_TABLE_NAME = safeString(
+  process.env.BSC_SESSION_STATE_TABLE ?? "business-canvas-session-state"
+).trim();
 const BOOTSTRAP_SESSION_ID_PREFIX = "bs_";
 const IDEMPOTENCY_ERROR_CODES = {
   REPLAY: "idempotency_replay",
@@ -90,15 +93,6 @@ function parsePositiveInt(value: unknown): number {
   if (!Number.isFinite(n) || n <= 0) return 0;
   return Math.trunc(n);
 }
-
-function envFlagEnabled(name: string, fallback: boolean): boolean {
-  const raw = safeString(process.env[name] ?? "").trim().toLowerCase();
-  if (!raw) return fallback;
-  return !["0", "false", "off", "no"].includes(raw);
-}
-
-const RUN_STEP_STALE_INGEST_GUARD_V1_ENABLED = envFlagEnabled("RUN_STEP_STALE_INGEST_GUARD_V1", false);
-const RUN_STEP_STALE_REBASE_V1_ENABLED = envFlagEnabled("RUN_STEP_STALE_REBASE_V1", false);
 
 function enforceRuntimeSecretsPolicy(): void {
   const isProduction = nodeEnv === "production" && !isLocalDev;
@@ -153,8 +147,7 @@ export {
   OPENAI_APPS_CHALLENGE_PATH,
   OPENAI_APPS_CHALLENGE_TOKEN,
   REQUEST_TIMEOUT_MS,
-  RUN_STEP_STALE_INGEST_GUARD_V1_ENABLED,
-  RUN_STEP_STALE_REBASE_V1_ENABLED,
+  SESSION_STATE_TABLE_NAME,
   UI_RESOURCE_NAME,
   UI_RESOURCE_PATH,
   UI_RESOURCE_QUERY,

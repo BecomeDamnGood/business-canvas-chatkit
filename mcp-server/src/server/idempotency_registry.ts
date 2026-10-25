@@ -6,20 +6,12 @@ import {
 import { safeString } from "../server_safe_string.js";
 
 import {
-  IDEMPOTENCY_ENTRY_TTL_MS,
-} from "./server_config.js";
-
-type IdempotencyRegistryEntry = {
-  scopeKey: string;
-  idempotencyKey: string;
-  requestHash: string;
-  status: "inflight" | "completed";
-  updatedAtMs: number;
-  resultForClient?: Record<string, unknown>;
-};
-
-// Process-local by design for this single-instance app. Move to a shared store before multi-instance rollout.
-const idempotencyRegistry = new Map<string, IdempotencyRegistryEntry>();
+  claimSharedAction,
+  completeSharedAction,
+  releaseSharedAction,
+  sharedStoreBackend,
+  type SharedActionEntry,
+} from "./shared_session_store.js";
 
 function toStableHashValue(value: unknown, depth = 0): unknown {
   if (depth > 10) return "[depth_limit]";
@@ -73,78 +65,50 @@ function cloneRecord(value: Record<string, unknown>): Record<string, unknown> {
   return JSON.parse(JSON.stringify(value)) as Record<string, unknown>;
 }
 
-function purgeExpiredIdempotencyEntries(nowMs: number): void {
-  for (const [registryKey, snapshot] of idempotencyRegistry.entries()) {
-    if (snapshot.updatedAtMs + IDEMPOTENCY_ENTRY_TTL_MS <= nowMs) {
-      idempotencyRegistry.delete(registryKey);
-    }
-  }
-}
-
-function summarizeIdempotencyRegistry(nowMs: number): {
-  total: number;
-  inflight: number;
-  completed: number;
-} {
-  purgeExpiredIdempotencyEntries(nowMs);
-  let inflight = 0;
-  let completed = 0;
-  for (const entry of idempotencyRegistry.values()) {
-    if (entry.status === "inflight") inflight += 1;
-    else completed += 1;
-  }
-  return {
-    total: idempotencyRegistry.size,
-    inflight,
-    completed,
-  };
-}
-
-function markIdempotencyInFlight(params: {
+async function claimIdempotency(params: {
   registryKey: string;
   scopeKey: string;
   idempotencyKey: string;
   requestHash: string;
   nowMs: number;
-}): void {
-  idempotencyRegistry.set(params.registryKey, {
-    scopeKey: params.scopeKey,
-    idempotencyKey: params.idempotencyKey,
-    requestHash: params.requestHash,
-    status: "inflight",
-    updatedAtMs: params.nowMs,
-  });
+}): Promise<{ claimed: boolean; existing: SharedActionEntry | null }> {
+  return claimSharedAction(params);
 }
 
-function markIdempotencyCompleted(params: {
+async function markIdempotencyCompleted(params: {
   registryKey: string;
   scopeKey: string;
   idempotencyKey: string;
   requestHash: string;
   resultForClient: Record<string, unknown>;
   nowMs: number;
-}): void {
-  const existing = idempotencyRegistry.get(params.registryKey);
-  if (existing && existing.requestHash !== params.requestHash) return;
-  idempotencyRegistry.set(params.registryKey, {
-    scopeKey: params.scopeKey,
-    idempotencyKey: params.idempotencyKey,
+}): Promise<void> {
+  await completeSharedAction({
+    registryKey: params.registryKey,
     requestHash: params.requestHash,
-    status: "completed",
-    updatedAtMs: params.nowMs,
-    resultForClient: cloneRecord(params.resultForClient),
+    resultForClient: params.resultForClient,
+    nowMs: params.nowMs,
   });
+}
+
+async function releaseIdempotency(params: {
+  registryKey: string;
+  requestHash: string;
+}): Promise<void> {
+  await releaseSharedAction(params);
+}
+
+function summarizeIdempotencyRegistry(): { backend: "memory" | "dynamodb" } {
+  return { backend: sharedStoreBackend() };
 }
 
 export {
   createIdempotencyRequestHash,
   buildIdempotencyScopeKey,
   buildIdempotencyRegistryKey,
+  claimIdempotency,
   cloneRecord,
-  idempotencyRegistry,
   markIdempotencyCompleted,
-  markIdempotencyInFlight,
-  purgeExpiredIdempotencyEntries,
+  releaseIdempotency,
   summarizeIdempotencyRegistry,
 };
-export type { IdempotencyRegistryEntry };

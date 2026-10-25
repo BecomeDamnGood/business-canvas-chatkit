@@ -5,16 +5,13 @@ import { safeString } from "../server_safe_string.js";
 import {
   attachBootstrapDiagnostics,
   attachIdempotencyDiagnostics,
-  nextBootstrapResponseSeq,
 } from "./ordering_parity.js";
 import {
   buildIdempotencyRegistryKey,
   buildIdempotencyScopeKey,
+  claimIdempotency,
   cloneRecord,
   createIdempotencyRequestHash,
-  idempotencyRegistry,
-  markIdempotencyInFlight,
-  purgeExpiredIdempotencyEntries,
 } from "./idempotency_registry.js";
 import { logStructuredEvent, resolveContractIdFromRecord } from "./observability.js";
 import { IDEMPOTENCY_ERROR_CODES, VERSION } from "./server_config.js";
@@ -59,7 +56,7 @@ export function __createStructuredResponseForTests(params: {
   return createStructuredResponse(params);
 }
 
-function buildIdempotencyErrorResult(params: {
+async function buildIdempotencyErrorResult(params: {
   context: RunStepContext;
   incomingOrdering: BootstrapOrdering;
   errorType: "idempotency_conflict" | "idempotency_inflight";
@@ -67,7 +64,7 @@ function buildIdempotencyErrorResult(params: {
   message: string;
   retryAction: "retry_same_key" | "regenerate_key";
   outcome: "conflict" | "inflight";
-}): Record<string, unknown> {
+}): Promise<Record<string, unknown>> {
   const normalizedState = (() => {
     try {
       return normalizeState(
@@ -80,7 +77,7 @@ function buildIdempotencyErrorResult(params: {
     }
   })();
 
-  const responseSeq = nextBootstrapResponseSeq();
+  const responseSeq = params.incomingOrdering.responseSeq;
   const errorBase = {
     ok: false as const,
     tool: "run_step",
@@ -144,21 +141,27 @@ export function createIdempotencyTracker(context: RunStepContext): IdempotencyTr
   };
 }
 
-export function preflightIdempotency(params: {
+export async function preflightIdempotency(params: {
   context: RunStepContext;
   incomingOrdering: BootstrapOrdering;
   nowMs: number;
   tracker: IdempotencyTracker | null;
-}): RunStepTransportResult | null {
+}): Promise<RunStepTransportResult | null> {
   const { context, incomingOrdering, tracker, nowMs } = params;
   if (!tracker) return null;
 
-  purgeExpiredIdempotencyEntries(nowMs);
-  const existing = idempotencyRegistry.get(tracker.registryKey);
+  const claim = await claimIdempotency({
+    registryKey: tracker.registryKey,
+    scopeKey: tracker.scopeKey,
+    idempotencyKey: tracker.idempotencyKey,
+    requestHash: tracker.requestHash,
+    nowMs,
+  });
+  const existing = claim.existing;
 
   if (existing) {
     if (existing.requestHash !== tracker.requestHash) {
-      const conflictResult = buildIdempotencyErrorResult({
+      const conflictResult = await buildIdempotencyErrorResult({
         context,
         incomingOrdering,
         errorType: "idempotency_conflict",
@@ -232,7 +235,7 @@ export function preflightIdempotency(params: {
       });
     }
 
-    const inflightResult = buildIdempotencyErrorResult({
+    const inflightResult = await buildIdempotencyErrorResult({
       context,
       incomingOrdering,
       errorType: "idempotency_inflight",
@@ -267,14 +270,6 @@ export function preflightIdempotency(params: {
       metaLabel: "idempotency_inflight",
     });
   }
-
-  markIdempotencyInFlight({
-    registryKey: tracker.registryKey,
-    scopeKey: tracker.scopeKey,
-    idempotencyKey: tracker.idempotencyKey,
-    requestHash: tracker.requestHash,
-    nowMs,
-  });
 
   return null;
 }
