@@ -218,6 +218,54 @@ test("pick_user exposes the normal confirm CTA when the user's chosen compare va
   assert.match(String(uiContent.support_text || ""), /Keeping your own wording is completely okay/i);
 });
 
+test("pick_user preserves a first-person Role when it is the user's explicit choice", () => {
+  const helpers = createCompareHelpers();
+  const userRole = "My role is to create a welcoming hub where creativity brings people together.";
+  const suggestedRole = "Clay Cafe creates a welcoming hub where creativity connects the community.";
+
+  const state = {
+    current_step: "role",
+    active_specialist: "Role",
+    business_name: "Clay Cafe",
+    ui_strings: UI_STRINGS_SOURCE_EN,
+    pending_interaction_state: createPendingInteractionState({
+      id: "pi_compare_role_user_voice",
+      kind: "text_compare",
+      render_model: {
+        mode: "text",
+        instruction: "Choose the version that feels closest to what you mean.",
+        feedback_reason_text: "The suggested version uses the business as its subject.",
+        user_label: "This is your input:",
+        suggestion_label: "This would be my suggestion:",
+        user_text: userRole,
+        suggestion_text: suggestedRole,
+        user_items: [],
+        suggestion_items: [],
+        retained_heading: "",
+        retained_items: [],
+      },
+    }),
+    last_specialist_result: {
+      refined_formulation: suggestedRole,
+      role: suggestedRole,
+      user_pick_feedback_text: "Keeping your own wording is completely okay.",
+      feedback_reason_text: "The suggested version uses the business as its subject.",
+    },
+  } as unknown as CanvasState;
+
+  const result = helpers.applyComparePickSelection({
+    stepId: "role",
+    routeToken: "__COMPARE_PICK_USER__",
+    state,
+  });
+
+  assert.equal(result.handled, true);
+  assert.equal(result.nextState.provisional_by_step?.role, userRole);
+  assert.equal(result.nextState.provisional_source_by_step?.role, "compare_pick");
+  const uiContent = (result.specialist.ui_content || {}) as Record<string, unknown>;
+  assert.equal(String(uiContent.canonical_text || "").trim(), userRole);
+});
+
 test("pick_user keeps the step-specific compare reason when it only exists in pending compare state", () => {
   const helpers = createCompareHelpers();
   const userInput = "Mensen willen eerlijke en open communicatie.";

@@ -231,14 +231,9 @@ export function parseExplicitLanguageOverride(message: string): string {
     return normalizeLocaleHint(codeMatch[2]);
   }
 
-  const directCode = normalizeLocaleHint(raw);
-  if (directCode) return directCode;
-
-  const keywords = ["switch", "change", "use", "speak", "language", "lang", "locale"];
-  const hasKeyword = keywords.some((k) => raw.includes(k));
-  if (!hasKeyword) return "";
-
-  const contextCode = raw.match(/\b(?:to|in|use)\s+([a-z]{2,3}(?:[-_][a-z0-9]{2,8}){0,5})\b/i);
+  const contextCode = raw.match(
+    /^(?:switch|change)(?:\s+(?:the\s+)?(?:language|lang|locale))?\s+(?:to|in)\s+([a-z]{2,3}(?:[-_][a-z0-9]{2,8}){0,5})[.!]?$/i
+  );
   if (contextCode && contextCode[1]) {
     return normalizeLocaleHint(contextCode[1]);
   }
