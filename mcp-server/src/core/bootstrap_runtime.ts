@@ -336,7 +336,10 @@ export async function resolveLanguageForTurn(params: {
     localeHintSourceRaw === "message_detect"
       ? localeHintSourceRaw
       : "none";
-  const trustedLocaleHintSource = localeHintSource !== "none";
+  const trustedLocaleHintSource =
+    localeHintSource === "openai_locale" ||
+    localeHintSource === "webplus_i18n" ||
+    localeHintSource === "request_header";
   if (deps.isUiLocaleMetaV1Enabled()) {
     if (localeHint) deps.bumpUiI18nCounter(telemetry, "locale_hint_used_count");
     else deps.bumpUiI18nCounter(telemetry, "locale_hint_missing_count");
@@ -351,23 +354,6 @@ export async function resolveLanguageForTurn(params: {
     });
     return deps.ensureUiStringsForState(persisted, model, telemetry);
   }
-  if (
-    !override &&
-    inputMode === "chat" &&
-    current &&
-    currentSource === "message_detect" &&
-    locked &&
-    hasDetectableMessage
-  ) {
-    // Keep chat language stable once it is confidently derived from user text.
-    const persisted = deps.withLanguageDecision(state, current, "message_detect", {
-      locked: "true",
-      override: "false",
-      locale: currentLocale || current,
-    });
-    return deps.ensureUiStringsForState(persisted, model, telemetry);
-  }
-
   const persistCurrentIfPresent = (): CanvasState => {
     if (!current) return state;
     if (currentSource) return state;
@@ -380,7 +366,19 @@ export async function resolveLanguageForTurn(params: {
 
   const localeHintLanguage = normalizeLangCode(localeHint);
 
-  // Upstream message-based locale hint is treated as a strong text signal.
+  // Once a session has an authoritative language, ordinary business input is
+  // never allowed to reinterpret it. Only an explicit command above may switch.
+  if (current && (currentSource || locked)) {
+    const next = deps.withLanguageDecision(state, current, currentSource || "persisted", {
+      locked: "true",
+      override: "false",
+      locale: currentLocale || current,
+    });
+    return deps.ensureUiStringsForState(next, model, telemetry);
+  }
+
+  // Upstream message detection is only a seed when no authoritative language
+  // exists yet. The widget can echo this source on later turns.
   if (
     deps.isUiLangSourceResolverV1Enabled() &&
     localeHintLanguage &&
@@ -397,19 +395,11 @@ export async function resolveLanguageForTurn(params: {
     return deps.ensureUiStringsForState(next, model, telemetry);
   }
 
-  const canRunMessageDetect =
-    hasDetectableMessage &&
-    (
-      !locked ||
-      inputMode === "widget" ||
-      !current ||
-      currentSource === "locale_hint" ||
-      currentSource === "persisted"
-    );
+  const canRunMessageDetect = hasDetectableMessage;
   if (canRunMessageDetect) {
     const detected = await deps.detectLanguageHeuristic(msg);
     const detectedLang = normalizeLangCode(detected.lang);
-    if (detectedLang) {
+    if (detectedLang && detected.confident) {
       if (current && current !== detectedLang) {
         deps.bumpUiI18nCounter(telemetry, "language_source_overridden_count");
       }
@@ -422,20 +412,18 @@ export async function resolveLanguageForTurn(params: {
     }
   }
 
-  // Locale hints can seed UI language, but should not hard-lock against user text.
+  // If the first user message does not provide a reliable language signal,
+  // use the host locale and lock it for the remainder of the session.
   if (deps.isUiLangSourceResolverV1Enabled() && localeHintLanguage && trustedLocaleHintSource) {
-    const isBrowserLocaleHint = localeHintSource === "webplus_i18n";
-    if (!isBrowserLocaleHint || !hasDetectableMessage) {
-      if (current && current !== localeHintLanguage) {
-        deps.bumpUiI18nCounter(telemetry, "language_source_overridden_count");
-      }
-      const next = deps.withLanguageDecision(state, localeHintLanguage, "locale_hint", {
-        locked: "false",
-        override: "false",
-        locale: localeHint,
-      });
-      return deps.ensureUiStringsForState(next, model, telemetry);
+    if (current && current !== localeHintLanguage) {
+      deps.bumpUiI18nCounter(telemetry, "language_source_overridden_count");
     }
+    const next = deps.withLanguageDecision(state, localeHintLanguage, "locale_hint", {
+      locked: "true",
+      override: "false",
+      locale: localeHint,
+    });
+    return deps.ensureUiStringsForState(next, model, telemetry);
   }
 
   return deps.ensureUiStringsForState(persistCurrentIfPresent(), model, telemetry);
