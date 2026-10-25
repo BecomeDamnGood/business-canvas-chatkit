@@ -130,3 +130,42 @@ test("advancing to the next step promotes visible last specialist wording when n
     "We believe every person deserves to feel valued in their work."
   );
 });
+
+test("later turns do not backfill unrelated earlier finals from the current step wording", () => {
+  const prevState = {
+    ...getDefaultState(),
+    current_step: "productsservices",
+    last_specialist_result: {
+      action: "ASK",
+      refined_formulation:
+        "Unique, practical banking schemes for young savers, students, eco-conscious customers, goal-based savers, and entrepreneurs.",
+      question: "",
+    },
+  } as any;
+
+  const nextState = helpers.applyPostSpecialistStateMutations({
+    prevState,
+    decision: {
+      current_step: "rulesofthegame",
+      specialist_to_call: "rules_specialist",
+    } as any,
+    specialistResult: {
+      action: "INTRO",
+      message: "",
+      question: "",
+    },
+    provisionalSource: "action_route",
+  });
+
+  assert.equal(
+    String((nextState as any).productsservices_final || ""),
+    "Unique, practical banking schemes for young savers, students, eco-conscious customers, goal-based savers, and entrepreneurs."
+  );
+  assert.equal(String((nextState as any).step_0_final || ""), "");
+  assert.equal(String((nextState as any).purpose_final || ""), "");
+  assert.equal(String((nextState as any).bigwhy_final || ""), "");
+  assert.equal(String((nextState as any).role_final || ""), "");
+  assert.equal(String((nextState as any).entity_final || ""), "");
+  assert.equal(String((nextState as any).strategy_final || ""), "");
+  assert.equal(String((nextState as any).targetgroup_final || ""), "");
+});
