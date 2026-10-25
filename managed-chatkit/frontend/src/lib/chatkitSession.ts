@@ -13,7 +13,7 @@ export function createClientSecretFetcher(
   workflow: string,
   endpoint = "/api/create-session"
 ) {
-  return async (_currentSecret: string | null) => {
+  return async () => {
     const response = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },

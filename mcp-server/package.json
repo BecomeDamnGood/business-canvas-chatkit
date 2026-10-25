@@ -9,6 +9,7 @@
     "check:submission-forbidden": "node scripts/check-submission-forbidden-terms.mjs",
     "verify:ui-runtime-artifacts": "node scripts/build-ui.mjs --check && node scripts/verify-ui-runtime-artifacts.mjs --dist",
     "typecheck": "tsc -p tsconfig.build.json --noEmit && tsc -p tsconfig.ui.json --noEmit",
+    "test": "TS_NODE_TRANSPILE_ONLY=true node --loader ts-node/esm --test src/**/*.test.ts ui/**/*.test.ts agents.test.ts",
     "start": "node dist/server.js",
     "smoke:runtime": "node scripts/runtime-smoke.mjs"
   },
