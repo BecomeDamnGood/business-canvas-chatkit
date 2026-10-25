@@ -18,7 +18,7 @@ const SurfaceCorrectionJsonSchema = {
 
 export type SurfaceCorrectionResult = {
   correctedText: string;
-  source: "llm_surface_pass" | "passthrough";
+  source: "llm_surface_pass" | "passthrough" | "language_control";
   llmCall?: {
     attempts: number;
     usage: LLMUsage;
@@ -199,4 +199,15 @@ export async function correctUserInputSurface(params: SurfaceCorrectionParams): 
   } catch {
     return { correctedText: inputText, source: "passthrough" };
   }
+}
+
+export async function prepareUserInputSurface(
+  params: SurfaceCorrectionParams,
+  parseExplicitLanguageOverride: (message: string) => string
+): Promise<SurfaceCorrectionResult> {
+  const inputText = pickInputText(params);
+  if (parseExplicitLanguageOverride(inputText)) {
+    return { correctedText: inputText, source: "language_control" };
+  }
+  return correctUserInputSurface(params);
 }

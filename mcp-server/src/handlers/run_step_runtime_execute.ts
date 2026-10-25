@@ -64,7 +64,7 @@ export async function runStepRuntimeExecute(
     STRATEGY_CHOOSE_FOR_ME_ROUTE_TOKEN,
     PRESENTATION_MAKE_ROUTE_TOKEN, SWITCH_TO_SELF_DREAM_TOKEN,
     DREAM_START_EXERCISE_ROUTE_TOKEN,
-    correctUserInputSurface,
+    prepareUserInputSurface, parseExplicitLanguageOverride,
   } = deps;
   const ingressParsed = parseRunStepIngressArgs(rawArgs, { defaultStepId: STEP_0_ID });
   const incomingLanguageSourceRaw = ingressParsed.incomingLanguageSourceRaw;
@@ -348,15 +348,18 @@ export async function runStepRuntimeExecute(
   (state as Record<string, unknown>).__last_llm_action_code = "";
   (state as Record<string, unknown>).__last_llm_intent_type = "";
 
-  const surfaceCorrection = await correctUserInputSurface({
-    model,
-    state,
-    userMessage,
-    submittedUserText,
-    actionCodeRaw,
-    localeHint,
-    normalizeLangCode,
-  });
+  const surfaceCorrection = await prepareUserInputSurface(
+    {
+      model,
+      state,
+      userMessage,
+      submittedUserText,
+      actionCodeRaw,
+      localeHint,
+      normalizeLangCode,
+    },
+    parseExplicitLanguageOverride
+  );
   if (surfaceCorrection?.llmCall) {
     rememberLlmCall(surfaceCorrection.llmCall);
   }

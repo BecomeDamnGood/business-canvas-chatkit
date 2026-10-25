@@ -34,6 +34,7 @@ type RunStepPreflightDeps = {
   isPristineStateForStart: (state: CanvasState) => boolean;
   extractUserMessageFromWrappedInput: (raw: string) => string;
   looksLikeMetaInstruction: (userMessage: string) => boolean;
+  parseExplicitLanguageOverride: (message: string) => string;
   maybeSeedStep0CandidateFromInitialMessage: (state: CanvasState, message: string) => CanvasState;
   bumpUiI18nCounter: (telemetry: unknown, key: string) => void;
   logStructuredEvent?: (params: {
@@ -321,9 +322,12 @@ export function createRunStepPreflightHelpers(deps: RunStepPreflightDeps) {
     const userMessageRaw = String(params.args.user_message ?? "");
     const extracted = deps.extractUserMessageFromWrappedInput(userMessageRaw);
     const rawNormalized = extracted ? extracted : userMessageRaw;
+    const isExplicitLanguageControl = Boolean(deps.parseExplicitLanguageOverride(rawNormalized));
 
     const userMessageCandidate =
-      pristineAtEntry ? rawNormalized : (deps.looksLikeMetaInstruction(rawNormalized) ? "" : rawNormalized);
+      pristineAtEntry || isExplicitLanguageControl
+        ? rawNormalized
+        : (deps.looksLikeMetaInstruction(rawNormalized) ? "" : rawNormalized);
 
     const currentStepAtEntry = String((state as any).current_step || deps.step0Id).trim() || deps.step0Id;
     const startedAtEntry = String((state as any).started || "").trim().toLowerCase() === "true";
@@ -331,7 +335,8 @@ export function createRunStepPreflightHelpers(deps: RunStepPreflightDeps) {
     const candidateCanSeed =
       candidateText !== "" &&
       !/^[0-9]+$/.test(candidateText) &&
-      !candidateText.startsWith("ACTION_");
+      !candidateText.startsWith("ACTION_") &&
+      !isExplicitLanguageControl;
     const prestartBufferingTurn = currentStepAtEntry === deps.step0Id && !startedAtEntry;
     if (candidateCanSeed && (prestartBufferingTurn || String((state as any).initial_user_message ?? "").trim() === "")) {
       // Keep the latest meaningful prestart input so ACTION_START can consume it.
@@ -450,7 +455,8 @@ export function createRunStepPreflightHelpers(deps: RunStepPreflightDeps) {
       const submittedCanSeed =
         submitted !== "" &&
         !/^[0-9]+$/.test(submitted) &&
-        !submitted.startsWith("ACTION_");
+        !submitted.startsWith("ACTION_") &&
+        !deps.parseExplicitLanguageOverride(submitted);
       const prestartBufferingTurn = currentStep === deps.step0Id && !started;
       if (submittedCanSeed && (prestartBufferingTurn || String((state as any).initial_user_message ?? "").trim() === "")) {
         // Buffer latest prestart text; it will be used once the user taps ACTION_START.

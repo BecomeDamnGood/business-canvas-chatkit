@@ -23,7 +23,7 @@ function toStableHashValue(value: unknown, depth = 0): unknown {
   const raw = value as Record<string, unknown>;
   const next: Record<string, unknown> = {};
   for (const key of Object.keys(raw).sort()) {
-    if (key === "__request_id" || key === "__trace_id") continue;
+    if (key === "__request_id" || key === "__trace_id" || key === "__client_action_id") continue;
     next[key] = toStableHashValue(raw[key], depth + 1);
   }
   return next;

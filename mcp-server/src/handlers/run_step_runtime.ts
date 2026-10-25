@@ -192,7 +192,7 @@ import { classifyStepStuckTurn as classifyStepStuckTurnRaw } from "./run_step_st
 import { classifyRunStepTurnSemantics as classifyRunStepTurnSemanticsRaw } from "./run_step_turn_semantics.js";
 import { createRunStepRuntimeSpecialistHelpers } from "./run_step_runtime_specialist_helpers.js";
 import { runStepRuntimeExecute } from "./run_step_runtime_execute.js";
-import { correctUserInputSurface } from "./run_step_surface_correction.js";
+import { prepareUserInputSurface } from "./run_step_surface_correction.js";
 export {
   LANGUAGE_LOCK_INSTRUCTION,
   UNIVERSAL_META_OFFTOPIC_POLICY,
@@ -396,6 +396,7 @@ const {
   bumpUiI18nCounter,
   ensureUiStringsForState,
   resolveLanguageForTurn,
+  parseExplicitLanguageOverride,
   langFromState,
 } = runStepI18nRuntime;
 
@@ -877,6 +878,7 @@ const runStepPreflightHelpers = createRunStepPreflightHelpers({
   isPristineStateForStart,
   extractUserMessageFromWrappedInput,
   looksLikeMetaInstruction,
+  parseExplicitLanguageOverride,
   maybeSeedStep0CandidateFromInitialMessage,
   bumpUiI18nCounter: (telemetry, key) =>
     bumpUiI18nCounter(
@@ -964,7 +966,7 @@ const runStepRuntimeExecuteDeps = {
   STRATEGY_CHOOSE_FOR_ME_ROUTE_TOKEN,
   PRESENTATION_MAKE_ROUTE_TOKEN, SWITCH_TO_SELF_DREAM_TOKEN,
   DREAM_START_EXERCISE_ROUTE_TOKEN, deriveSuggestionStateForWidget,
-  correctUserInputSurface, classifyAcceptedOutputUserTurn, classifyBusinessListTurn, classifyUserTurnSemantics, classifyStepStuckTurn,
+  prepareUserInputSurface, parseExplicitLanguageOverride, classifyAcceptedOutputUserTurn, classifyBusinessListTurn, classifyUserTurnSemantics, classifyStepStuckTurn,
 };
 
 export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunStepError> {

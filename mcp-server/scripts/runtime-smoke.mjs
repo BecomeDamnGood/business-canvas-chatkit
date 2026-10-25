@@ -228,6 +228,7 @@ async function main() {
     env: {
       ...process.env,
       LOCAL_DEV: process.env.LOCAL_DEV || "1",
+      LANGUAGE_MODE: "detect_once",
       PORT: port,
       HOST: process.env.HOST || "127.0.0.1",
     },
@@ -325,7 +326,7 @@ async function main() {
 
     const duplicateBehavior =
       duplicateSeq2 === duplicateSeq1 ? "replay" : duplicateSeq2 > duplicateSeq1 ? "fresh" : "invalid";
-    assert.notEqual(duplicateBehavior, "invalid", "duplicate request gedrag ongeldig");
+    assert.equal(duplicateBehavior, "replay", "duplicate request moet dezelfde response replayen");
 
     const conflictCandidate = await callRunStep({
       ...duplicatePayload,
@@ -340,7 +341,31 @@ async function main() {
         : conflictSeq >= duplicateSeq2
           ? "accepted"
           : "invalid";
-    assert.notEqual(conflictBehavior, "invalid", "duplicate/conflict gedrag ongeldig");
+    assert.equal(conflictBehavior, "conflict", "gewijzigde payload met dezelfde key moet conflicteren");
+
+    const switchToDutch = await callRunStep({
+      current_step_id: "step_0",
+      user_message: "language: nl",
+      input_mode: "chat",
+      idempotency_key: `smoke-lang-nl-${Date.now()}`,
+      state: duplicateWidget1.state,
+    });
+    const dutchWidget = extractWidgetResult(switchToDutch.json);
+    assert.equal(dutchWidget.state?.language, "nl", "expliciete taalwissel naar nl mislukt");
+    assert.equal(dutchWidget.state?.language_source, "explicit_override", "nl taalbron is niet expliciet");
+
+    const switchToEnglish = await callRunStep({
+      current_step_id: "step_0",
+      user_message: "language: en",
+      input_mode: "chat",
+      idempotency_key: `smoke-lang-en-${Date.now()}`,
+      state: dutchWidget.state,
+    });
+    const englishWidget = extractWidgetResult(switchToEnglish.json);
+    assert.equal(englishWidget.state?.language, "en", "expliciete taalwissel naar en mislukt");
+    assert.equal(englishWidget.state?.language_source, "explicit_override", "en taalbron is niet expliciet");
+    assert.equal(englishWidget.state?.normalized_user_input, "language: en", "taalcommando is gewijzigd");
+    assert.equal(englishWidget.state?.normalized_user_input_source, "language_control", "taalcommando ging niet via controlepad");
 
     const durationMs = Math.round(performance.now() - startedAt);
     console.log(
@@ -356,6 +381,7 @@ async function main() {
             step0: "ok",
             duplicate_behavior: duplicateBehavior,
             duplicate_conflict_behavior: conflictBehavior,
+            explicit_language_switch: "nl_to_en",
           },
         },
         null,
